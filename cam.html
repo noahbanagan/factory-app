@@ -1306,6 +1306,7 @@ const coolCode = c => c === 'flood' ? 'M8' : c === 'mist' ? 'M7' : '';
 function post(list, opt = {}){
   const st = S.setup, pp = st.post, out = [], ops = list.filter(o => o.post !== false && o.moves && o.moves.length);
   const zs = opt.zShift || 0, fk = opt.feedPct ? opt.feedPct/100 : 1, fZ = v => fmt(v + zs), fF = f => fmt(f*fk, isMM() ? 1 : 2);
+  const all = S.ops.filter(o => o.post !== false && o.moves && o.moves.length), partial = ops.length && ops.length < all.length;
   const G = c => pp.short ? c.replace(/^([GM])0(\d)$/, '$1$2') : c.replace(/^([GM])(\d)$/, '$10$2');
   let n = pp.nStart - pp.nInc;
   const emit = (s, num = true) => { if (num && pp.lineNums){ n += pp.nInc; s = 'N' + n + ' ' + s; } out.push(s); return out.length - 1; };
@@ -1318,6 +1319,7 @@ function post(list, opt = {}){
   emit(cmt(`MATERIAL - ${MATS[st.material].n} ${st.units === 'mm' ? 'MM' : 'INCH'}`), false);
   emit(cmt(`${st.wcs} Z0 = TOP OF FINISHED PART`), false);
   if (zs || fk !== 1) emit(cmt(`*** AIR CUT ONLY - Z RAISED ${fmt(zs)} FEEDS ${Math.round(fk*100)}% ***`), false);
+  if (partial){ const idx = ops.map(o => all.indexOf(o) + 1); emit(cmt(`*** PART PROGRAM: OPS ${idx.join(',')} OF ${all.length} IN O${String(st.progNum).padStart(4, '0')} - SAME ${st.wcs} AND OFFSETS ***`), false); const rest = all.filter(o => !ops.includes(o)); if (rest.length) emit(cmt(`STILL TO RUN: ${rest.map(o => (all.indexOf(o) + 1) + ' ' + o.name).join(' / ')}`), false); }
   const used = [...new Set(ops.map(o => o.toolId))].map(id => S.tools.find(t => t.id === id));
   used.forEach(t => emit(`( T${t.num} | ${cmt(t.name).slice(1, -1)} | H${t.hOff || t.num} )`, false));
   emit(st.units === 'mm' ? 'G21' : 'G20');
@@ -2172,12 +2174,13 @@ function renderMgr(){
         if (OPDEF[op.type].chain) h += node(3, '', '⛓', `Geometry - (${cs}) ${OPDEF[op.type].chain === 'points' ? 'point(s)' : 'chain(s)'}`, `data-op="${op.id}" data-part="geo"`);
         else h += node(3, '', '◆', `Drive surfaces - ${S.geom.mesh ? 'model' : '<span class="err">none</span>'}`, `data-op="${op.id}" data-part="par"`);
         const kb = op.moves ? (op.moves.length*28/1024).toFixed(1) : '0';
-        h += node(3, '', '≈', `Toolpath - ${kb}K - O${String(st.progNum).padStart(4, '0')}.NC${op.moves && op.moves.length ? ' - ' + hms(cycleTime(op)) : ''}`, `data-op="${op.id}" data-part="path"`);
+        h += node(3, '', '≈', `Toolpath - ${kb}K - ${S.posted && S.posted[op.id] ? esc(S.posted[op.id]) : 'not posted yet'}${op.moves && op.moves.length ? ' - ' + hms(cycleTime(op)) : ''}`, `data-op="${op.id}" data-part="path"`);
+        h += `<div class="tn" style="padding-left:${3*14 + 2}px"><span class="tw"></span><span class="ic">${op.done ? '<span class="ok-ic">☑</span>' : '☐'}</span><label class="lb" style="cursor:pointer"><input type="checkbox" data-done="${op.id}"${op.done ? ' checked' : ''} style="vertical-align:middle;margin:0 4px 0 0">Done at machine${op.doneAt ? ' ' + esc(op.doneAt) : ''}</label></div>`;
         if (op.warn && op.warn.length) h += node(3, '', '⚠', `<span class="err">${esc(op.warn[0])}${op.warn.length > 1 ? ` (+${op.warn.length - 1})` : ''}</span>`, `data-op="${op.id}" data-part="warn"`);
       }
     });
-    const tot = S.ops.filter(o => o.moves && o.post !== false).reduce((a, o) => a + cycleTime(o), 0);
-    if (S.ops.length) h += `<div style="padding:6px 8px;color:#555;border-top:1px solid #eee;margin-top:6px">Estimated cycle time: <b>${hms(tot)}</b></div>`;
+    const tot = S.ops.filter(o => o.moves && o.post !== false).reduce((a, o) => a + cycleTime(o), 0), left = S.ops.filter(o => o.post !== false && !o.done);
+    if (S.ops.length) h += `<div style="padding:6px 8px;color:#555;border-top:1px solid #eee;margin-top:6px">Estimated cycle time: <b>${hms(tot)}</b><br>${left.length ? `Still to run at the machine: <b>${left.length}</b> of ${S.ops.filter(o => o.post !== false).length}` : '<span class="ok-ic">All operations ticked done</span>'}</div>`;
     el.innerHTML = h;
   } else if (mgrTab === 'tools'){
     el.innerHTML = `<table class="grid"><tr><th>#</th><th>Name</th><th>Type</th><th>Dia</th><th>RPM</th><th>Feed</th></tr>${S.tools.slice().sort((a, b) => a.num - b.num).map(t => `<tr data-tid="${t.id}" class="${t.id === selTool ? 'on' : ''}"><td>${t.num}</td><td>${esc(t.name)}</td><td>${TT[t.type][0]}</td><td>${fmt(t.dia)}</td><td>${t.rpm}</td><td>${t.feed}</td></tr>`).join('')}</table><div style="padding:6px;color:#666">Double-click a tool to edit it. Material for speeds/feeds: <b>${esc(MATS[S.setup.material].n)}</b></div>`;
@@ -2202,6 +2205,7 @@ $('#mgrBar').addEventListener('click', e => {
     else { Object.entries(S.geom.levels).forEach(([n, lv]) => lv.vis = l.dataset.lv === 'on' || n === S.geom.main); geomChanged(); } }
 });
 $('#mgrBody').addEventListener('click', e => {
+  const dn = e.target.closest('[data-done]'); if (dn){ const op = S.ops.find(o => o.id === dn.dataset.done); op.done = dn.checked; op.doneAt = dn.checked ? new Date().toLocaleString() : ''; autosave(); renderMgr(); return; }
   const lv = e.target.closest('[data-lvis]'); if (lv){ S.geom.levels[lv.dataset.lvis].vis = lv.checked; selEnt.clear(); geomChanged(); return; }
   const lr = e.target.closest('[data-lvl]'); if (lr){ S.geom.main = lr.dataset.lvl; renderMgr(); updStatus(); return; }
   const tr = e.target.closest('[data-tid]'); if (tr){ selTool = tr.dataset.tid; renderMgr(); return; }
@@ -2307,8 +2311,10 @@ async function postDlg(){
   if (!list.length){ msg('Post', 'No operations to post.'); return; }
   const dirty = list.filter(o => o.dirty || !o.moves);
   if (dirty.length){ if (!confirm(`${dirty.length} operation(s) are dirty (changed since last calculation). Regenerate them before posting?`)) return; await regen(dirty, true); }
-  const W = {edit:true, save:true, air:false, zShift:rnd(20*K()), feedPct:50}, el = document.createElement('div'), issues = preflight(list);
-  const name = `O${String(S.setup.progNum).padStart(4, '0')}.NC`;
+  const allOps = S.ops.filter(o => o.post !== false), selected = S.ops.filter(o => selOps.has(o.id) && o.post !== false);
+  const W = {edit:true, save:true, air:false, zShift:rnd(20*K()), feedPct:50, scope:'all', fromOp:1}, el = document.createElement('div'), issues = preflight(list);
+  const done = list.filter(o => o.done); if (done.length) issues.push(['warn', `${done.length} operation(s) are already ticked "Done at machine": ${done.map(o => o.name).join(', ')}. Post only what still has to run, or untick them.`]);
+  const base = `O${String(S.setup.progNum).padStart(4, '0')}`, name = `${base}.NC`;
   el.innerHTML = `<fieldset><legend>Active post</legend><b>${MACHINE.post}</b> → ${MACHINE.name} (${MACHINE.control})</fieldset>
     ${issues.length ? `<fieldset><legend>Check before posting</legend><div class="warnl">${issues.map(([k, t]) => `<div class="${k === 'stop' ? 'err' : ''}">${k === 'stop' ? '⛔' : '⚠'} ${esc(t)}</div>`).join('')}</div></fieldset>` : '<div class="info">✔ No warnings from the toolpaths.</div>'}
     ${S.setup.beginner ? `<fieldset><legend>At the machine — tick each one</legend><div class="chk">
@@ -2316,15 +2322,22 @@ async function postDlg(){
       <label><input type="checkbox" data-ck> Tool length offsets H${[...new Set(list.map(o => toolOf(o).num))].join(', H')} measured for the tools actually loaded</label>
       <label><input type="checkbox" data-ck> Stock is clamped; nothing is in the way of the rapids (clamps, vise jaws, indicator)</label>
       <label><input type="checkbox" data-ck> First run: single block, rapid override 25%, hand on feed hold</label></div></fieldset>` : ''}
+    <fieldset><legend>What to post</legend><div class="fr"><span>Scope</span><select data-k="scope"><option value="all">Whole program — all ${allOps.length} operations (recommended)</option><option value="sel"${selected.length ? '' : ' disabled'}>Only the ${selected.length} selected operation(s) — as a part program</option><option value="from">From operation N to the end — as a part program</option></select><div class="hint">A part program is posted from this same job: same ${S.setup.wcs}, same T/H/D numbers. Use it to feed the machine while the rest is still being programmed, then post the whole program once for the record and the next reorder. Never program a tool as a separate job.</div></div>${fRow(W, 'fromOp', 'Start from operation #', 'i', null, false)}</fieldset>
     <fieldset><legend>First run (air cut)</legend>${fRow(W, 'air', 'Make an AIR-CUT version: whole program raised in Z and slowed down', 'c', null, false)}${fRow(W, 'zShift', `Raise Z by (${U()})`, 'n', null, false)}${fRow(W, 'feedPct', 'Feeds at (%)', 'i', null, false)}<div class="hint">Run the air-cut file first with the part clamped: the tool traces the whole program above the stock, so you see every move before it ever touches metal. Then post the real program.</div></fieldset>
     <fieldset><legend>NC file</legend>${fRow(W, 'save', 'Download ' + name, 'c', null, false)}${fRow(W, 'edit', 'Open in NC editor to read / copy', 'c', null, false)}</fieldset>`;
   bindFields(el, W);
   const d = dlg({title:'Post processing', body:el, w:520, okLabel:'Post G-code', ok:close => {
     if (issues.some(i => i[0] === 'stop')){ alert('Fix the ⛔ items first.'); return; }
     const cks = [...el.querySelectorAll('[data-ck]')]; if (cks.length && !cks.every(c => c.checked)){ if (!confirm('Not all checklist items are ticked. Post anyway?')) return; }
+    let scopeList = allOps, suffix = '';
+    if (W.scope === 'sel'){ scopeList = selected; suffix = '-P' + selected.map(o => allOps.indexOf(o) + 1).join('_'); }
+    if (W.scope === 'from'){ const n = Math.max(1, Math.min(allOps.length, W.fromOp|0)); scopeList = allOps.slice(n - 1); suffix = n > 1 ? `-FROM${n}` : ''; }
+    if (!scopeList.length){ alert('Nothing to post in that scope.'); return; }
     close();
-    const nc = post(list, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {}).join('\r\n') + '\r\n';
-    if (W.save) download(W.air ? name.replace('.NC', '-AIRCUT.NC') : name, nc);
+    const nc = post(scopeList, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {}).join('\r\n') + '\r\n';
+    const fname = `${base}${suffix}${W.air ? '-AIRCUT' : ''}.NC`;
+    if (W.save) download(fname, nc);
+    S.posted = S.posted || {}; scopeList.forEach(o => S.posted[o.id] = fname); autosave(); renderMgr();
     if (W.edit) ncEditor(nc);
   }});
 }
@@ -2340,7 +2353,7 @@ function setupSheet(){
   <h2>Work offset</h2><table>${row('Offset', `<span class="big">${st.wcs}</span>`)}${row('X0 Y0', bb ? `Drawing origin. Part spans X ${fmt(bb.x0)} to ${fmt(bb.x1)}, Y ${fmt(bb.y0)} to ${fmt(bb.y1)} ${U()}` : '—')}${row('Z0', `<b>TOP OF THE FINISHED PART</b>${s.top > 1e-9 ? ` — raw stock top is at Z +${fmt(s.top)} (facing removes it)` : ''}`)}</table>
   <h2>Stock</h2><table>${row('Size', `${fmt(s.x1 - s.x0)} × ${fmt(s.y1 - s.y0)} × ${fmt(s.top - s.bottom)} ${U()}`)}${row('Material', esc(MATS[st.material].n))}${row('Lowest cut', `Z ${fmt(Math.min(...ops.map(o => o.p.depth != null ? o.p.depth : 0), 0))} — clamps and vise jaws must be below this and outside the toolpath`)}</table>
   <h2>Tools — measure every H offset for the tools actually loaded</h2><table><tr><th>T</th><th>Tool</th><th>Ø</th><th>H</th><th>D</th><th>Flute len</th><th>RPM</th><th>Stick-out ok?</th></tr>${tools.map(t => `<tr><td class="big">T${t.num}</td><td>${esc(t.name)}</td><td>${fmt(t.dia)}</td><td>H${t.hOff || t.num}</td><td>D${t.dOff || t.num}</td><td>${fmt(t.len)}</td><td>${t.rpm}</td><td>☐</td></tr>`).join('')}</table>
-  <h2>Operations</h2><table><tr><th>#</th><th>Operation</th><th>Tool</th><th>Depth Z</th><th>Time</th><th>Done</th></tr>${ops.map((o, i) => { const t = toolOf(o); return `<tr><td>${i + 1}</td><td>${esc(o.name)}${o.warn && o.warn.length ? `<div class="warn">⚠ ${esc(o.warn[0])}</div>` : ''}</td><td>${t ? 'T' + t.num : ''}</td><td>${o.p.depth != null ? fmt(o.p.depth) : '—'}</td><td>${o.moves ? hms(cycleTime(o)) : '—'}</td><td>☐</td></tr>`; }).join('')}</table>
+  <h2>Operations</h2><table><tr><th>#</th><th>Operation</th><th>Tool</th><th>Depth Z</th><th>Time</th><th>NC file</th><th>Done</th></tr>${ops.map((o, i) => { const t = toolOf(o); return `<tr><td>${i + 1}</td><td>${esc(o.name)}${o.warn && o.warn.length ? `<div class="warn">⚠ ${esc(o.warn[0])}</div>` : ''}</td><td>${t ? 'T' + t.num : ''}</td><td>${o.p.depth != null ? fmt(o.p.depth) : '—'}</td><td>${o.moves ? hms(cycleTime(o)) : '—'}</td><td>${S.posted && S.posted[o.id] ? esc(S.posted[o.id]) : ''}</td><td>${o.done ? '☑ ' + esc(o.doneAt || '') : '☐'}</td></tr>`; }).join('')}</table>
   <h2>Before pressing cycle start</h2><table class="chk">
   <tr><td>☐</td><td>Stock clamped square; nothing above the stock top inside the toolpath area</td></tr>
   <tr><td>☐</td><td>${st.wcs} set: X0 Y0 at the datum, Z0 touched off on the top of the finished part</td></tr>
@@ -2560,12 +2573,12 @@ async function openCAD(file, merge){
 }
 function scaleItem(e, f){ for (const k of ['x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'x', 'y']) if (e[k] != null) e[k] *= f; if (e.pts) e.pts = e.pts.map(p => [p[0]*f, p[1]*f]); }
 function stockFromGeom(){ const bb = geomBBox(), s = S.setup.stock; if (!bb) return; const m = s.margin; Object.assign(s, {x0:rnd(bb.x0 - m), y0:rnd(bb.y0 - m), x1:rnd(bb.x1 + m), y1:rnd(bb.y1 + m)}); if (S.geom.mesh) s.bottom = rnd(Math.min(s.bottom, bb.z0 - m)); }
-function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}}); }
+function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, posted:S.posted || {}, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}}); }
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
   S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {});
-  S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null;
+  S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {};
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
   selOps.clear(); selEnt.clear(); UNDO.length = 0;
@@ -2573,7 +2586,28 @@ function applyProject(d){
   if (S.ops.length) regen(S.ops.slice(), true);
 }
 function saveProj(as){ const go = n => { S.file = n; download(n + '.cam.json', projectJSON()); updTitle(); }; if (as || S.file === 'untitled') ask('Save As', 'File name', S.file === 'untitled' ? S.setup.progName : S.file).then(n => n && go(n)); else go(S.file); }
-function autosave(){ try { const s = projectJSON(); if (s.length < 4.5e6) localStorage.setItem('cam5.project', s); } catch(e){} }
+function autosave(){ try { const s = projectJSON(); if (s.length < 4.5e6) localStorage.setItem('cam5.project', s); recentSave(s); } catch(e){} }
+// job library: last 12 jobs by file name, kept in this browser (no 3D meshes to stay under the storage limit)
+function recentList(){ try { return JSON.parse(localStorage.getItem('cam5.recent') || '[]'); } catch(e){ return []; } }
+function recentSave(s){
+  if (S.file === 'untitled' || !S.ops.length) return;
+  let list = recentList().filter(r => r.file !== S.file);
+  const slim = S.geom.mesh ? JSON.stringify(Object.assign(JSON.parse(s), {geom:Object.assign(JSON.parse(s).geom, {mesh:null})})) : s;
+  if (slim.length > 1.2e6) return;
+  list.unshift({file:S.file, prog:S.setup.progName, num:S.setup.progNum, when:new Date().toISOString(), ops:S.ops.length, data:slim});
+  while (list.length > 12 || JSON.stringify(list).length > 4e6) list.pop();
+  try { localStorage.setItem('cam5.recent', JSON.stringify(list)); } catch(e){ list.pop(); try { localStorage.setItem('cam5.recent', JSON.stringify(list)); } catch(e2){} }
+}
+function recentDlg(){
+  const list = recentList();
+  const el = document.createElement('div');
+  el.innerHTML = list.length ? `<div class="info">Jobs saved in this browser. For a reorder: open it, check the drawing revision and stock, then post.</div><table class="grid"><tr><th>Job</th><th>Program</th><th>Ops</th><th>Saved</th><th></th></tr>${list.map((r, i) => `<tr><td><b>${esc(r.file)}</b></td><td>O${String(r.num).padStart(4, '0')} ${esc(r.prog)}</td><td>${r.ops}</td><td>${new Date(r.when).toLocaleString()}</td><td><button class="btn" data-open="${i}">Open</button> <button class="btn" data-del="${i}">✕</button></td></tr>`).join('')}</table>` : '<div class="note">No saved jobs yet. A job is listed here as soon as it has a file name and at least one operation (File ▸ Save As).</div>';
+  const d = dlg({title:'Recent jobs', body:el, w:640, ok:c => c()});
+  el.addEventListener('click', e => {
+    const o = e.target.closest('[data-open]'); if (o){ if ((S.ops.length || S.geom.items.length) && !confirm('Open this job? Unsaved changes to the current job are lost.')) return; try { applyProject(JSON.parse(list[+o.dataset.open].data)); } catch(err){ alert('Could not open that job.'); } d.close(); }
+    const x = e.target.closest('[data-del]'); if (x){ list.splice(+x.dataset.del, 1); localStorage.setItem('cam5.recent', JSON.stringify(list)); d.close(); recentDlg(); }
+  });
+}
 function newProj(){ if ((S.ops.length || S.geom.items.length) && !confirm('Start a new file? Unsaved work is lost.')) return; pushUndo(); S.geom = {items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, name:''}; S.ops = []; S.file = 'untitled'; S.setup.progName = 'PART'; S.setup.stock = defSetup(S.setup.units).stock; selOps.clear(); selEnt.clear(); buildChains(); drawGeom(); drawStock(); clearG(G.path); clearG(G.sim); renderMgr(); updTitle(); setView('top'); autosave(); }
 function setUnits(u){
   if (u === S.setup.units) return;
@@ -2737,7 +2771,7 @@ function wizard(){
 function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ? '' : 'Toolpath display off (Alt+T)'); }
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
-  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
+  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
   ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
@@ -2773,7 +2807,7 @@ function renderMenu(){
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.dd') && !e.target.closest('.mi')) closeMenus(); });
 const TBAR = [
   ['🧭 Job Wizard', 'Step-by-step: drawing → operations → G-code', wizard, 'wiz'], ['✦ Ask Claude', 'Claude assistant: explains, suggests and creates operations', () => aiPanel(), 'wiz'], '|',
-  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['📐', 'Open drawing / model (DXF, PDF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
+  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['🕘', 'Recent jobs', recentDlg], ['📐', 'Open drawing / model (DXF, PDF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
   ['⤢', 'Fit (Alt+F1)', () => setView(S.gview || 'top')], ['＋', 'Zoom in (PgUp)', () => zoom(0.8)], ['－', 'Un-zoom (PgDn)', () => zoom(1.25)], ['<small>T</small>', 'Top view (Alt+1)', () => setView('top')], ['<small>F</small>', 'Front view (Alt+2)', () => setView('front')], ['<small>R</small>', 'Right view (Alt+5)', () => setView('right')], ['<small>ISO</small>', 'Isometric (Alt+7)', () => setView('iso')], ['◐', 'Toggle shading (Alt+S)', () => { shade = !shade; drawGeom(); }], '|',
   ['·', 'Create point', () => startCreate('point')], ['╱', 'Create line endpoints', () => startCreate('line')], ['◯', 'Create circle center point', () => startCreate('circle')], ['◠', 'Create arc polar', () => startCreate('arc')], ['▭', 'Create rectangle', () => startCreate('rect')], ['⁘', 'Create bolt circle', () => startCreate('bolt')], ['🗑', 'Delete selected entities (Del)', delSel], ['⇥', 'Xform translate', () => xformDlg('translate')], ['⟲', 'Xform rotate', () => xformDlg('rotate')], ['⇋', 'Xform mirror', () => xformDlg('mirror')], ['🔍', 'Analyze entity', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], '|',
   ['⌒', 'Contour toolpath', () => newOp('contour')], ['⊙', 'Drill toolpath', () => newOp('drill')], ['▣', 'Pocket toolpath', () => newOp('pocket')], ['▤', 'Face toolpath', () => newOp('face')], ['◎', 'Circle mill toolpath', () => newOp('cmill')], ['⛰', 'Surface rough parallel', () => newOp('srough')], ['〰', 'Surface finish parallel', () => newOp('sfinish')], ['≋', 'Surface finish contour (waterline)', () => newOp('scont')], '|',
@@ -3071,7 +3105,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
