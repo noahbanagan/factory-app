@@ -2970,7 +2970,7 @@ function estCsv(E, r){
 
 /* ============================== Google Drive job queue + tool sheet ============================== */
 // RFQ intake files every RFQ into "Dynamic RFQ Drawings" as "<Est no> - <Customer> - <Subject>" with the drawings inside.
-const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'', sheetRange:'Tools!A1:Z200', token:'', exp:0, user:''};
+const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', token:'', exp:0, user:''};
 try { Object.assign(GD, JSON.parse(localStorage.getItem('cam5.google') || '{}'), {token:'', exp:0}); } catch(e){}
 const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange})); } catch(e){} };
 function gdSettings(){
