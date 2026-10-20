@@ -189,9 +189,16 @@ function prompt_(t){ $('#prompt').textContent = t || ''; }
 
 /* ============================== state ============================== */
 const MATS = {
-  alu:{n:'ALUMINUM 6061/7075', vc:300, fz:0.010}, mild:{n:'MILD STEEL 1018/1045', vc:120, fz:0.006},
-  alloy:{n:'ALLOY/TOOL STEEL P20 4140', vc:90, fz:0.005}, ss:{n:'STAINLESS 304/316', vc:80, fz:0.004},
-  ci:{n:'CAST IRON', vc:100, fz:0.007}, brass:{n:'BRASS/BRONZE', vc:200, fz:0.008}, plastic:{n:'PLASTIC POM/NYLON', vc:250, fz:0.012}, bakelite:{n:'BAKELITE/PHENOLIC (G10)', vc:150, fz:0.008}
+  alu:{n:'ALUMINUM A2017/A5056/6061', vc:300, fz:0.010, fam:'alu', note:'Free cutting. Sharp tools, flood coolant, high RPM. Chip-weld risk if feed too low.'},
+  mild:{n:'MILD STEEL 1018/1045/S45C', vc:120, fz:0.006, fam:'steel'},
+  alloy:{n:'4140 / SCM440 (SOFT, UNHARDENED)', vc:90, fz:0.005, fam:'steel', note:'Only mill in the soft state. If the drawing gives a hardness (e.g. 50-55 HRC), the part is hardened after machining: leave grind stock, or route to wire EDM / grinding.'},
+  hard:{n:'HARDENED STEEL >40 HRC', vc:0, fz:0, fam:'hard', note:'Not a milling job on this machine. Wire EDM (Mitsubishi BA24) or grinding.'},
+  ss:{n:'SUS304 / SUS316 STAINLESS', vc:80, fz:0.004, fam:'ss', note:'Work-hardens: never dwell or rub, keep the feed up, climb mill, fresh tools. Thin plate (< 3 mm) distorts — clamp well, light depth cuts.'},
+  sscsp:{n:'SUS304CSP SPRING STAINLESS (THIN)', vc:0, fz:0, fam:'hard', note:'Spring-temper sheet 0.3-2 mm: toothcombs, blades. Wire EDM job, not milling.'},
+  ci:{n:'CAST IRON', vc:100, fz:0.007, fam:'steel'}, brass:{n:'BRASS/BRONZE', vc:200, fz:0.008, fam:'alu'},
+  copper:{n:'COPPER / CU-CR ELECTRODE', vc:200, fz:0.008, fam:'alu', note:'Gummy: sharp polished-flute tools, generous feed, coolant. Electrode mods are usually re-machining an existing part — check the datum carefully.'},
+  plastic:{n:'POM (DELRIN) / NYLON', vc:250, fz:0.012, fam:'plastic', note:'High RPM, sharp tools, air blast or light coolant. Clamp gently — it deflects.'},
+  bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:150, fz:0.008, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
 const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20};
@@ -791,8 +798,8 @@ async function genOp(op){
   if (L.clearOn && L.clear < L.retract) w.push('Clearance is below the retract height.');
   if (p.rpm > st.maxRpm) w.push(`Spindle ${p.rpm} RPM exceeds the machine max ${st.maxRpm}.`);
   if (p.feed > st.maxFeed) w.push('Feed rate exceeds the machine maximum.');
-  if (L.depth != null && L.depth < st.stock.bottom - 1e-6 && !OPDEF[op.type].surf) w.push(`Depth ${fmt(L.depth)} is below the stock bottom — check vise/fixture clearance.`);
-  if (tool.len && L.depth != null && L.top - L.depth > tool.len + 1e-9 && !OPDEF[op.type].surf) w.push(`Cut depth ${fmt(L.top - L.depth)} is deeper than the flute length ${fmt(tool.len)} of T${tool.num}.`);
+  if (L.depth != null && L.depth < st.stock.bottom - 1e-6 && !OPDEF[op.type].surf && p.ctype !== 'chamfer') w.push(`Depth ${fmt(L.depth)} is below the stock bottom — check vise/fixture clearance.`);
+  if (tool.len && L.depth != null && L.top - L.depth > tool.len + 1e-9 && !OPDEF[op.type].surf && p.ctype !== 'chamfer') w.push(`Cut depth ${fmt(L.top - L.depth)} is deeper than the flute length ${fmt(tool.len)} of T${tool.num}.`);
   const pb = new PB(ctx); pb.L = L; pb.tool = tool;
   const gen = {contour:genContour, pocket:genPocket, face:genFace, drill:genDrill, cmill:genCmill, srough:genSurf, sfinish:genSurf, scont:genSurf}[op.type];
   await gen(op, tool, pb, w);
@@ -2587,8 +2594,38 @@ function setUnits(u){
 /* ============================== Job Wizard (beginner flow) ============================== */
 function wizard(){
   let step = S.geom.items.length || S.geom.mesh ? 1 : 0, dlgEl, body;
-  const W = {thick:rnd((S.setup.stock.top - S.setup.stock.bottom) || 20*K()), extra:rnd(1*K()), ops:{face:S.setup.stock.top > 0, outside:true, pockets:true, holes:true, chamfer:false}, holeMode:'drill'};
+  const W = {thick:rnd((S.setup.stock.top - S.setup.stock.bottom) || 20*K()), extra:rnd(1*K()), ops:{face:S.setup.stock.top > 0, outside:true, pockets:true, holes:true, chamfer:false}, holeMode:'drill', family:'', hardened:false, qty:1};
   const steps = ['Drawing', 'Material & stock', 'What to cut', 'Review'];
+  // part families seen in the shop's RFQs (Semitec jigs, JTEKT/Mahle blocks, SMYPC gauges)
+  const FAM = {
+    sus:{n:'Thin SUS304 plate jig', who:'Semitec frame holders, stoppers, putting jigs', ops:{face:false, outside:true, pockets:true, holes:true, chamfer:true}, holeMode:'drill',
+      set:{contour:{dcOn:true, dcMax:1, tabOn:true, tabN:4, tabW:4, tabH:0.5, comp:'wear'}, pocket:{dcMax:1}, drill:{peck:1.5}}, cool:'flood',
+      tip:'Plate must be clamped flat (vacuum, super-glue to a sub-plate, or toe clamps outside the profile). Tabs hold the part; file them off after.'},
+    plastic:{n:'Plastic / bakelite baseplate', who:'Semitec POM, bakelite, G11 baseplates and jigs', ops:{face:true, outside:true, pockets:true, holes:true, chamfer:false}, holeMode:'drill',
+      set:{face:{dcMax:1.5}, contour:{dcOn:true, dcMax:3, tabOn:false, comp:'computer'}, pocket:{dcMax:3, soPct:50}, drill:{peck:4}}, cool:'off',
+      tip:'Bakelite dust is abrasive and bad to breathe: coolant off, extraction on. POM moves when clamped hard — snug only.'},
+    alu:{n:'Aluminium block / plate', who:'JTEKT & Mahle guide plates, clamp blocks', ops:{face:true, outside:true, pockets:true, holes:true, chamfer:true}, holeMode:'drill',
+      set:{face:{dcMax:2}, contour:{dcOn:true, dcMax:4, comp:'wear'}, pocket:{dcMax:4, soPct:50}, drill:{peck:5}}, cool:'flood',
+      tip:'Spot drill, drill, then tap (M5/M6 with G84). Chamfer C0.2–C0.5 all round is usually on the drawing — a chamfer mill pass does it in one go.'},
+    steel:{n:'Steel part (soft 4140 / S45C)', who:'SMYPC seal bars, scrapers, gauges before hardening', ops:{face:true, outside:true, pockets:true, holes:true, chamfer:true}, holeMode:'drill',
+      set:{face:{dcMax:1}, contour:{dcOn:true, dcMax:1.5, mpOn:false, comp:'wear', stockWall:0}, pocket:{dcMax:1.5, soPct:40}, drill:{peck:1}}, cool:'flood',
+      tip:'If the drawing says 50-55 HRC the part is hardened AFTER milling: leave 0.2-0.3 mm grind stock on gauge faces and tell the estimator to add heat treatment + grinding.'}
+  };
+  const route = () => {   // which process should this really be?
+    const m = MATS[S.setup.material], u = K(), chs = CH, closed = chs.filter(c => c.closed && !c.circle), circles = chs.filter(c => c.circle);
+    const minTool = Math.min(...S.tools.filter(t => ['flat', 'ball', 'bull'].includes(t.type)).map(t => t.dia), Infinity);
+    const out = [];
+    if (m.fam === 'hard' || W.hardened) out.push(['stop', `${m.n}: not a milling job on the ${MACHINE.name}. Route to wire EDM (Mitsubishi BA24) or grinding.`]);
+    // narrow inside features (toothcomb slots, fine grooves): smallest closed shape width vs smallest cutter
+    let narrow = 0; closed.forEach(c => { const xs = c.pts.map(q => q[0]), ys = c.pts.map(q => q[1]); const w = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)); if (w < minTool*1.05 && w > 0) narrow++; });
+    const tinyHoles = circles.filter(c => c.circle.r*2 < 1*u).length;
+    if (narrow) out.push(['warn', `${narrow} inside shape(s) are narrower than your smallest end mill (Ø${fmt(minTool)}). Those need a smaller cutter or wire EDM.`]);
+    if (tinyHoles) out.push(['warn', `${tinyHoles} hole(s) under Ø1 mm — micro drill or EDM, not this program.`]);
+    if (W.thick < 1.5*u && m.fam !== 'plastic') out.push(['warn', `${fmt(W.thick)} ${U()} thick: very thin for milling — expect distortion. Wire EDM gives a cleaner result on thin SUS.`]);
+    if (m.fam === 'plastic' && S.setup.material === 'bakelite') out.push(['info', 'Bakelite: coolant off, dust extraction on.']);
+    if (!out.length) out.push(['ok', `Good fit for the ${MACHINE.name}: ${m.n}, ${fmt(W.thick)} ${U()} thick, ${closed.length} closed shape(s), ${circles.length} hole(s).`]);
+    return out;
+  };
   const render = () => {
     const u = U(), bb = geomBBox(), s = S.setup;
     const closed = CH.filter(c => c.closed && !c.circle), circles = CH.filter(c => c.circle), pts = CH.filter(c => c.point);
@@ -2600,13 +2637,18 @@ function wizard(){
        ${bb ? `<div class="info">Loaded: <b>${esc(S.geom.name || S.file)}</b> — ${fmt(bb.x1 - bb.x0)} × ${fmt(bb.y1 - bb.y0)} ${u}, ${CH.length} chains (${closed.length} closed shapes, ${circles.length} circles).</div>` : '<div class="note">Nothing loaded yet.</div>'}
        <p class="hint">Tip: if the drawing has a title block or dimensions, hide those levels in the <b>Levels</b> tab so they are not cut.</p>`,
       `<h3>2. Material and stock</h3>
-       <div class="fr"><span>Material</span><select data-k="material">${Object.entries(MATS).map(([k, v]) => `<option value="${k}"${s.material === k ? ' selected' : ''}>${v.n}</option>`).join('')}</select><div class="hint">Sets safe starting speeds and feeds for every tool.</div></div>
+       <div class="fr"><span>Material</span><select data-k="material">${Object.entries(MATS).map(([k, v]) => `<option value="${k}"${s.material === k ? ' selected' : ''}>${v.n}</option>`).join('')}</select><div class="hint">${esc(MATS[s.material].note || 'Sets safe starting speeds and feeds for every tool.')}</div></div>
+       <div class="fr"><span>Drawing gives a hardness (HRC) — part is hardened</span><input type="checkbox" data-w="hardened"${W.hardened ? ' checked' : ''}><div class="hint">Gauges and blades from SMYPC often say 50-55 HRC. Then only soft machining happens here; the rest is heat treatment + grinding/EDM.</div></div>
+       <div class="fr"><span>Quantity</span><input type="number" step="1" data-w="qty" value="${W.qty}"><div class="hint">Used for the estimate and to decide if a fixture/tabs are worth it.</div></div>
        <div class="fr"><span>Part thickness (${u})</span><input type="number" step="any" data-w="thick" value="${W.thick}"><div class="hint">Finished thickness. The stock bottom is set to −thickness.</div></div>
        <div class="fr"><span>Extra material on top (${u})</span><input type="number" step="any" data-w="extra" value="${W.extra}"><div class="hint">0 if the top is already finished. Otherwise a facing cut removes this first.</div></div>
        <div class="fr"><span>Work offset</span><select data-k="wcs">${['G54','G55','G56','G57','G58','G59'].map(x => `<option${s.wcs === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
        <div class="info"><b>Datum:</b> X0 Y0 is where the drawing's origin is (${bb ? `the part spans X ${fmt(bb.x0)}…${fmt(bb.x1)}, Y ${fmt(bb.y0)}…${fmt(bb.y1)}` : 'no drawing'}). <b>Z0 = top of the finished part.</b> Set ${s.wcs} on the machine to match.</div>
        <div style="display:flex;gap:6px"><button class="btn" data-w="origin-ll">Move origin to lower-left corner</button><button class="btn" data-w="origin-c">Move origin to center</button></div>`,
-      `<h3>3. What needs cutting?</h3><p>Tick what applies — the wizard picks tools from the library and sensible settings. You can change anything afterwards.</p>
+      `<h3>3. What needs cutting?</h3>
+       <div class="warnl" style="margin-bottom:8px">${route().map(([k, t]) => `<div class="${k === 'stop' ? 'err' : ''}">${k === 'stop' ? '⛔' : k === 'warn' ? '⚠' : k === 'ok' ? '✔' : 'ℹ'} ${esc(t)}</div>`).join('')}</div>
+       <div class="fr"><span>Part family (sets tabs, depth cuts, coolant, pecks)</span><select data-w="family"><option value="">— choose —</option>${Object.entries(FAM).map(([k, f]) => `<option value="${k}"${W.family === k ? ' selected' : ''}>${f.n} — ${f.who}</option>`).join('')}</select>${W.family ? `<div class="hint">${esc(FAM[W.family].tip)}</div>` : ''}</div>
+       <p>Tick what applies — the wizard picks tools from the library and sensible settings. You can change anything afterwards.</p>
        <div class="chk">
          <label><input type="checkbox" data-o="face"${W.ops.face ? ' checked' : ''}> <span><b>Face the top</b> — skim ${fmt(W.extra)} ${u} off (needs extra material on top)</span></label>
          <label><input type="checkbox" data-o="outside"${W.ops.outside ? ' checked' : ''}${outer ? '' : ' disabled'}> <span><b>Cut the outside profile</b> ${outer ? `— the largest closed shape (chain ${outer.no}), full depth with tabs off` : '— no closed outline found'}</span></label>
@@ -2643,20 +2685,27 @@ function wizard(){
       if (pts.length){ const dr = T('drill')[0]; if (dr) out.push({label:`Drill ${pts.length} point(s) with T${dr.num}`, type:'drill', tool:dr, sel:pts.map(c => ({key:c.key})), p:{cycle:'G83', peck:rnd(dr.dia), depth, tipOn:true}}); }
     }
     if (W.ops.pockets && inner.length){
-      const em = T('flat').find(t => inner.every(c => { const w = Math.min(...clOffset([c.pts], -t.dia/2).map(r => 1)); return clOffset([c.pts], -t.dia/2 - 0.01).length > 0; })) || T('flat').slice(-1)[0];
-      if (em) out.push({label:`Pocket ${inner.length} inside shape(s) with T${em.num}, ${fmt(W.thick)} deep`, type:'pocket', tool:em, sel:inner.map(c => chainSpec(c, true)), p:{depth, dcOn:true, dcMax:rnd(Math.min(em.dia*0.5, W.thick))}});
+      // largest end mill that fits each inside shape; shapes no cutter fits are flagged, not silently skipped
+      const fits = (c, t) => clOffset([c.pts], -(t.dia/2 + 0.01*u)).length > 0;
+      const groups = new Map(), none = [];
+      for (const c of inner){ const em = T('flat').find(t => fits(c, t)); if (em) (groups.get(em) || groups.set(em, []).get(em)).push(c); else none.push(c); }
+      for (const [em, list] of groups) out.push({label:`Pocket ${list.length} inside shape(s) with T${em.num} (Ø${fmt(em.dia)}), ${fmt(W.thick)} deep`, type:'pocket', tool:em, sel:list.map(c => chainSpec(c, true)), p:{depth, dcOn:true, dcMax:rnd(Math.min(em.dia*0.5, W.thick))}});
+      if (none.length) out.push({label:`⚠ ${none.length} inside shape(s) are too narrow for any end mill in the library (smallest Ø${fmt(Math.min(...T('flat').map(t => t.dia)))}) — add a smaller end mill (Tool Manager) or send to wire EDM`, type:null});
     }
     if (W.ops.outside && outer){
       const em = T('flat')[0];
       if (em) out.push({label:`Contour the outside profile with T${em.num}, ${fmt(W.thick)} deep in layers`, type:'contour', tool:em, sel:[chainSpec(outer, false)], p:{depth, dcOn:true, dcMax:rnd(Math.min(em.dia*0.5, W.thick)), comp:'wear', btOn:true, btAmt:rnd(0.5*u)}});
     }
-    if (W.ops.chamfer && outer){ const ch = T('chamfer')[0]; if (ch) out.push({label:`Chamfer the outside top edge with T${ch.num}`, type:'contour', tool:ch, sel:[chainSpec(outer, false)], p:{ctype:'chamfer', chW:rnd(0.5*u), chTip:rnd(0.5*u), comp:'computer'}}); }
+    if (W.ops.chamfer && outer){ const ch = T('chamfer')[0]; if (ch) out.push({label:`Chamfer the outside top edge with T${ch.num}`, type:'contour', tool:ch, sel:[chainSpec(outer, false)], p:{ctype:'chamfer', chW:rnd(0.5*u), chTip:rnd(0.5*u), comp:'computer', depth:0}}); }
+    const fam = FAM[W.family];
+    if (fam) for (const o of out){ if (!o.type) continue; const ov = fam.set[o.type]; if (ov && !(o.type === 'contour' && o.p.ctype === 'chamfer')){ const sc = {}; for (const [k, v] of Object.entries(ov)) sc[k] = typeof v === 'number' && /Max|tabW|tabH|peck|Step/.test(k) ? rnd(v*u) : v; Object.assign(o.p, sc); } o.p.cool = fam.cool; }
     return out;
   };
   const el = document.createElement('div'); body = el;
   dlgEl = dlg({title:'Job Wizard — from drawing to G-code', body:el, w:720, okLabel:'Next ▸', cancel:c => c(), ok:close => {
     if (step < 3){ if (step === 0 && !(S.geom.items.length || S.geom.mesh)){ alert('Load a drawing first.'); return; } if (step === 0 && CH.some(c => !c.closed && !c.point)){ const n = closeGaps(isMM() ? 0.3 : 0.012, true); if (n) render(); } if (step === 1) applyStock(); step++; render(); return; }
     const pl = plan().filter(o => o.type);
+    if (route().some(r => r[0] === 'stop') && !confirm('The router says this is NOT a milling job. Create milling operations anyway?')) return;
     if (!pl.length){ alert('Nothing to create.'); return; }
     pushUndo();
     const made = pl.map(o => { const op = newOpObj(o.type); op.toolId = o.tool.id; Object.assign(op.p, {rpm:o.tool.rpm, feed:o.tool.feed, plunge:o.tool.plunge, retractF:o.tool.retract}, o.p); op.sel = o.sel; op.name = opTitle(op) + ' - ' + o.label.replace(/ with T\d+.*$/, ''); return op; });
@@ -2673,9 +2722,12 @@ function wizard(){
   });
   el.addEventListener('change', e => {
     const t = e.target;
-    if (t.dataset.k){ S.setup[t.dataset.k] = t.value; return; }
+    if (t.dataset.k){ S.setup[t.dataset.k] = t.value; if (t.dataset.k === 'material') render(); return; }
     if (t.dataset.w === 'thick' || t.dataset.w === 'extra'){ W[t.dataset.w] = parseFloat(t.value) || 0; return; }
     if (t.dataset.w === 'holeMode'){ W.holeMode = t.value; return; }
+    if (t.dataset.w === 'family'){ W.family = t.value; const f = FAM[W.family]; if (f){ Object.assign(W.ops, f.ops); W.holeMode = f.holeMode; } render(); return; }
+    if (t.dataset.w === 'hardened'){ W.hardened = t.checked; return; }
+    if (t.dataset.w === 'qty'){ W.qty = parseInt(t.value) || 1; S.est = Object.assign({}, EST_DEF, S.est || {}, {qty:W.qty}); return; }
     if (t.dataset.o){ W.ops[t.dataset.o] = t.checked; }
   });
   render();
