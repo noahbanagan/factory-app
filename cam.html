@@ -2183,7 +2183,7 @@ function renderMgr(){
     if (S.ops.length) h += `<div style="padding:6px 8px;color:#555;border-top:1px solid #eee;margin-top:6px">Estimated cycle time: <b>${hms(tot)}</b><br>${left.length ? `Still to run at the machine: <b>${left.length}</b> of ${S.ops.filter(o => o.post !== false).length}` : '<span class="ok-ic">All operations ticked done</span>'}</div>`;
     el.innerHTML = h;
   } else if (mgrTab === 'tools'){
-    el.innerHTML = `<table class="grid"><tr><th>#</th><th>Name</th><th>Type</th><th>Dia</th><th>RPM</th><th>Feed</th></tr>${S.tools.slice().sort((a, b) => a.num - b.num).map(t => `<tr data-tid="${t.id}" class="${t.id === selTool ? 'on' : ''}"><td>${t.num}</td><td>${esc(t.name)}</td><td>${TT[t.type][0]}</td><td>${fmt(t.dia)}</td><td>${t.rpm}</td><td>${t.feed}</td></tr>`).join('')}</table><div style="padding:6px;color:#666">Double-click a tool to edit it. Material for speeds/feeds: <b>${esc(MATS[S.setup.material].n)}</b></div>`;
+    el.innerHTML = `<div style="padding:4px 6px;display:flex;gap:6px;align-items:center"><button class="btn" id="tlSync">⟳ Sync from Google Sheet</button><span class="hint" style="margin:0">${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced) : GD.sheet ? 'not synced yet' : 'no sheet set (Settings ▸ Google connection)'}</span></div><table class="grid"><tr><th>#</th><th>Name</th><th>Type</th><th>Dia</th><th>RPM</th><th>Feed</th></tr>${S.tools.slice().sort((a, b) => a.num - b.num).map(t => `<tr data-tid="${t.id}" class="${t.id === selTool ? 'on' : ''}"><td>${t.num}${t.loaded ? ' <span class="ok-ic" title="Loaded in the machine">●</span>' : ''}</td><td>${esc(t.name)}${t.pocket ? ' <span class="bdg">pot ' + esc(t.pocket) + '</span>' : ''}</td><td>${TT[t.type][0]}</td><td>${fmt(t.dia)}</td><td>${t.rpm}</td><td>${t.feed}</td></tr>`).join('')}</table><div style="padding:6px;color:#666">Double-click a tool to edit it. Material for speeds/feeds: <b>${esc(MATS[S.setup.material].n)}</b></div>`;
   } else {
     const cnt = {}; S.geom.items.forEach(it => cnt[it.level] = (cnt[it.level] || 0) + 1);
     el.innerHTML = `<table class="grid"><tr><th>Main</th><th>Visible</th><th>Number</th><th>Name</th><th>Entities</th></tr>${Object.entries(S.geom.levels).sort((a, b) => a[1].num - b[1].num).map(([n, l]) => `<tr data-lvl="${esc(n)}"><td style="text-align:center">${n === S.geom.main ? '✔' : ''}</td><td style="text-align:center"><input type="checkbox" data-lvis="${esc(n)}"${l.vis !== false ? ' checked' : ''}></td><td>${l.num}</td><td>${esc(n)}</td><td>${cnt[n] || 0}</td></tr>`).join('')}</table><div style="padding:6px;color:#666">Levels = DXF layers. Untick title-block / dimension layers so they are not chained. Click a row to make it the main level for new geometry.</div>`;
@@ -2208,6 +2208,7 @@ $('#mgrBody').addEventListener('click', e => {
   const dn = e.target.closest('[data-done]'); if (dn){ const op = S.ops.find(o => o.id === dn.dataset.done); op.done = dn.checked; op.doneAt = dn.checked ? new Date().toLocaleString() : ''; autosave(); renderMgr(); return; }
   const lv = e.target.closest('[data-lvis]'); if (lv){ S.geom.levels[lv.dataset.lvis].vis = lv.checked; selEnt.clear(); geomChanged(); return; }
   const lr = e.target.closest('[data-lvl]'); if (lr){ S.geom.main = lr.dataset.lvl; renderMgr(); updStatus(); return; }
+  if (e.target.id === 'tlSync'){ syncToolSheet(); return; }
   const tr = e.target.closest('[data-tid]'); if (tr){ selTool = tr.dataset.tid; renderMgr(); return; }
   const pr = e.target.closest('[data-prop]'); if (pr){ propsDlg(pr.dataset.prop); return; }
   const n = e.target.closest('[data-op]'); if (!n) return;
@@ -2337,6 +2338,7 @@ async function postDlg(){
     const nc = post(scopeList, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {}).join('\r\n') + '\r\n';
     const fname = `${base}${suffix}${W.air ? '-AIRCUT' : ''}.NC`;
     if (W.save) download(fname, nc);
+    if (S.drive && S.drive.folder && confirm('Also save the job and this NC file into the RFQ folder on Google Drive?')) saveToDrive(nc, fname);
     S.posted = S.posted || {}; scopeList.forEach(o => S.posted[o.id] = fname); autosave(); renderMgr();
     if (W.edit) ncEditor(nc);
   }});
@@ -2352,7 +2354,7 @@ function setupSheet(){
   <div>${esc(MACHINE.name)} (${esc(MACHINE.control)}) · File ${esc(S.file)} · ${new Date().toLocaleDateString()} · Est. run time <b>${hms(tot)}</b> per part</div>
   <h2>Work offset</h2><table>${row('Offset', `<span class="big">${st.wcs}</span>`)}${row('X0 Y0', bb ? `Drawing origin. Part spans X ${fmt(bb.x0)} to ${fmt(bb.x1)}, Y ${fmt(bb.y0)} to ${fmt(bb.y1)} ${U()}` : '—')}${row('Z0', `<b>TOP OF THE FINISHED PART</b>${s.top > 1e-9 ? ` — raw stock top is at Z +${fmt(s.top)} (facing removes it)` : ''}`)}</table>
   <h2>Stock</h2><table>${row('Size', `${fmt(s.x1 - s.x0)} × ${fmt(s.y1 - s.y0)} × ${fmt(s.top - s.bottom)} ${U()}`)}${row('Material', esc(MATS[st.material].n))}${row('Lowest cut', `Z ${fmt(Math.min(...ops.map(o => o.p.depth != null ? o.p.depth : 0), 0))} — clamps and vise jaws must be below this and outside the toolpath`)}</table>
-  <h2>Tools — measure every H offset for the tools actually loaded</h2><table><tr><th>T</th><th>Tool</th><th>Ø</th><th>H</th><th>D</th><th>Flute len</th><th>RPM</th><th>Stick-out ok?</th></tr>${tools.map(t => `<tr><td class="big">T${t.num}</td><td>${esc(t.name)}</td><td>${fmt(t.dia)}</td><td>H${t.hOff || t.num}</td><td>D${t.dOff || t.num}</td><td>${fmt(t.len)}</td><td>${t.rpm}</td><td>☐</td></tr>`).join('')}</table>
+  <h2>Tools — measure every H offset for the tools actually loaded</h2><table><tr><th>T</th><th>Tool</th><th>Ø</th><th>H</th><th>D</th><th>Flute len</th><th>RPM</th><th>Pocket</th><th>Stick-out ok?</th></tr>${tools.map(t => `<tr><td class="big">T${t.num}</td><td>${esc(t.name)}</td><td>${fmt(t.dia)}</td><td>H${t.hOff || t.num}</td><td>D${t.dOff || t.num}</td><td>${fmt(t.len)}</td><td>${t.rpm}</td><td>${t.pocket ? esc(t.pocket) : (t.loaded ? 'in' : '<b>LOAD</b>')}</td><td>☐</td></tr>`).join('')}</table>
   <h2>Operations</h2><table><tr><th>#</th><th>Operation</th><th>Tool</th><th>Depth Z</th><th>Time</th><th>NC file</th><th>Done</th></tr>${ops.map((o, i) => { const t = toolOf(o); return `<tr><td>${i + 1}</td><td>${esc(o.name)}${o.warn && o.warn.length ? `<div class="warn">⚠ ${esc(o.warn[0])}</div>` : ''}</td><td>${t ? 'T' + t.num : ''}</td><td>${o.p.depth != null ? fmt(o.p.depth) : '—'}</td><td>${o.moves ? hms(cycleTime(o)) : '—'}</td><td>${S.posted && S.posted[o.id] ? esc(S.posted[o.id]) : ''}</td><td>${o.done ? '☑ ' + esc(o.doneAt || '') : '☐'}</td></tr>`; }).join('')}</table>
   <h2>Before pressing cycle start</h2><table class="chk">
   <tr><td>☐</td><td>Stock clamped square; nothing above the stock top inside the toolpath area</td></tr>
@@ -2573,12 +2575,12 @@ async function openCAD(file, merge){
 }
 function scaleItem(e, f){ for (const k of ['x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'x', 'y']) if (e[k] != null) e[k] *= f; if (e.pts) e.pts = e.pts.map(p => [p[0]*f, p[1]*f]); }
 function stockFromGeom(){ const bb = geomBBox(), s = S.setup.stock; if (!bb) return; const m = s.margin; Object.assign(s, {x0:rnd(bb.x0 - m), y0:rnd(bb.y0 - m), x1:rnd(bb.x1 + m), y1:rnd(bb.y1 + m)}); if (S.geom.mesh) s.bottom = rnd(Math.min(s.bottom, bb.z0 - m)); }
-function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, posted:S.posted || {}, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}}); }
+function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, posted:S.posted || {}, drive:S.drive || null, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}}); }
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
   S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {});
-  S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {};
+  S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {}; S.drive = d.drive || null;
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
   selOps.clear(); selEnt.clear(); UNDO.length = 0;
@@ -2700,7 +2702,7 @@ function wizard(){
   const plan = () => {
     const out = [], closed = CH.filter(c => c.closed && !c.circle), circles = CH.filter(c => c.circle), pts = CH.filter(c => c.point);
     const outer = closed.slice().sort((a, b) => Math.abs(area(b.pts)) - Math.abs(area(a.pts)))[0], inner = closed.filter(c => c !== outer);
-    const T = ty => S.tools.filter(t => t.type === ty).sort((a, b) => b.dia - a.dia);
+    const T = ty => S.tools.filter(t => t.type === ty).sort((a, b) => (b.loaded ? 1 : 0) - (a.loaded ? 1 : 0) || b.dia - a.dia);   // tools in the machine first
     const u = K(), depth = rnd(-W.thick);
     if (W.ops.face && W.extra > 0 && T('face')[0]) out.push({label:`Facing with T${T('face')[0].num} (${fmt(W.extra)} off the top)`, type:'face', tool:T('face')[0], sel:[], p:{top:rnd(W.extra), depth:0, dcOn:W.extra > 1.5*u, dcMax:rnd(1*u)}});
     if (W.ops.holes && (circles.length || pts.length)){
@@ -2771,7 +2773,7 @@ function wizard(){
 function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ? '' : 'Toolpath display off (Alt+T)'); }
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
-  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
+  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
   ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
@@ -2780,7 +2782,7 @@ const MENU = () => [
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['💲 Estimate / quotation…', '', estimateDlg]]],
   ['Screen', [['Toggle toolpath display', 'Alt+T', togglePaths], ['Toggle shading', 'Alt+S', () => { shade = !shade; drawGeom(); }], ['Toggle WCS axes', 'F9', () => { axesOn = !axesOn; drawAxes(); }], ['Clear verify stock', '', () => clearG(G.sim)], ['Clear selection', '', () => { selEnt.clear(); drawGeom(); updStatus(); }]]],
-  ['Settings', [[(isMM() ? '✔ ' : '') + 'Configuration ▸ Metric (mm)', '', () => setUnits('mm')], [(!isMM() ? '✔ ' : '') + 'Configuration ▸ English (inch)', '', () => setUnits('in')], '-', [(S.setup.beginner ? '✔ ' : '') + 'Beginner mode (hints & checklists)', '', () => { S.setup.beginner = !S.setup.beginner; renderMenu(); autosave(); }], '-', ['Machine definition…', '', () => propsDlg('machine')], ['Post options…', '', () => propsDlg('post')], ['Claude assistant settings…', '', () => aiSettings()]]],
+  ['Settings', [[(isMM() ? '✔ ' : '') + 'Configuration ▸ Metric (mm)', '', () => setUnits('mm')], [(!isMM() ? '✔ ' : '') + 'Configuration ▸ English (inch)', '', () => setUnits('in')], '-', [(S.setup.beginner ? '✔ ' : '') + 'Beginner mode (hints & checklists)', '', () => { S.setup.beginner = !S.setup.beginner; renderMenu(); autosave(); }], '-', ['Machine definition…', '', () => propsDlg('machine')], ['Post options…', '', () => propsDlg('post')], ['Claude assistant settings…', '', () => aiSettings()], ['Google Drive & tool sheet connection…', '', gdSettings], ['Sync tool library from Google Sheet', '', syncToolSheet]]],
   ['Help', [['Load demo part', '', () => { if (S.ops.length && !confirm('Replace the current file with the demo part?')) return; demo(); }], ['Keyboard & mouse', 'F1', helpDlg], ['Beginner guide', '', guideDlg], ['About', '', () => msg('About', `<b>Dynamic Intl CAM</b><br>2D/3D milling CAM posting to ${MACHINE.name} (${MACHINE.control}).<br><br>Always backplot and verify. Prove out new programs with single block, reduced rapids and the feed override.`)]]]
 ];
 let openMenu = null;
@@ -2807,7 +2809,7 @@ function renderMenu(){
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.dd') && !e.target.closest('.mi')) closeMenus(); });
 const TBAR = [
   ['🧭 Job Wizard', 'Step-by-step: drawing → operations → G-code', wizard, 'wiz'], ['✦ Ask Claude', 'Claude assistant: explains, suggests and creates operations', () => aiPanel(), 'wiz'], '|',
-  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['🕘', 'Recent jobs', recentDlg], ['📐', 'Open drawing / model (DXF, PDF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
+  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['🕘', 'Recent jobs', recentDlg], ['☁', 'Job queue — RFQ drawings on Google Drive', jobQueue], ['📐', 'Open drawing / model (DXF, PDF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
   ['⤢', 'Fit (Alt+F1)', () => setView(S.gview || 'top')], ['＋', 'Zoom in (PgUp)', () => zoom(0.8)], ['－', 'Un-zoom (PgDn)', () => zoom(1.25)], ['<small>T</small>', 'Top view (Alt+1)', () => setView('top')], ['<small>F</small>', 'Front view (Alt+2)', () => setView('front')], ['<small>R</small>', 'Right view (Alt+5)', () => setView('right')], ['<small>ISO</small>', 'Isometric (Alt+7)', () => setView('iso')], ['◐', 'Toggle shading (Alt+S)', () => { shade = !shade; drawGeom(); }], '|',
   ['·', 'Create point', () => startCreate('point')], ['╱', 'Create line endpoints', () => startCreate('line')], ['◯', 'Create circle center point', () => startCreate('circle')], ['◠', 'Create arc polar', () => startCreate('arc')], ['▭', 'Create rectangle', () => startCreate('rect')], ['⁘', 'Create bolt circle', () => startCreate('bolt')], ['🗑', 'Delete selected entities (Del)', delSel], ['⇥', 'Xform translate', () => xformDlg('translate')], ['⟲', 'Xform rotate', () => xformDlg('rotate')], ['⇋', 'Xform mirror', () => xformDlg('mirror')], ['🔍', 'Analyze entity', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], '|',
   ['⌒', 'Contour toolpath', () => newOp('contour')], ['⊙', 'Drill toolpath', () => newOp('drill')], ['▣', 'Pocket toolpath', () => newOp('pocket')], ['▤', 'Face toolpath', () => newOp('face')], ['◎', 'Circle mill toolpath', () => newOp('cmill')], ['⛰', 'Surface rough parallel', () => newOp('srough')], ['〰', 'Surface finish parallel', () => newOp('sfinish')], ['≋', 'Surface finish contour (waterline)', () => newOp('scont')], '|',
@@ -2965,6 +2967,129 @@ function estCsv(E, r){
   return rows.map(x => x.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
 }
 
+
+/* ============================== Google Drive job queue + tool sheet ============================== */
+// RFQ intake files every RFQ into "Dynamic RFQ Drawings" as "<Est no> - <Customer> - <Subject>" with the drawings inside.
+const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'', sheetRange:'Tools!A1:Z200', token:'', exp:0, user:''};
+try { Object.assign(GD, JSON.parse(localStorage.getItem('cam5.google') || '{}'), {token:'', exp:0}); } catch(e){}
+const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange})); } catch(e){} };
+function gdSettings(){
+  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange}, el = document.createElement('div');
+  el.innerHTML = `<div class="info">One-time setup (10 min, by Noah): Google Cloud Console → APIs & Services → enable <b>Google Drive API</b> and <b>Google Sheets API</b> → Credentials → <b>OAuth client ID (Web application)</b> → add this page's address (e.g. <code>${esc(location.origin)}</code>) under <i>Authorised JavaScript origins</i>. Paste the client ID below. Each operator then signs in with their own Google account; the CAM only sees the RFQ drawings folder and the tool sheet.${location.protocol === 'file:' ? '<br><b>Note:</b> Google sign-in does not work from a file opened off the disk — open the CAM from the web address of the production app.' : ''}</div>
+    <div class="fr"><span>OAuth client ID</span><input type="text" data-k="clientId" value="${esc(W.clientId)}" style="width:320px" placeholder="xxxx.apps.googleusercontent.com"></div>
+    <div class="fr"><span>RFQ drawings folder ID</span><input type="text" data-k="root" value="${esc(W.root)}" style="width:320px"><div class="hint">Default = "Dynamic RFQ Drawings" shared drive folder used by the RFQ intake agent.</div></div>
+    <div class="fr"><span>Tool inventory sheet ID</span><input type="text" data-k="sheet" value="${esc(W.sheet)}" style="width:320px" placeholder="from the sheet URL: /spreadsheets/d/<ID>/"></div>
+    <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Notes.</div></div>
+    <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div>`;
+  bindFields(el, W);
+  dlg({title:'Google Drive & Sheets connection', body:el, w:600, ok:close => { Object.assign(GD, W); gdSave(); close(); }});
+}
+function loadGIS(){ return new Promise((res, rej) => { if (window.google && google.accounts) return res(); const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.onload = res; sc.onerror = () => rej(new Error('Could not load Google sign-in (needs internet).')); document.head.appendChild(sc); }); }
+async function gdToken(){
+  if (GD.token && Date.now() < GD.exp - 60000) return GD.token;
+  if (!GD.clientId){ gdSettings(); throw new Error('Set the Google OAuth client ID first (Settings ▸ Google Drive connection).'); }
+  await loadGIS();
+  return new Promise((res, rej) => {
+    const tc = google.accounts.oauth2.initTokenClient({client_id:GD.clientId, scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/userinfo.email',
+      callback:r => { if (r.error){ rej(new Error(r.error)); return; } GD.token = r.access_token; GD.exp = Date.now() + (r.expires_in || 3600)*1000; fetch('https://www.googleapis.com/oauth2/v3/userinfo', {headers:{Authorization:'Bearer ' + GD.token}}).then(x => x.json()).then(u => { GD.user = u.email || ''; }).catch(() => {}); res(GD.token); }});
+    tc.requestAccessToken({prompt:GD.user ? '' : 'consent'});
+  });
+}
+async function gdFetch(url, opt = {}){
+  const tok = await gdToken();
+  const r = await fetch(url, Object.assign({}, opt, {headers:Object.assign({Authorization:'Bearer ' + tok}, opt.headers || {})}));
+  if (!r.ok){ let m = r.statusText; try { m = (await r.json()).error.message; } catch(e){} throw new Error(`Google: ${r.status} ${m}`); }
+  return r;
+}
+const gdQ = o => Object.entries(o).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+async function gdList(parent, extra = ''){
+  const q = `'${parent}' in parents and trashed=false${extra}`;
+  const r = await gdFetch('https://www.googleapis.com/drive/v3/files?' + gdQ({q, orderBy:'createdTime desc', pageSize:100, fields:'files(id,name,mimeType,createdTime,modifiedTime,size)', supportsAllDrives:true, includeItemsFromAllDrives:true, corpora:'allDrives'}));
+  return (await r.json()).files || [];
+}
+async function gdDownload(id, name){ const r = await gdFetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`); return new File([await r.blob()], name); }
+async function gdUpload(folder, name, text, mime, existingId){
+  const meta = {name, mimeType:mime}, bnd = 'camboundary' + uid();
+  if (!existingId) meta.parents = [folder];
+  const body = `--${bnd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${bnd}\r\nContent-Type: ${mime}\r\n\r\n${text}\r\n--${bnd}--`;
+  const url = existingId ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart&supportsAllDrives=true` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true';
+  const r = await gdFetch(url, {method:existingId ? 'PATCH' : 'POST', headers:{'Content-Type':'multipart/related; boundary=' + bnd}, body});
+  return r.json();
+}
+// ---- job queue dialog ----
+async function jobQueue(){
+  const el = document.createElement('div'); el.innerHTML = '<div class="hint">Loading the RFQ drawings folder…</div>';
+  const d = dlg({title:'Job queue — Dynamic RFQ Drawings', body:el, w:860, ok:c => c(), extra:'<button class="btn" id="jqRefresh">Refresh</button><button class="btn" id="jqSettings">Connection…</button>'});
+  $('#jqSettings').onclick = gdSettings; $('#jqRefresh').onclick = () => { d.close(); jobQueue(); };
+  let folders;
+  try { folders = await gdList(GD.root, " and mimeType='application/vnd.google-apps.folder'"); }
+  catch(e){ el.innerHTML = `<div class="note">${esc(e.message)}</div>`; return; }
+  const rows = folders.slice(0, 60);
+  el.innerHTML = `<div class="info">${rows.length} RFQ folders (newest first). <b>Open</b> imports a drawing; <b>CAM job</b> opens a job someone already prepared. Signed in as ${esc(GD.user || '…')}.</div>
+    <table class="grid" id="jqT"><tr><th>Est.</th><th>Customer / subject</th><th>Received</th><th>Files</th></tr>${rows.map((f, i) => { const m = f.name.match(/^(\d{3,5})\s*[-–]\s*(.*?)\s*[-–]\s*(.*)$/); return `<tr data-f="${i}"><td><b>${m ? esc(m[1]) : ''}</b></td><td>${esc(m ? m[2] + ' — ' + m[3] : f.name)}</td><td>${new Date(f.createdTime).toLocaleDateString()}</td><td class="jqFiles"><button class="btn" data-ls="${i}">Show files</button></td></tr>`; }).join('')}</table>`;
+  el.addEventListener('click', async e => {
+    const b = e.target.closest('[data-ls]');
+    if (b){ const f = rows[+b.dataset.ls], td = b.closest('td'); td.innerHTML = '…';
+      try { const files = await gdList(f.id); td.innerHTML = files.map(x => { const ext = x.name.split('.').pop().toLowerCase(); const cam = /\.cam\.json$/i.test(x.name), nc = ext === 'nc'; const can = cam || ['pdf', 'dxf', 'step', 'stp', 'iges', 'igs', 'stl'].includes(ext); return `<div style="white-space:nowrap">${can ? `<button class="btn" data-open="${x.id}" data-name="${esc(x.name)}" data-folder="${f.id}" data-est="${esc((f.name.match(/^(\d{3,5})/) || [])[1] || '')}" data-cam="${cam ? 1 : 0}" style="margin:1px 4px 1px 0">${cam ? '▶ CAM job' : 'Open'}</button>` : '<span style="display:inline-block;width:52px"></span>'}${esc(x.name)}${nc ? ' <span class="bdg ok">NC posted</span>' : ''}</div>`; }).join('') || '<span class="hint">empty</span>'; }
+      catch(err){ td.innerHTML = `<span class="err">${esc(err.message)}</span>`; } return; }
+    const o = e.target.closest('[data-open]');
+    if (o){
+      busy(true, 'Downloading ' + o.dataset.name + '…');
+      try {
+        const file = await gdDownload(o.dataset.open, o.dataset.name);
+        if (o.dataset.cam === '1'){ applyProject(JSON.parse(await file.text())); }
+        else { const ok = await openCAD(file, false); if (!ok) return; if (o.dataset.est){ S.setup.progNum = +o.dataset.est; S.est = Object.assign({}, EST_DEF, S.est || {}, {rfq:o.dataset.est}); } }
+        S.drive = {folder:o.dataset.folder, est:o.dataset.est, source:o.dataset.name}; updTitle(); autosave(); d.close();
+        if (o.dataset.cam !== '1' && S.setup.beginner) setTimeout(() => { if (AI.key && confirm('Ask Claude to look at this drawing and suggest a plan now?')){ aiPanel(); aiSend('A new RFQ drawing was just imported from the job queue (' + o.dataset.name + '). Look at the job, say what kind of part it is, which process fits (CNC mill / wire EDM / lathe), which view to keep, and propose the operations in order. Do not create operations yet.'); } else wizard(); }, 300);
+      } catch(err){ alert(err.message); } finally { busy(false); }
+    }
+  });
+}
+// save the job (and optionally the posted NC) back into the RFQ folder so the operator opens the same job
+async function saveToDrive(ncText, ncName){
+  if (!S.drive || !S.drive.folder){ msg('Save to Drive', 'This job was not opened from the job queue, so there is no RFQ folder to save into. Open the drawing via <b>File ▸ Job queue</b> first.'); return; }
+  busy(true, 'Saving to Drive…');
+  try {
+    const files = await gdList(S.drive.folder);
+    const jn = (S.file || 'job') + '.cam.json', ex = files.find(f => f.name === jn);
+    await gdUpload(S.drive.folder, jn, projectJSON(), 'application/json', ex && ex.id);
+    if (ncText){ const exn = files.find(f => f.name === ncName); await gdUpload(S.drive.folder, ncName, ncText, 'text/plain', exn && exn.id); }
+    prompt_(`Saved ${jn}${ncText ? ' and ' + ncName : ''} to the RFQ folder.`);
+  } catch(e){ alert(e.message); } finally { busy(false); }
+}
+// ---- tool inventory from the Google Sheet ----
+async function syncToolSheet(){
+  if (!GD.sheet){ gdSettings(); return; }
+  busy(true, 'Reading tool sheet…');
+  try {
+    const r = await gdFetch(`https://sheets.googleapis.com/v4/spreadsheets/${GD.sheet}/values/${encodeURIComponent(GD.sheetRange)}`);
+    const rows = (await r.json()).values || [];
+    if (rows.length < 2) throw new Error('The sheet range is empty.');
+    const H = rows[0].map(h => String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const col = (...names) => { for (const n of names){ const i = H.indexOf(n); if (i >= 0) return i; } return -1; };
+    const C = {num:col('t', 'tool', 'toolno', 'tno', 'num'), name:col('name', 'description', 'tooln'), type:col('type'), dia:col('dia', 'diameter', 'd'), cr:col('cornerrad', 'cr', 'cornerradius', 'r'), flutes:col('flutes', 'fl'), len:col('flutelen', 'flutelength', 'loc'), oal:col('oal', 'overall'), rpm:col('rpm', 's'), feed:col('feed', 'f'), plunge:col('plunge'), pitch:col('pitch'), angle:col('angle', 'tipangle'), hOff:col('h', 'hoff', 'lengthoffset'), dOff:col('d2', 'doff', 'diaoffset', 'dnum'), pocket:col('pocket', 'pot', 'station'), loaded:col('loaded', 'inmachine', 'mounted'), notes:col('notes', 'note')};
+    if (C.num < 0 || C.dia < 0 || C.type < 0) throw new Error('Header row must have at least T, Type and Dia columns.');
+    const types = Object.keys(TT), alias = {endmill:'flat', flatendmill:'flat', em:'flat', bullnose:'bull', bullendmill:'bull', ballnose:'ball', ballendmill:'ball', facemill:'face', chamfermill:'chamfer', spotdrill:'spot', centerdrill:'center', centredrill:'center', reamer:'ream', boringbar:'bore'};
+    const num = (i, d) => { if (i < 0) return d; const v = parseFloat(String(rows[0] && '').length ? '' : ''); return d; };
+    const tools = [];
+    for (const row of rows.slice(1)){
+      const g = i => i >= 0 && row[i] != null ? String(row[i]).trim() : '';
+      const n = parseInt(g(C.num)); if (!(n > 0)) continue;
+      let ty = g(C.type).toLowerCase().replace(/[^a-z]/g, ''); ty = types.includes(ty) ? ty : (alias[ty] || 'flat');
+      const f = (i, d) => { const v = parseFloat(g(i)); return isFinite(v) ? v : d; };
+      const old = S.tools.find(t => t.num === n) || {};
+      tools.push(mkTool({id:old.id || uid(), num:n, name:g(C.name) || old.name || `${fmt(f(C.dia, 10))} ${TT[ty][0].toUpperCase()}`, type:ty, dia:f(C.dia, old.dia || 10), cr:f(C.cr, old.cr || 0), flutes:f(C.flutes, old.flutes || 2), len:f(C.len, old.len || 20), oal:f(C.oal, old.oal || 60),
+        rpm:f(C.rpm, old.rpm || 2000), feed:f(C.feed, old.feed || 300), plunge:f(C.plunge, old.plunge || 100), retract:old.retract || 1000, pitch:f(C.pitch, old.pitch || 0), angle:f(C.angle, old.angle || (ty === 'chamfer' ? 90 : 118)), hOff:f(C.hOff, n), dOff:f(C.dOff, n),
+        pocket:g(C.pocket), loaded:/^(y|yes|1|true|x|loaded|in)$/i.test(g(C.loaded)) || (!!g(C.pocket) && C.loaded < 0), notes:g(C.notes)}));
+    }
+    if (!tools.length) throw new Error('No tool rows found.');
+    pushUndo(); S.tools = tools; saveTools();
+    S.ops.forEach(o => { if (!S.tools.find(t => t.id === o.toolId)){ const same = S.tools.find(t => t.num === (toolOf(o) || {}).num); o.toolId = same ? same.id : defaultTool(o.type).id; o.dirty = true; } });
+    GD.sheetSynced = new Date().toLocaleString(); renderMgr();
+    msg('Tool sheet synced', `${tools.length} tools loaded from the sheet, ${tools.filter(t => t.loaded).length} marked as loaded in the machine.<br><br>The wizard prefers loaded tools; the setup sheet shows the pocket numbers.`);
+  } catch(e){ alert(e.message); } finally { busy(false); }
+}
+
 /* ============================== Claude assistant ============================== */
 const AI = {key:'', model:'claude-opus-5-5', msgs:[], el:null, busy:false};
 try { AI.key = localStorage.getItem('cam5.aikey') || ''; } catch(e){}
@@ -3105,7 +3230,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
