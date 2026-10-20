@@ -2795,6 +2795,8 @@ async function aiSend(text){
       for (const u of uses){ aiStatus(`Running ${u.name}…`); let out; try { out = await aiRunTool(u.name, u.input); } catch(e){ out = {error:e.message}; } results.push({type:'tool_result', tool_use_id:u.id, content:JSON.stringify(out).slice(0, 60000)}); }
       AI.msgs.push({role:'user', content:results});
     }
+    const last = AI.msgs[AI.msgs.length-1];
+    if (AI.speak && AI.speak.checked && window.speechSynthesis && last.role === 'assistant'){ const t = last.content.filter(b => b.type === 'text').map(b => b.text).join(' ').replace(/[*`#]/g, ''); if (t){ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t.slice(0, 1500))); } }
   } catch(e){ AI.msgs.push({role:'assistant', content:[{type:'text', text:'⚠ ' + e.message + (/401|auth/i.test(e.message) ? ' — check the API key in Settings ▸ Claude assistant.' : '')}]}); }
   finally { AI.busy = false; aiStatus(''); aiRender(); }
 }
@@ -2812,8 +2814,8 @@ function aiPanel(){
   if (AI.el && document.body.contains(AI.el.closest('.dlg'))){ AI.el.closest('.dlg').style.zIndex = ++zTop; return; }
   const el = document.createElement('div'); el.style.cssText = 'display:flex;flex-direction:column;height:62vh;min-height:300px';
   el.innerHTML = `<div id="aiLog" style="flex:1;overflow:auto;padding:2px"></div><div id="aiSt" class="hint" style="min-height:14px;margin:4px 0"></div>
-    <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask Claude… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn pri" id="aiGo">Send</button></div>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr">Clear</button><button class="btn" id="aiKey">API key…</button></div>`;
+    <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask Claude… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn" id="aiMic" title="Speak (Chrome / Edge)">🎤</button><button class="btn pri" id="aiGo">Send</button></div>
+    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr">Clear</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
   AI.el = el;
   dlg({title:'✦ Claude — CAM assistant', body:el, w:520, modal:false, footer:false, x:innerWidth - 540, y:70});
   const send = () => { const i = el.querySelector('#aiIn'), t = i.value.trim(); if (!t) return; i.value = ''; aiSend(t); };
@@ -2822,6 +2824,19 @@ function aiPanel(){
   el.querySelector('#aiClr').onclick = () => { AI.msgs = []; aiRender(); };
   el.querySelector('#aiKey').onclick = aiSettings;
   el.querySelectorAll('[data-q]').forEach(b => b.onclick = () => aiSend(b.dataset.q));
+  // voice input (Web Speech API — Chrome / Edge) and spoken replies
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = el.querySelector('#aiMic');
+  if (!SR){ mic.disabled = true; mic.title = 'Voice input needs Chrome or Edge'; }
+  else mic.onclick = () => {
+    if (AI.rec){ AI.rec.stop(); return; }
+    const r = new SR(); r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false;
+    const i = el.querySelector('#aiIn'); AI.rec = r; mic.classList.add('on'); mic.textContent = '⏺'; aiStatus('Listening… click 🎤 again to stop');
+    r.onresult = e => { let t = ''; for (const res of e.results) t += res[0].transcript; i.value = t; if (e.results[e.results.length-1].isFinal){ r.stop(); } };
+    r.onerror = e => aiStatus(e.error === 'not-allowed' ? 'Microphone blocked — allow it in the browser address bar.' : 'Voice: ' + e.error);
+    r.onend = () => { AI.rec = null; mic.classList.remove('on'); mic.textContent = '🎤'; if (i.value.trim()){ aiStatus(''); send(); } };
+    r.start();
+  };
+  AI.speak = el.querySelector('#aiSpk');
   aiRender();
   if (!AI.key) aiSettings();
 }
