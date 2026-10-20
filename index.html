@@ -493,6 +493,7 @@ function rDash(){
     if(G.user.role==="sales")    h+="<button class=\"btn btn-p\" onclick=\"nav('sales')\" style=\"margin-bottom:8px\">&#128203; RFQ &amp; Quotations</button>";
     if(G.user.role==="supervisor"){ h+="<button class=\"btn btn-p\" onclick=\"nav('production')\" style=\"margin-bottom:8px\">&#9881; Production Setup</button>"; h+="<button class=\"btn\" onclick=\"nav('summary')\" style=\"margin-bottom:8px\">&#128202; Summary</button>"; }
   }
+  if(isMD()||G.user.role==="supervisor"||G.user.role==="operator") h+="<a class=\"btn\" href=\"cam.html\" style=\"margin-top:8px;text-decoration:none;background:#E3F2FD;color:#0D47A1;border-color:#BBDEFB\">&#128736; CAM / CNC Programming</a>";
   h+="<button class=\"btn btn-q\" onclick=\"nav('backup')\" style=\"margin-top:4px;color:#1565C0\">&#128190; Backup &amp; Restore</button><button class=\"btn btn-q\" onclick=\"nav('change-pw')\" style=\"margin-top:4px\">Change my password</button>";
   h+="</div>";
   return h;

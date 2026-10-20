@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dynamic Intl — CAM</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:13px;overflow:hidden}
+button,select,input{font-family:inherit;font-size:12px}
+#top{height:52px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#fff;border-bottom:1px solid #e3e5ea;overflow-x:auto;white-space:nowrap}
+.brand{font-weight:700;font-size:14px;margin-right:6px}.brand b{color:#1976D2}.brand span{color:#888;font-weight:600}
+.tb{padding:7px 11px;border-radius:8px;border:1px solid #dcdfe5;background:#fff;color:#333;cursor:pointer;display:inline-flex;align-items:center;gap:5px;flex-shrink:0}
+.tb:hover{background:#f5f6f8}
+.tb.pri{background:#1565C0;border-color:#1565C0;color:#fff;font-weight:600}.tb.pri:hover{background:#1976D2}
+.tb.gr{background:#2E7D32;border-color:#2E7D32;color:#fff;font-weight:600}
+.sp{flex:1}
+main{display:grid;grid-template-columns:350px 1fr 360px;height:calc(100vh - 52px)}
+#side{background:#fff;border-right:1px solid #e3e5ea;display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid #e3e5ea}
+.tabs button{flex:1;padding:11px 4px;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-weight:600;color:#777}
+.tabs button.on{color:#1565C0;border-bottom-color:#1565C0}
+#panel{overflow-y:auto;padding:12px;flex:1}
+.sec{margin-bottom:16px}
+.sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#888;margin-bottom:8px;font-weight:700}
+.f{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.f>span{color:#444;flex:1}
+.f input[type=number],.f input[type=text],.f select{width:130px;padding:5px 7px;border:1px solid #d6d9df;border-radius:6px;background:#fff}
+.f input[type=checkbox]{width:16px;height:16px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btn{padding:7px 10px;border-radius:7px;border:1px solid #d6d9df;background:#fff;cursor:pointer;color:#333}
+.btn:hover{background:#f3f4f6}
+.btn.s{padding:4px 8px;font-size:11px}
+.btn.b{background:#E3F2FD;color:#0D47A1;border-color:#BBDEFB}
+.btn.r{background:#FFEBEE;color:#C62828;border-color:#FFCDD2}
+.card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff}
+.card.on{border-color:#1565C0;box-shadow:0 0 0 2px #BBDEFB}
+.card .hd{display:flex;align-items:center;gap:6px;cursor:pointer}
+.card .hd b{flex:1}
+.mut{color:#888;font-size:11px}
+.bdg{font-size:10px;padding:2px 7px;border-radius:100px;font-weight:700;background:#f0f0f0;color:#666}
+.bdg.ok{background:#E8F5E9;color:#1B5E20}.bdg.w{background:#FFF8E1;color:#E65100}.bdg.e{background:#FFEBEE;color:#C62828}
+.addops{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+.note{background:#FFFDE7;border:1px solid #FFE082;border-radius:8px;padding:8px 10px;font-size:12px;color:#5d4a00;margin-bottom:10px;line-height:1.45}
+.info{background:#E3F2FD;border:1px solid #BBDEFB;border-radius:8px;padding:8px 10px;font-size:12px;color:#0D47A1;margin-bottom:10px;line-height:1.45}
+#view{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column}
+#cv{flex:1;min-height:0;position:relative}
+#cv canvas{display:block}
+#vbtns{position:absolute;top:10px;left:10px;display:flex;gap:4px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+#vbtns .btn{background:rgba(255,255,255,.92)}
+#vbtns .btn.on{background:#1565C0;color:#fff;border-color:#1565C0}
+#status{position:absolute;bottom:62px;left:10px;right:10px;font-size:12px;color:#555;pointer-events:none;text-shadow:0 0 3px #fff}
+#busy{position:absolute;inset:0;background:rgba(255,255,255,.6);display:none;align-items:center;justify-content:center;font-weight:600;color:#1565C0;font-size:14px}
+#play{height:52px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#fff;border-top:1px solid #e3e5ea}
+#slider{flex:1;min-width:60px}
+#pinfo{font-variant-numeric:tabular-nums;color:#555;font-size:11px;min-width:150px}
+#codeP{background:#fff;border-left:1px solid #e3e5ea;display:flex;flex-direction:column;min-height:0}
+.ch{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid #e3e5ea}
+.ch b{flex:1}
+#warn{max-height:30%;overflow-y:auto}
+#warn div{padding:6px 12px;font-size:11.5px;border-bottom:1px solid #f3e0b0;background:#FFF8E1;color:#7a4b00}
+#warn div.e{background:#FFEBEE;color:#B71C1C;border-color:#FFCDD2}
+#stats{padding:8px 12px;font-size:11.5px;color:#555;border-bottom:1px solid #eee}
+#code{flex:1;overflow:auto;position:relative;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+#codeIn{position:relative}
+.ln{position:absolute;left:0;right:0;height:18px;line-height:18px;padding-left:52px;white-space:pre;color:#222}
+.ln i{position:absolute;left:0;width:44px;text-align:right;color:#aaa;font-style:normal}
+.ln.cur{background:#FFF59D}
+.ln .cm{color:#2E7D32}
+@media(max-width:1000px){
+  body{overflow:auto}
+  main{display:block;height:auto}
+  #side{max-height:none;border-right:none}
+  #panel{overflow:visible}
+  #view{height:70vh}
+  #codeP{height:60vh;border-left:none;border-top:1px solid #e3e5ea}
+  #view{height:auto}
+  #cv{height:62vh;flex:none}
+  #play{flex-wrap:wrap;height:auto;padding:8px 12px}
+  #pinfo{min-width:0;width:100%;order:5}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<header id="top">
+  <a class="brand" href="index.html" style="text-decoration:none;color:inherit"><b>Dynamic</b> Intl · <span>CAM</span></a>
+  <label class="tb">📂 Open drawing / model<input type="file" id="fOpen" accept=".dxf,.stl,.step,.stp,.iges,.igs,.dwg,.pdf" hidden></label>
+  <button class="tb" id="bDemo">Demo part</button>
+  <button class="tb" id="bSave">💾 Save project</button>
+  <label class="tb">Load project<input type="file" id="fProj" accept=".json,.cam" hidden></label>
+  <select class="tb" id="units"><option value="mm">Metric (mm)</option><option value="in">Inch</option></select>
+  <span class="sp"></span>
+  <button class="tb pri" id="bPost">⚙ Generate G-code</button>
+  <button class="tb gr" id="bDl">⬇ Download .NC</button>
+</header>
+<main>
+  <aside id="side">
+    <nav class="tabs"><button data-t="setup">Setup</button><button data-t="tools">Tools</button><button data-t="ops" class="on">Operations</button></nav>
+    <div id="panel"></div>
+  </aside>
+  <section id="view">
+    <div id="cv">
+      <div id="vbtns">
+        <button class="btn s" data-v="top">Top</button><button class="btn s" data-v="iso">Iso</button><button class="btn s" data-v="front">Front</button><button class="btn s" data-v="fit">Fit</button>
+        <span style="width:8px"></span>
+        <button class="btn s on" data-l="geom">Geometry</button><button class="btn s on" data-l="mesh">Part</button><button class="btn s on" data-l="stock">Stock</button><button class="btn s on" data-l="path">Toolpath</button><button class="btn s on" data-l="sim">Verify</button>
+      </div>
+      <div id="status"></div>
+      <div id="busy">Calculating…</div>
+    </div>
+    <div id="play">
+      <button class="btn" id="bPlay" title="Play / pause">▶</button>
+      <input type="range" id="slider" min="0" max="0" value="0">
+      <select id="speed" class="btn s" title="Playback speed"><option value="1">1×</option><option value="5" selected>5×</option><option value="25">25×</option><option value="100">100×</option></select>
+      <span id="pinfo"></span>
+      <button class="btn b" id="bVerify" title="Simulate material removal up to the slider position">Verify stock</button>
+    </div>
+  </section>
+  <aside id="codeP">
+    <div class="ch"><b>G-code (Fanuc)</b><span class="mut" id="cinfo"></span><button class="btn s" id="bCopy">Copy</button></div>
+    <div id="stats"></div>
+    <div id="warn"></div>
+    <div id="code"><div id="codeIn"></div></div>
+  </aside>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {STLLoader} from 'three/addons/loaders/STLLoader.js';
+const CL = window.ClipperLib;
+
+/* ============================== utilities ============================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const rnd = v => +(+v).toFixed(4);
+const hyp = Math.hypot;
+const tick = () => new Promise(r => setTimeout(r, 0));
+function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function load(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
+function status(t){ $('#status').textContent = t || ''; }
+function busy(on, t){ $('#busy').style.display = on ? 'flex' : 'none'; if (t) $('#busy').textContent = t; }
+
+/* ============================== state ============================== */
+const MATS = {
+  alu:{n:'Aluminum 6061/7075', vc:300, fz:0.010},
+  mild:{n:'Mild steel 1018/1045', vc:120, fz:0.006},
+  alloy:{n:'Alloy / tool steel P20, 4140', vc:90, fz:0.005},
+  ss:{n:'Stainless 304/316', vc:80, fz:0.004},
+  ci:{n:'Cast iron', vc:100, fz:0.007},
+  brass:{n:'Brass / bronze', vc:200, fz:0.008},
+  plastic:{n:'Plastics (POM, nylon)', vc:250, fz:0.012}
+};
+const TOOL_TYPES = [['flat','Flat end mill'],['bull','Bull nose end mill'],['ball','Ball end mill'],['face','Face mill'],['drill','Drill'],['spot','Spot / center drill'],['tap','Tap'],['ream','Reamer / boring bar']];
+const MILLS = ['flat','bull','ball','face'];
+
+function defTools(u){
+  const T = (num,name,type,dia,o={}) => Object.assign({id:uid(),num,name,type,dia,cr:0,flutes:3,len:u==='mm'?30:1.25,rpm:3000,feed:u==='mm'?600:24,plunge:u==='mm'?200:8,pitch:0,angle:118}, o);
+  if (u === 'mm') return [
+    T(1,'Ø50 Face mill 5FL','face',50,{flutes:5,len:40,rpm:1500,feed:900,plunge:300}),
+    T(2,'Ø10 Flat end mill 3FL','flat',10,{rpm:4500,feed:900,plunge:250}),
+    T(3,'Ø6 Flat end mill 3FL','flat',6,{len:20,rpm:7000,feed:800,plunge:200}),
+    T(4,'Ø6 Ball end mill 2FL','ball',6,{flutes:2,len:20,rpm:8000,feed:1400,plunge:300}),
+    T(5,'Ø8 Spot drill 90°','spot',8,{flutes:2,angle:90,rpm:2500,feed:200,plunge:200}),
+    T(6,'Ø6.8 Drill (M8 tap)','drill',6.8,{flutes:2,len:45,rpm:2200,feed:250,plunge:250}),
+    T(7,'M8×1.25 Tap','tap',8,{flutes:3,len:25,rpm:400,feed:500,plunge:500,pitch:1.25})
+  ];
+  return [
+    T(1,'2" Face mill 5FL','face',2,{flutes:5,len:1.5,rpm:1500,feed:35,plunge:12}),
+    T(2,'1/2" Flat end mill 3FL','flat',0.5,{rpm:3600,feed:36,plunge:10}),
+    T(3,'1/4" Flat end mill 3FL','flat',0.25,{len:0.75,rpm:7000,feed:32,plunge:8}),
+    T(4,'1/4" Ball end mill 2FL','ball',0.25,{flutes:2,len:0.75,rpm:8000,feed:55,plunge:12}),
+    T(5,'3/8" Spot drill 90°','spot',0.375,{flutes:2,angle:90,rpm:2500,feed:8,plunge:8}),
+    T(6,'#7 Drill (1/4-20 tap)','drill',0.201,{flutes:2,len:1.75,rpm:2200,feed:10,plunge:10}),
+    T(7,'1/4-20 Tap','tap',0.25,{flutes:3,len:1,rpm:400,feed:20,plunge:20,pitch:0.05})
+  ];
+}
+function defSetup(u){
+  const k = u === 'mm' ? 1 : 1/25.4;
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', safeZ:rnd(50*k), clearZ:rnd(5*k),
+    stock:{auto:true, margin:rnd(2*k), x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k)},
+    maxRpm:8000, maxFeed:rnd(10000*k), rapid:rnd(15000*k), material:'alu',
+    post:{lineNums:true, nInc:10, coolant:'M08', home:'G91 G28 Z0.', endY:true, m01:true, nextTool:false, tcFmt:'T# M06', rigid:true, arcs:true}};
+}
+const S = {setup:defSetup('mm'), tools:defTools('mm'), ops:[], geom:{items:[], layers:{}, chains:[], mesh:null, name:''}};
+let activeOp = null, gcode = [], simPts = [], tab = 'ops';
+
+/* ============================== DXF parsing ============================== */
+function arcPts(cx, cy, r, a0, a1, tol){
+  const sweep = a1 - a0;
+  const step = r > tol ? 2*Math.acos(Math.max(-1, 1 - tol/r)) : Math.PI/4;
+  const n = Math.max(2, Math.ceil(Math.abs(sweep)/Math.min(step, Math.PI/18)));
+  const out = [];
+  for (let i = 0; i <= n; i++){ const a = a0 + sweep*i/n; out.push([cx + r*Math.cos(a), cy + r*Math.sin(a)]); }
+  return out;
+}
+function bulgePts(p, q, b, tol){
+  if (Math.abs(b) < 1e-9) return [p, q];
+  const th = 4*Math.atan(b), c = hyp(q[0]-p[0], q[1]-p[1]);
+  if (c < 1e-12) return [p, q];
+  const r = c/(2*Math.sin(Math.abs(th)/2));
+  const mx = (p[0]+q[0])/2, my = (p[1]+q[1])/2;
+  const h = (c/2)/Math.tan(th/2);                   // signed distance from chord midpoint to centre (left of p→q)
+  const cx = mx - (q[1]-p[1])/c*h, cy = my + (q[0]-p[0])/c*h;
+  const a0 = Math.atan2(p[1]-cy, p[0]-cx);
+  const pts = arcPts(cx, cy, r, a0, a0 + th, tol);
+  pts[0] = p; pts[pts.length-1] = q;
+  return pts;
+}
+function bspline(deg, knots, ctrl, w, n){
+  const out = [], k0 = knots[deg], k1 = knots[knots.length-1-deg];
+  for (let s = 0; s <= n; s++){
+    let t = k0 + (k1-k0)*s/n; if (s === n) t = k1 - 1e-10;
+    let span = deg; while (span < ctrl.length-1 && knots[span+1] <= t) span++;
+    const d = []; for (let j = 0; j <= deg; j++){ const c = ctrl[span-deg+j], ww = w ? w[span-deg+j] : 1; d.push([c[0]*ww, c[1]*ww, ww]); }
+    for (let r = 1; r <= deg; r++) for (let j = deg; j >= r; j--){
+      const i = span-deg+j, den = knots[i+deg-r+1] - knots[i], a = den ? (t-knots[i])/den : 0;
+      d[j] = [(1-a)*d[j-1][0]+a*d[j][0], (1-a)*d[j-1][1]+a*d[j][1], (1-a)*d[j-1][2]+a*d[j][2]];
+    }
+    out.push([d[deg][0]/d[deg][2], d[deg][1]/d[deg][2]]);
+  }
+  return out;
+}
+function parseDXF(text){
+  const L = text.split(/\r?\n/), P = [];
+  for (let i = 0; i + 1 < L.length; i += 2) P.push([parseInt(L[i]), L[i+1].trim()]);
+  let units = 0, sec = null, i = 0;
+  const blocks = {}, ents = [];
+  let curBlock = null;
+  // gather raw entities
+  while (i < P.length){
+    const [c, v] = P[i];
+    if (c === 0 && v === 'SECTION'){ sec = P[i+1] && P[i+1][1]; i += 2; continue; }
+    if (c === 0 && v === 'ENDSEC'){ sec = null; i++; continue; }
+    if (sec === 'HEADER' && c === 9 && v === '$INSUNITS'){ units = parseInt(P[i+1][1]); i += 2; continue; }
+    if ((sec === 'ENTITIES' || sec === 'BLOCKS') && c === 0){
+      const e = {type:v, g:[]}; i++;
+      while (i < P.length && P[i][0] !== 0){ e.g.push(P[i]); i++; }
+      if (v === 'BLOCK'){ curBlock = {name:gv(e,2), bx:+gv(e,10,0), by:+gv(e,20,0), ents:[]}; blocks[curBlock.name] = curBlock; continue; }
+      if (v === 'ENDBLK'){ curBlock = null; continue; }
+      if (+gv(e,67,0) === 1) continue;                         // paper space
+      (curBlock ? curBlock.ents : ents).push(e);
+      continue;
+    }
+    i++;
+  }
+  // attach VERTEX entities to their POLYLINE
+  const fold = list => { const out = []; let pl = null;
+    for (const e of list){
+      if (e.type === 'POLYLINE'){ pl = e; e.verts = []; out.push(e); }
+      else if (e.type === 'VERTEX' && pl) pl.verts.push(e);
+      else if (e.type === 'SEQEND') pl = null;
+      else out.push(e);
+    } return out; };
+  for (const b of Object.values(blocks)) b.ents = fold(b.ents);
+  return {units, ents:fold(ents), blocks};
+}
+function gv(e, code, d){ const p = e.g.find(x => x[0] === code); return p ? p[1] : d; }
+function gall(e, code){ return e.g.filter(x => x[0] === code).map(x => +x[1]); }
+function dxfItems(dxf, tol){
+  const items = [];
+  const emit = (it, layer, X) => {
+    it.layer = layer;
+    if (it.kind === 'circle'){
+      const c = X.p([it.cx, it.cy]);
+      if (X.uniform){ items.push({kind:'circle', cx:c[0], cy:c[1], r:it.r*X.s, layer}); return; }
+      it = {kind:'poly', closed:true, pts:arcPts(it.cx, it.cy, it.r, 0, 2*Math.PI, tol).slice(0,-1), layer};
+    }
+    if (it.kind === 'point'){ const c = X.p([it.x, it.y]); items.push({kind:'point', x:c[0], y:c[1], layer}); return; }
+    items.push({kind:'poly', closed:it.closed, pts:it.pts.map(X.p), layer});
+  };
+  const walk = (ents, X, depth) => {
+    for (const e of ents){
+      const layer = gv(e, 8, '0');
+      const t = e.type;
+      if (t === 'LINE') emit({kind:'poly', pts:[[+gv(e,10,0), +gv(e,20,0)], [+gv(e,11,0), +gv(e,21,0)]]}, layer, X);
+      else if (t === 'CIRCLE') emit({kind:'circle', cx:+gv(e,10,0), cy:+gv(e,20,0), r:+gv(e,40,0)}, layer, X);
+      else if (t === 'ARC'){
+        const a0 = +gv(e,50,0)*Math.PI/180; let a1 = +gv(e,51,0)*Math.PI/180; if (a1 <= a0) a1 += 2*Math.PI;
+        emit({kind:'poly', pts:arcPts(+gv(e,10,0), +gv(e,20,0), +gv(e,40,0), a0, a1, tol)}, layer, X);
+      }
+      else if (t === 'LWPOLYLINE' || t === 'POLYLINE'){
+        let V = [];
+        if (t === 'LWPOLYLINE'){ let cur = null; for (const [c, v] of e.g){ if (c === 10){ cur = {x:+v, y:0, b:0}; V.push(cur); } else if (c === 20 && cur) cur.y = +v; else if (c === 42 && cur) cur.b = +v; } }
+        else { if (+gv(e,70,0) & (16|64)) continue; V = e.verts.map(v => ({x:+gv(v,10,0), y:+gv(v,20,0), b:+gv(v,42,0)})); }
+        const closed = !!(+gv(e,70,0) & 1);
+        if (V.length < 2) continue;
+        const pts = [[V[0].x, V[0].y]];
+        const n = closed ? V.length : V.length - 1;
+        for (let k = 0; k < n; k++){ const a = V[k], b = V[(k+1) % V.length]; pts.push(...bulgePts([a.x,a.y], [b.x,b.y], a.b, tol).slice(1)); }
+        if (closed) pts.pop();
+        emit({kind:'poly', closed, pts}, layer, X);
+      }
+      else if (t === 'SPLINE'){
+        const deg = +gv(e,71,3), knots = gall(e,40), cx = gall(e,10), cy = gall(e,20), w = gall(e,41), fx = gall(e,11), fy = gall(e,21);
+        let pts;
+        if (cx.length > deg && knots.length === cx.length + deg + 1){
+          const ctrl = cx.map((x, k) => [x, cy[k]]);
+          pts = bspline(deg, knots, ctrl, w.length === ctrl.length ? w : null, Math.max(64, ctrl.length*16));
+        } else if (fx.length > 1) pts = fx.map((x, k) => [x, fy[k]]);
+        else continue;
+        emit({kind:'poly', closed:!!(+gv(e,70,0) & 1), pts}, layer, X);
+      }
+      else if (t === 'ELLIPSE'){
+        const cx = +gv(e,10,0), cy = +gv(e,20,0), mx = +gv(e,11,0), my = +gv(e,21,0), ra = +gv(e,40,1);
+        let s = +gv(e,41,0), en = +gv(e,42,2*Math.PI); if (en <= s) en += 2*Math.PI;
+        const a = hyp(mx, my), rot = Math.atan2(my, mx), b = a*ra;
+        const n = Math.max(32, Math.ceil((en-s)/(2*Math.acos(Math.max(-1, 1 - tol/a)))));
+        const pts = []; for (let k = 0; k <= n; k++){ const tt = s + (en-s)*k/n, x = a*Math.cos(tt), y = b*Math.sin(tt); pts.push([cx + x*Math.cos(rot) - y*Math.sin(rot), cy + x*Math.sin(rot) + y*Math.cos(rot)]); }
+        const full = Math.abs(en - s - 2*Math.PI) < 1e-6;
+        if (full) pts.pop();
+        emit({kind:'poly', closed:full, pts}, layer, X);
+      }
+      else if (t === 'POINT') emit({kind:'point', x:+gv(e,10,0), y:+gv(e,20,0)}, layer, X);
+      else if (t === 'INSERT' && depth < 8){
+        const b = dxf.blocks[gv(e,2,'')]; if (!b) continue;
+        const ix = +gv(e,10,0), iy = +gv(e,20,0), sx = +gv(e,41,1), sy = +gv(e,42,1), rot = +gv(e,50,0)*Math.PI/180;
+        const cols = +gv(e,70,1) || 1, rows = +gv(e,71,1) || 1, dc = +gv(e,44,0), dr = +gv(e,45,0);
+        for (let cc = 0; cc < cols; cc++) for (let rr = 0; rr < rows; rr++){
+          const ox = cc*dc, oy = rr*dr, co = Math.cos(rot), si = Math.sin(rot);
+          const local = q => { const x = (q[0]-b.bx)*sx + ox, y = (q[1]-b.by)*sy + oy; return [ix + x*co - y*si, iy + x*si + y*co]; };
+          const XX = {p:q => X.p(local(q)), uniform:X.uniform && Math.abs(Math.abs(sx) - Math.abs(sy)) < 1e-9, s:X.s*Math.abs(sx)};
+          walk(b.ents, XX, depth + 1);
+        }
+      }
+    }
+  };
+  walk(dxf.ents, {p:q => [q[0], q[1]], uniform:true, s:1}, 0);
+  return items;
+}
+
+/* ============================== chaining ============================== */
+function buildChains(items, layers){
+  const tol = S.setup.units === 'mm' ? 0.01 : 0.0004;
+  const out = [], open = [];
+  let id = 1;
+  for (const it of items){
+    if (layers[it.layer] === false) continue;
+    if (it.kind === 'circle') out.push({id:id++, closed:true, circle:{cx:it.cx, cy:it.cy, r:it.r}, pts:arcPts(it.cx, it.cy, it.r, 0, 2*Math.PI, chordTol()).slice(0,-1), layer:it.layer});
+    else if (it.kind === 'point') out.push({id:id++, point:true, closed:false, pts:[[it.x, it.y]], layer:it.layer});
+    else if (it.closed) out.push({id:id++, closed:true, pts:it.pts.slice(), layer:it.layer});
+    else open.push({pts:it.pts.slice(), used:false, layer:it.layer});
+  }
+  // spatial hash on open-segment endpoints
+  const key = p => Math.round(p[0]/tol) + ',' + Math.round(p[1]/tol);
+  const H = new Map();
+  const put = (p, s) => { const k = key(p); if (!H.has(k)) H.set(k, []); H.get(k).push(s); };
+  open.forEach(s => { put(s.pts[0], s); put(s.pts[s.pts.length-1], s); });
+  const find = p => {
+    const gx = Math.round(p[0]/tol), gy = Math.round(p[1]/tol);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++){
+      const l = H.get((gx+dx) + ',' + (gy+dy)); if (!l) continue;
+      for (const s of l){ if (s.used) continue;
+        const a = s.pts[0], b = s.pts[s.pts.length-1];
+        if (hyp(a[0]-p[0], a[1]-p[1]) <= tol) return [s, false];
+        if (hyp(b[0]-p[0], b[1]-p[1]) <= tol) return [s, true];
+      }
+    }
+    return null;
+  };
+  for (const s of open){
+    if (s.used) continue;
+    s.used = true;
+    let pts = s.pts.slice(), f;
+    while ((f = find(pts[pts.length-1]))){ f[0].used = true; const q = f[1] ? f[0].pts.slice().reverse() : f[0].pts; pts.push(...q.slice(1)); }
+    while ((f = find(pts[0]))){ f[0].used = true; const q = f[1] ? f[0].pts : f[0].pts.slice().reverse(); pts = q.slice(0, -1).concat(pts); }
+    const a = pts[0], b = pts[pts.length-1];
+    const closed = pts.length > 2 && hyp(a[0]-b[0], a[1]-b[1]) <= tol;
+    if (closed) pts.pop();
+    out.push({id:id++, closed, pts, layer:s.layer});
+  }
+  return out;
+}
+function chordTol(){ return S.setup.units === 'mm' ? 0.002 : 0.0001; }
+function area(pts){ let a = 0; for (let i = 0, n = pts.length; i < n; i++){ const p = pts[i], q = pts[(i+1)%n]; a += p[0]*q[1] - q[0]*p[1]; } return a/2; }
+
+/* ============================== geometry placement ============================== */
+function geomBBox(){
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const c of S.geom.chains) for (const p of c.pts){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  const m = S.geom.mesh;
+  if (m){ x0 = Math.min(x0, m.bb[0]); y0 = Math.min(y0, m.bb[1]); z0 = m.bb[2]; x1 = Math.max(x1, m.bb[3]); y1 = Math.max(y1, m.bb[4]); z1 = m.bb[5]; }
+  return isFinite(x0) ? {x0, y0, x1, y1, z0, z1} : null;
+}
+function meshBB(pos){
+  const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < pos.length; i += 3) for (let k = 0; k < 3; k++){ const v = pos[i+k]; if (v < b[k]) b[k] = v; if (v > b[k+3]) b[k+3] = v; }
+  return b;
+}
+function setMesh(pos){
+  const bb = meshBB(pos);
+  for (let i = 2; i < pos.length; i += 3) pos[i] -= bb[5];          // top of part at Z0
+  S.geom.mesh = {pos, bb:meshBB(pos)};
+}
+function translateGeom(dx, dy){
+  const mv = p => { p[0] += dx; p[1] += dy; };
+  for (const it of S.geom.items){ if (it.kind === 'circle'){ it.cx += dx; it.cy += dy; } else if (it.kind === 'point'){ it.x += dx; it.y += dy; } else it.pts.forEach(mv); }
+  if (S.geom.mesh){ const p = S.geom.mesh.pos; for (let i = 0; i < p.length; i += 3){ p[i] += dx; p[i+1] += dy; } S.geom.mesh.bb = meshBB(p); }
+  rebuildChains(true);
+}
+function rotateMesh(axis){
+  const m = S.geom.mesh; if (!m) return;
+  const p = m.pos;
+  for (let i = 0; i < p.length; i += 3){
+    const x = p[i], y = p[i+1], z = p[i+2];
+    if (axis === 'x'){ p[i+1] = -z; p[i+2] = y; } else if (axis === 'y'){ p[i] = z; p[i+2] = -x; } else { p[i] = -y; p[i+1] = x; }
+  }
+  setMesh(p); afterGeom();
+}
+function scaleGeom(f){
+  for (const it of S.geom.items){ if (it.kind === 'circle'){ it.cx *= f; it.cy *= f; it.r *= f; } else if (it.kind === 'point'){ it.x *= f; it.y *= f; } else it.pts.forEach(p => { p[0] *= f; p[1] *= f; }); }
+  if (S.geom.mesh){ const p = S.geom.mesh.pos; for (let i = 0; i < p.length; i++) p[i] *= f; S.geom.mesh.bb = meshBB(p); }
+  rebuildChains(true);
+}
+function rebuildChains(keepSel){
+  const old = S.geom.chains;
+  S.geom.chains = buildChains(S.geom.items, S.geom.layers);
+  if (!keepSel || old.length !== S.geom.chains.length) S.ops.forEach(o => o.sel = []);
+  afterGeom();
+}
+function afterGeom(){
+  autoStock();
+  S.ops.forEach(o => o.moves = null);
+  drawGeom(); drawStock(); clearSim();
+  schedule();
+}
+function autoStock(){
+  const st = S.setup.stock, bb = geomBBox();
+  if (!st.auto || !bb) return;
+  st.x0 = rnd(bb.x0 - st.margin); st.y0 = rnd(bb.y0 - st.margin); st.x1 = rnd(bb.x1 + st.margin); st.y1 = rnd(bb.y1 + st.margin);
+  if (S.geom.mesh) st.bottom = rnd(Math.min(st.bottom, bb.z0));
+}
+
+/* ============================== clipper helpers ============================== */
+const SC = () => S.setup.units === 'mm' ? 1e4 : 1e5;
+const toCL = pl => pl.map(pts => pts.map(p => ({X:Math.round(p[0]*SC()), Y:Math.round(p[1]*SC())})));
+const fromCL = pl => pl.map(path => path.map(p => [p.X/SC(), p.Y/SC()]));
+function clUnion(polys){
+  const c = new CL.Clipper(), sol = new CL.Paths();
+  c.AddPaths(toCL(polys), CL.PolyType.ptSubject, true);
+  c.Execute(CL.ClipType.ctUnion, sol, CL.PolyFillType.pftEvenOdd, CL.PolyFillType.pftEvenOdd);
+  return fromCL(sol);
+}
+function clOffset(polys, d){
+  const co = new CL.ClipperOffset(2, chordTol()*SC()), sol = new CL.Paths();
+  co.AddPaths(toCL(polys), CL.JoinType.jtRound, CL.EndType.etClosedPolygon);
+  co.Execute(sol, d*SC());
+  return fromCL(sol).map(p => dp3(p.concat([p[0]]).map(q => [q[0], q[1], 0]), chordTol()).slice(0, -1).map(q => [q[0], q[1]])).filter(p => p.length > 2);
+}
+function insideAll(polys, x, y){
+  const pt = {X:Math.round(x*SC()), Y:Math.round(y*SC())};
+  let n = 0; for (const p of toCL(polys)) if (CL.Clipper.PointInPolygon(pt, p) !== 0) n++;
+  return n % 2 === 1;
+}
+
+/* ============================== path builder ============================== */
+class PB {
+  constructor(ctx){ this.m = []; this.c = ctx; this.cur = null; }
+  add(g, x, y, z, f, ex){ this.m.push(Object.assign({g, x, y, z, f}, ex || {})); this.cur = {x, y, z}; }
+  rapid(x, y, z){ const c = this.cur; if (c && Math.abs(c.x-x) < 1e-9 && Math.abs(c.y-y) < 1e-9 && Math.abs(c.z-z) < 1e-9) return; this.add(0, x, y, z); }
+  feed(x, y, z, f){ const c = this.cur; if (c && Math.abs(c.x-x) < 1e-9 && Math.abs(c.y-y) < 1e-9 && Math.abs(c.z-z) < 1e-9) return; this.add(1, x, y, z, f || this.c.feed); }
+  // travel to (x,y) and enter down to z: rapid to approach height, then feed
+  enter(x, y, z, approach){
+    const cz = this.c.clearZ;
+    if (!this.cur) this.add(0, x, y, this.c.safeZ);
+    else if (hyp(this.cur.x-x, this.cur.y-y) > 1e-9){ this.rapid(this.cur.x, this.cur.y, Math.max(cz, this.cur.z)); this.rapid(x, y, cz); }
+    const a = Math.min(cz, approach == null ? cz : approach);
+    if (a > z) { this.rapid(x, y, Math.max(a, z)); }
+    this.feed(x, y, z, this.c.plunge);
+  }
+  retract(){ if (this.cur) this.rapid(this.cur.x, this.cur.y, Math.max(this.c.clearZ, this.cur.z)); }
+  end(){ if (this.cur) this.rapid(this.cur.x, this.cur.y, this.c.safeZ); }
+  // feed from the current position along a polyline, fitting G2/G3 arcs where possible.
+  // Points are [x,y] at height z, or [x,y,z] for ramps (z linear in length → helical arcs).
+  poly(pts, z, f){
+    f = f || this.c.feed;
+    const Z = p => p.length > 2 ? p[2] : z;
+    if (!S.setup.post.arcs || pts.length < 3){ for (const p of pts) this.feed(p[0], p[1], Z(p), f); return; }
+    const all = [[this.cur.x, this.cur.y, this.cur.z]].concat(pts);
+    for (const s of arcFit(all, arcTol())){
+      const zz = Z(all[s.k]);
+      if (s.arc) this.add(s.cw ? 2 : 3, s.x, s.y, zz, f, {i:s.cx - this.cur.x, j:s.cy - this.cur.y});
+      else this.feed(s.x, s.y, zz, f);
+    }
+  }
+  approach(top){ return Math.max(top, S.setup.stock.top) + (S.setup.units === 'mm' ? 1 : 0.04); }
+}
+const arcTol = () => S.setup.units === 'mm' ? 0.005 : 0.0002;
+function circ3(a, b, c){
+  const d = 2*(a[0]*(b[1]-c[1]) + b[0]*(c[1]-a[1]) + c[0]*(a[1]-b[1]));
+  if (Math.abs(d) < 1e-12) return null;
+  const a2 = a[0]*a[0]+a[1]*a[1], b2 = b[0]*b[0]+b[1]*b[1], c2 = c[0]*c[0]+c[1]*c[1];
+  const x = (a2*(b[1]-c[1]) + b2*(c[1]-a[1]) + c2*(a[1]-b[1]))/d, y = (a2*(c[0]-b[0]) + b2*(a[0]-c[0]) + c2*(b[0]-a[0]))/d;
+  return [x, y, hyp(a[0]-x, a[1]-y)];
+}
+// greedy arc fitting of a polyline; returns segments ending at each target point
+function arcFit(pts, tol){
+  const out = [], n = pts.length, maxR = S.setup.units === 'mm' ? 2000 : 80;
+  let i = 0;
+  while (i < n - 1){
+    let best = null;
+    for (let j = i + 3; j < n; j++){
+      const c = circ3(pts[i], pts[(i+j) >> 1], pts[j]);
+      if (!c || c[2] > maxR) break;
+      let ok = true, sgn = 0, sweep = 0;
+      for (let k = i; k < j && ok; k++){
+        const p = pts[k], q = pts[k+1];
+        if (Math.abs(hyp(q[0]-c[0], q[1]-c[1]) - c[2]) > tol) ok = false;
+        const cr = (p[0]-c[0])*(q[1]-c[1]) - (p[1]-c[1])*(q[0]-c[0]);
+        const s = Math.sign(cr); if (!s || (sgn && s !== sgn)) ok = false; sgn = s;
+        sweep += Math.abs(Math.atan2(cr, (p[0]-c[0])*(q[0]-c[0]) + (p[1]-c[1])*(q[1]-c[1])));
+        const mx = (p[0]+q[0])/2, my = (p[1]+q[1])/2;               // chord must hug the arc
+        if (c[2] - hyp(mx-c[0], my-c[1]) > tol*2) ok = false;
+      }
+      if (!ok || sweep > Math.PI) break;
+      best = {j, c, cw:sgn < 0};
+    }
+    if (best){ out.push({arc:true, k:best.j, x:pts[best.j][0], y:pts[best.j][1], cx:best.c[0], cy:best.c[1], cw:best.cw}); i = best.j; }
+    else { out.push({k:i+1, x:pts[i+1][0], y:pts[i+1][1]}); i++; }
+  }
+  return out;
+}
+function levels(top, bottom, step){
+  if (bottom >= top) return [bottom];
+  const n = Math.max(1, Math.ceil((top - bottom)/Math.max(step, 1e-6) - 1e-9)), d = (top - bottom)/n, out = [];
+  for (let k = 1; k <= n; k++) out.push(k === n ? bottom : top - d*k);
+  return out;
+}
+// rotate a closed ring so it starts at the point on it nearest (x,y), inserting that point if it lies mid-edge
+function rotateTo(ring, x, y){
+  let bk = 0, bt = 0, bd = Infinity;
+  for (let k = 0; k < ring.length; k++){
+    const a = ring[k], b = ring[(k+1) % ring.length], dx = b[0]-a[0], dy = b[1]-a[1], L2 = dx*dx + dy*dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((x-a[0])*dx + (y-a[1])*dy)/L2)) : 0, d = hyp(a[0] + dx*t - x, a[1] + dy*t - y);
+    if (d < bd - 1e-12){ bd = d; bk = k; bt = t; }
+  }
+  const a = ring[bk], b = ring[(bk+1) % ring.length], L = hyp(b[0]-a[0], b[1]-a[1]);
+  if (bt*L < arcTol()) return ring.slice(bk).concat(ring.slice(0, bk));
+  if ((1-bt)*L < arcTol()) return ring.slice(bk+1).concat(ring.slice(0, bk+1));
+  const p = [a[0] + (b[0]-a[0])*bt, a[1] + (b[1]-a[1])*bt];
+  return [p].concat(ring.slice(bk+1), ring.slice(0, bk+1));
+}
+function perim(ring){ let s = 0; for (let k = 0; k < ring.length; k++){ const p = ring[k], q = ring[(k+1) % ring.length]; s += hyp(q[0]-p[0], q[1]-p[1]); } return s; }
+// cut a closed ring at depth z, entering from zFrom by plunge or ramp; ends back at its start point
+function cutRing(pb, ring, zFrom, z, op){
+  const p = op.p;
+  if (p.entry === 'ramp' && zFrom > z + 1e-9 && ring.length > 2){
+    const slope = Math.tan(Math.max(0.5, p.rampAngle)*Math.PI/180);
+    const per = perim(ring); if (per < 1e-6) return;
+    let zc = zFrom, k = 0;
+    const ramp = [];
+    pb.feed(ring[0][0], ring[0][1], zFrom, pb.c.plunge);
+    for (let guard = 0; guard < 200000; guard++){
+      const a = ring[k % ring.length], b = ring[(k+1) % ring.length], L = hyp(b[0]-a[0], b[1]-a[1]);
+      const dz = L*slope;
+      if (zc - dz <= z){
+        const t = dz > 0 ? (zc - z)/dz : 1, sx = a[0] + (b[0]-a[0])*t, sy = a[1] + (b[1]-a[1])*t;
+        ramp.push([sx, sy, z]);
+        pb.poly(ramp, z);
+        const i0 = (k+1) % ring.length, loop = ring.slice(i0).concat(ring.slice(0, i0), [[sx, sy]]);
+        pb.poly(loop, z);
+        return;
+      }
+      zc -= dz; ramp.push([b[0], b[1], zc]); k++;
+    }
+  } else {
+    pb.feed(ring[0][0], ring[0][1], z, pb.c.plunge);
+    pb.poly(ring.slice(1).concat([ring[0]]), z);
+  }
+}
+
+/* ============================== operations ============================== */
+const OPDEF = {
+  face:{label:'Facing', icon:'▭', tools:['face','flat','bull'], chains:false},
+  contour:{label:'Contour', icon:'◯', tools:['flat','bull','ball'], chains:true},
+  pocket:{label:'Pocket', icon:'▣', tools:['flat','bull','ball'], chains:true},
+  drill:{label:'Drill / Tap', icon:'⊙', tools:['drill','spot','tap','ream','flat'], chains:true},
+  rough3d:{label:'3D Rough', icon:'⛰', tools:['flat','bull','ball'], chains:false},
+  finish3d:{label:'3D Finish', icon:'〰', tools:['ball','bull','flat'], chains:false}
+};
+const DIR = [['climb','Climb'],['conv','Conventional']], ENTRY = [['plunge','Plunge'],['ramp','Ramp']];
+const FIELDS = {
+  face:[['top','Start Z (stock top)','n'],['bottom','Final Z','n'],['stepdown','Max step-down','n'],['stepoverPct','Step-over % of Ø','n']],
+  contour:[['side','Tool side','s',[['outside','Outside'],['inside','Inside'],['on','On line']]],['top','Top Z','n'],['bottom','Bottom Z','n'],['stepdown','Max step-down','n'],['allowance','Wall stock to leave','n'],['dir','Direction','s',DIR],['entry','Entry','s',ENTRY],['rampAngle','Ramp angle °','n']],
+  pocket:[['top','Top Z','n'],['bottom','Bottom Z','n'],['stepdown','Max step-down','n'],['stepoverPct','Step-over % of Ø','n'],['allowance','Wall stock to leave','n'],['dir','Direction','s',DIR],['entry','Entry','s',ENTRY],['rampAngle','Ramp angle °','n']],
+  drill:[['cycle','Cycle','s',[['G81','G81 Drill'],['G82','G82 Spot / dwell'],['G83','G83 Deep peck'],['G73','G73 Chip-break peck'],['G84','G84 Tap'],['G85','G85 Ream / bore']]],['top','Top Z','n'],['bottom','Depth Z','n'],['rplane','R plane Z','n'],['peck','Peck Q','n'],['dwell','Dwell P (ms)','n'],['addTip','Depth = full Ø (add drill point)','c']],
+  rough3d:[['zmin','Lowest Z','n'],['stepdown','Max step-down','n'],['stepoverPct','Step-over % of Ø','n'],['allowance','Stock to leave','n'],['res','Calc resolution','n'],['area','Area','s',[['stock','Whole stock'],['part','Part + tool radius']]]],
+  finish3d:[['zmin','Lowest Z','n'],['stepover','Step-over','n'],['allowance','Stock to leave','n'],['res','Calc resolution','n'],['dirn','Raster direction','s',[['X','Along X'],['Y','Along Y']]],['area','Area','s',[['part','Part + tool radius'],['stock','Whole stock']]]]
+};
+function defOp(type){
+  const k = S.setup.units === 'mm' ? 1 : 1/25.4, st = S.setup.stock;
+  const P = {
+    face:{top:st.top, bottom:0, stepdown:rnd(1*k), stepoverPct:70},
+    contour:{side:'outside', top:0, bottom:rnd(-5*k), stepdown:rnd(2*k), allowance:0, dir:'climb', entry:'plunge', rampAngle:3},
+    pocket:{top:0, bottom:rnd(-5*k), stepdown:rnd(2*k), stepoverPct:45, allowance:0, dir:'climb', entry:'ramp', rampAngle:3},
+    drill:{cycle:'G83', top:0, bottom:rnd(-10*k), rplane:rnd(2*k), peck:rnd(2*k), dwell:0, addTip:true},
+    rough3d:{zmin:rnd(S.geom.mesh ? S.geom.mesh.bb[2] : st.bottom), stepdown:rnd(1.5*k), stepoverPct:45, allowance:rnd(0.3*k), res:rnd(0.4*k), area:'stock'},
+    finish3d:{zmin:rnd(S.geom.mesh ? S.geom.mesh.bb[2] : st.bottom), stepover:rnd(0.3*k), allowance:0, res:rnd(0.15*k), dirn:'X', area:'part'}
+  }[type];
+  const tool = S.tools.find(t => OPDEF[type].tools[0] === t.type) || S.tools.find(t => OPDEF[type].tools.includes(t.type)) || S.tools[0];
+  return {id:uid(), type, name:OPDEF[type].label, enabled:true, toolId:tool && tool.id, sel:[], p:P, moves:null, warn:[]};
+}
+const toolOf = op => S.tools.find(t => t.id === op.toolId);
+const chainsOf = op => op.sel.map(id => S.geom.chains.find(c => c.id === id)).filter(Boolean);
+
+async function genOp(op){
+  const tool = toolOf(op), w = [], st = S.setup;
+  op.warn = w;
+  if (!tool){ w.push('No tool selected.'); return op.moves = []; }
+  const ctx = {safeZ:st.safeZ, clearZ:st.clearZ, feed:tool.feed, plunge:tool.plunge};
+  const pb = new PB(ctx), p = op.p, r = tool.dia/2;
+  if (tool.rpm > st.maxRpm) w.push(`T${tool.num} spindle ${tool.rpm} RPM exceeds machine max ${st.maxRpm}.`);
+  if (tool.feed > st.maxFeed) w.push(`T${tool.num} feed exceeds machine max feed.`);
+  if (p.bottom != null && p.bottom < st.stock.bottom - 1e-6) w.push(`Bottom Z ${p.bottom} is below stock bottom ${st.stock.bottom} — check fixture/vise clearance.`);
+  if (p.top != null && p.bottom != null && tool.len && p.top - p.bottom > tool.len) w.push(`Depth ${rnd(p.top - p.bottom)} is deeper than T${tool.num} flute length ${tool.len}.`);
+  if (st.clearZ <= st.stock.top) w.push('Clearance Z is not above the stock top.');
+  const climb = p.dir !== 'conv';
+
+  if (op.type === 'face'){
+    const s = st.stock, so = Math.max(tool.dia*p.stepoverPct/100, 1e-3);
+    const ext = S.setup.units === 'mm' ? 2 : 0.08;
+    const xa = s.x0 - r - ext, xb = s.x1 + r + ext;
+    const ya = s.y0 + r - tool.dia*0.1, yb = s.y1 - r + tool.dia*0.1;
+    const nr = yb > ya ? Math.ceil((yb - ya)/so) + 1 : 1;
+    const rows = []; for (let k = 0; k < nr; k++) rows.push(nr === 1 ? (s.y0 + s.y1)/2 : ya + (yb - ya)*k/(nr - 1));
+    for (const z of levels(p.top, p.bottom, p.stepdown)){
+      rows.forEach((y, k) => {
+        const [xs, xe] = k % 2 ? [xb, xa] : [xa, xb];
+        if (k === 0) pb.enter(xs, y, z, pb.approach(p.top));
+        else pb.feed(xs, y, z);
+        pb.feed(xe, y, z);
+      });
+      pb.retract();
+    }
+  }
+
+  else if (op.type === 'contour'){
+    const ch = chainsOf(op).filter(c => !c.point);
+    if (!ch.length) w.push('Select chains in the view (click the geometry).');
+    for (const c of ch){
+      let rings = [];
+      if (!c.closed){
+        if (p.side !== 'on') w.push(`Chain ${c.id} is open — cut on the line.`);
+        const pts = c.pts; let fwd = true;
+        pb.enter(pts[0][0], pts[0][1], levels(p.top, p.bottom, p.stepdown)[0], pb.approach(p.top));
+        for (const z of levels(p.top, p.bottom, p.stepdown)){
+          const seq = fwd ? pts : pts.slice().reverse();
+          pb.feed(seq[0][0], seq[0][1], z, ctx.plunge); pb.poly(seq.slice(1), z); fwd = !fwd;
+        }
+        pb.retract(); continue;
+      }
+      const base = area(c.pts) > 0 ? c.pts : c.pts.slice().reverse();      // CCW
+      if (p.side === 'on') rings = [base];
+      else rings = clOffset([base], (p.side === 'outside' ? 1 : -1)*(r + p.allowance));
+      if (!rings.length){ w.push(`Tool too large for chain ${c.id}.`); continue; }
+      for (let ring of rings){
+        // climb: machined region on the left of travel → outside = CW, inside = CCW
+        let ccw = area(ring) > 0;
+        const wantCCW = (p.side === 'outside' ? !climb : climb);
+        if (ccw !== wantCCW) ring = ring.slice().reverse();
+        const cur = pb.cur || {x:ring[0][0], y:ring[0][1]};
+        ring = rotateTo(ring, cur.x, cur.y);
+        let zPrev = p.top;
+        pb.enter(ring[0][0], ring[0][1], p.top, pb.approach(p.top));
+        for (const z of levels(p.top, p.bottom, p.stepdown)){ cutRing(pb, ring, zPrev, z, op); zPrev = z; }
+        pb.retract();
+      }
+    }
+  }
+
+  else if (op.type === 'pocket'){
+    const ch = chainsOf(op).filter(c => c.closed);
+    if (!ch.length) w.push('Select closed chains to pocket (outer boundary plus any islands).');
+    else {
+      const region = clUnion(ch.map(c => c.pts));
+      const bound = clOffset(region, -(r + p.allowance));
+      if (!bound.length) w.push('Tool is too large for the pocket.');
+      const so = Math.max(tool.dia*p.stepoverPct/100, 1e-3), rings = [];
+      let cur = bound;
+      for (let g = 0; cur.length && g < 5000; g++){ rings.push(cur); cur = clOffset(cur, -so); }
+      const order = rings.slice().reverse().flat().map(rg => climb ? rg : rg.slice().reverse());
+      let zPrev = p.top;
+      for (const z of levels(p.top, p.bottom, p.stepdown)){
+        let first = true;
+        for (let ring of order){
+          const c0 = pb.cur || {x:ring[0][0], y:ring[0][1]};
+          ring = rotateTo(ring, c0.x, c0.y);
+          const s = ring[0];
+          let linked = false;
+          if (!first && pb.cur && Math.abs(pb.cur.z - z) < 1e-9){
+            const d = hyp(s[0]-pb.cur.x, s[1]-pb.cur.y);
+            if (d <= tool.dia){
+              linked = true;
+              for (let t = 0; t <= 1 && linked; t += 0.1) if (!insideAll(bound, pb.cur.x + (s[0]-pb.cur.x)*t, pb.cur.y + (s[1]-pb.cur.y)*t)) linked = false;
+            }
+          }
+          if (linked){ pb.feed(s[0], s[1], z); pb.poly(ring.slice(1).concat([s]), z); }
+          else { pb.retract(); pb.enter(s[0], s[1], zPrev, pb.approach(zPrev)); cutRing(pb, ring, zPrev, z, op); }
+          first = false;
+        }
+        pb.retract(); zPrev = z;
+      }
+    }
+  }
+
+  else if (op.type === 'drill'){
+    let pts = chainsOf(op).filter(c => c.circle || c.point).map(c => c.circle ? [c.circle.cx, c.circle.cy] : c.pts[0]);
+    if (!pts.length) w.push('Select circles or points to drill.');
+    if (chainsOf(op).some(c => !c.circle && !c.point)) w.push('Only circles and points are drilled; other selected chains ignored.');
+    // nearest-neighbour order
+    const ord = []; let at = [st.stock.x0, st.stock.y0];
+    while (pts.length){ let bi = 0, bd = Infinity; pts.forEach((q, k) => { const d = hyp(q[0]-at[0], q[1]-at[1]); if (d < bd){ bd = d; bi = k; } }); at = pts.splice(bi, 1)[0]; ord.push(at); }
+    if (ord.length){
+      let z = p.bottom;
+      if (p.addTip && (tool.type === 'drill' || tool.type === 'spot')) z -= (tool.dia/2)/Math.tan((tool.angle || 118)/2*Math.PI/180);
+      let cyc = p.cycle;
+      if (tool.type === 'tap' && cyc !== 'G84'){ cyc = 'G84'; w.push('Tap tool: cycle forced to G84.'); }
+      if (cyc === 'G84' && !tool.pitch) w.push('Tap has no pitch set.');
+      const f = cyc === 'G84' ? tool.rpm*tool.pitch : tool.feed;
+      if (p.rplane <= p.top) w.push('R plane should be above the top Z.');
+      pb.add(0, ord[0][0], ord[0][1], ctx.safeZ); pb.rapid(ord[0][0], ord[0][1], Math.max(ctx.clearZ, p.rplane));
+      pb.add('cyc', ord[ord.length-1][0], ord[ord.length-1][1], pb.cur.z, f, {code:cyc, pts:ord, zb:rnd(z), r:p.rplane, q:p.peck, dw:p.dwell, rpm:tool.rpm});
+    }
+  }
+
+  else if (op.type === 'rough3d' || op.type === 'finish3d'){
+    const m = S.geom.mesh;
+    if (!m){ w.push('Load a 3D model (STEP, IGES or STL) first.'); return op.moves = []; }
+    if (!MILLS.includes(tool.type)) w.push('Use an end mill for 3D toolpaths.');
+    const a = p.allowance || 0, R = r + a, res = Math.max(p.res, S.setup.units === 'mm' ? 0.02 : 0.001);
+    const s = st.stock, bb = m.bb;
+    const A = p.area === 'part' ? {x0:bb[0]-R, y0:bb[1]-R, x1:bb[3]+R, y1:bb[4]+R} : {x0:s.x0, y0:s.y0, x1:s.x1, y1:s.y1};
+    if (op.type === 'rough3d'){ A.x0 -= R + res; A.x1 += R + res; }
+    const pad = R + 2*res;
+    const hm = makeHM(m, Math.min(A.x0, bb[0]) - pad, Math.min(A.y0, bb[1]) - pad, Math.max(A.x1, bb[3]) + pad, Math.max(A.y1, bb[4]) + pad, res);
+    const fp = footprint(R, res, tool.type, tool.type === 'bull' ? tool.cr + a : tool.type === 'ball' ? R : 0, res*0.75);
+    const memo = new Map();
+    const zFloor = isFinite(p.zmin) ? p.zmin : -Infinity;
+    const tz = (i, j) => { const kk = j*hm.nx + i; let v = memo.get(kk); if (v === undefined){ v = Math.max(toolZ(hm, fp, i, j) + a, zFloor); memo.set(kk, v); } return v; };
+    const I = x => Math.max(0, Math.min(hm.nx-1, Math.round((x - hm.x0)/res))), J = y => Math.max(0, Math.min(hm.ny-1, Math.round((y - hm.y0)/res)));
+    const X = i => hm.x0 + i*res, Y = j => hm.y0 + j*res;
+    if (op.type === 'rough3d'){
+      const so = Math.max(tool.dia*p.stepoverPct/100, res);
+      const ny = Math.max(1, Math.ceil((A.y1 - A.y0)/so)), rowsJ = [];
+      for (let k = 0; k <= ny; k++) rowsJ.push(J(A.y0 + (A.y1 - A.y0)*k/ny));
+      const i0 = I(A.x0), i1 = I(A.x1), rowZ = [];
+      let zmin = Infinity;
+      for (let k = 0; k < rowsJ.length; k++){
+        const arr = new Float32Array(i1 - i0 + 1);
+        for (let i = i0; i <= i1; i++){ arr[i-i0] = tz(i, rowsJ[k]); zmin = Math.min(zmin, arr[i-i0]); }
+        rowZ.push(arr);
+        if (k % 8 === 0){ busy(true, `${op.name}: analysing model ${Math.round(100*k/rowsJ.length)}%`); await tick(); }
+      }
+      const zb = Math.max(zmin, s.bottom, zFloor);
+      let zPrev = s.top;
+      for (const z of levels(s.top, zb, p.stepdown)){
+        let fwd = true;
+        for (let k = 0; k < rowsJ.length; k++){
+          const arr = rowZ[k], iv = [];
+          let st0 = -1;
+          for (let i = 0; i < arr.length; i++){ const ok = arr[i] <= z + 1e-6; if (ok && st0 < 0) st0 = i; if ((!ok || i === arr.length-1) && st0 >= 0){ iv.push([st0, ok ? i : i-1]); st0 = -1; } }
+          const seq = fwd ? iv : iv.map(v => [v[1], v[0]]).reverse();
+          const y = Y(rowsJ[k]);
+          for (const [ia, ib] of seq){
+            const xa = X(i0+ia), xb = X(i0+ib);
+            let linked = false;
+            if (pb.cur && Math.abs(pb.cur.z - z) < 1e-9 && hyp(pb.cur.x - xa, pb.cur.y - y) <= so*1.5 + res){
+              linked = true;
+              const n = Math.ceil(hyp(pb.cur.x - xa, pb.cur.y - y)/res) + 1;
+              for (let t = 0; t <= n && linked; t++){ const xx = pb.cur.x + (xa - pb.cur.x)*t/n, yy = pb.cur.y + (y - pb.cur.y)*t/n; if (tz(I(xx), J(yy)) > z + 1e-6) linked = false; }
+            }
+            if (linked) pb.feed(xa, y, z);
+            else { pb.retract(); pb.enter(xa, y, z, pb.approach(zPrev)); }
+            pb.feed(xb, y, z);
+          }
+          if (seq.length) fwd = !fwd;
+        }
+        pb.retract(); zPrev = z;
+      }
+    } else {
+      const so = Math.max(p.stepover, res), alongX = p.dirn !== 'Y';
+      const [u0, u1, v0, v1] = alongX ? [A.x0, A.x1, A.y0, A.y1] : [A.y0, A.y1, A.x0, A.x1];
+      const nv = Math.max(1, Math.ceil((v1 - v0)/so)), tol = S.setup.units === 'mm' ? 0.004 : 0.00015;
+      const sample = (u, v) => alongX ? [u, v, tz(I(u), J(v))] : [v, u, tz(I(v), J(u))];
+      let fwd = true, first = true;
+      for (let k = 0; k <= nv; k++){
+        const v = v0 + (v1 - v0)*k/nv, nu = Math.max(1, Math.ceil((u1 - u0)/res)), row = [];
+        for (let q = 0; q <= nu; q++) row.push(sample(u0 + (u1 - u0)*q/nu, v));
+        const pts = dp3(fwd ? row : row.reverse(), tol);
+        if (first){ pb.enter(pts[0][0], pts[0][1], pts[0][2]); first = false; }
+        else {   // link along the surface to the start of the next row
+          const c = pb.cur, n = Math.max(1, Math.ceil(hyp(pts[0][0]-c.x, pts[0][1]-c.y)/res));
+          for (let t = 1; t < n; t++){ const xx = c.x + (pts[0][0]-c.x)*t/n, yy = c.y + (pts[0][1]-c.y)*t/n; pb.feed(xx, yy, tz(I(xx), J(yy))); }
+        }
+        for (const q of pts) pb.feed(q[0], q[1], q[2]);
+        fwd = !fwd;
+        if (k % 4 === 0){ busy(true, `${op.name}: ${Math.round(100*k/nv)}%`); await tick(); }
+      }
+      pb.retract();
+    }
+  }
+  pb.end();
+  return op.moves = pb.m;
+}
+function dp3(pts, tol){
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length-1] = 1;
+  const st = [[0, pts.length-1]];
+  while (st.length){
+    const [a, b] = st.pop(), A = pts[a], B = pts[b];
+    const d = [B[0]-A[0], B[1]-A[1], B[2]-A[2]], L2 = d[0]*d[0]+d[1]*d[1]+d[2]*d[2];
+    let bi = -1, bd = tol;
+    for (let k = a+1; k < b; k++){
+      const P = pts[k], w = [P[0]-A[0], P[1]-A[1], P[2]-A[2]];
+      const t = L2 ? Math.max(0, Math.min(1, (w[0]*d[0]+w[1]*d[1]+w[2]*d[2])/L2)) : 0;
+      const e = hyp(w[0]-d[0]*t, w[1]-d[1]*t, w[2]-d[2]*t);
+      if (e > bd){ bd = e; bi = k; }
+    }
+    if (bi > 0){ keep[bi] = 1; st.push([a, bi], [bi, b]); }
+  }
+  return pts.filter((_, k) => keep[k]);
+}
+
+/* ============================== heightmaps ============================== */
+function makeHM(m, x0, y0, x1, y1, res){
+  const nx = Math.ceil((x1 - x0)/res) + 1, ny = Math.ceil((y1 - y0)/res) + 1;
+  if (nx*ny > 8e6) throw new Error('Calc resolution is too fine for this part size — increase it.');
+  const h = new Float32Array(nx*ny).fill(-1e30), P = m.pos;
+  const set = (x, y, z) => { const i = Math.round((x - x0)/res), j = Math.round((y - y0)/res); if (i < 0 || j < 0 || i >= nx || j >= ny) return; const k = j*nx + i; if (z > h[k]) h[k] = z; };
+  const edge = (ax, ay, az, bx, by, bz) => { const n = Math.max(1, Math.ceil(hyp(bx-ax, by-ay)/(res*0.5))); for (let k = 0; k <= n; k++){ const t = k/n; set(ax + (bx-ax)*t, ay + (by-ay)*t, az + (bz-az)*t); } };
+  for (let t = 0; t < P.length; t += 9){
+    const ax = P[t], ay = P[t+1], az = P[t+2], bx = P[t+3], by = P[t+4], bz = P[t+5], cx = P[t+6], cy = P[t+7], cz = P[t+8];
+    const i0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - x0)/res)), i1 = Math.min(nx-1, Math.ceil((Math.max(ax, bx, cx) - x0)/res));
+    const j0 = Math.max(0, Math.floor((Math.min(ay, by, cy) - y0)/res)), j1 = Math.min(ny-1, Math.ceil((Math.max(ay, by, cy) - y0)/res));
+    const d = (by-cy)*(ax-cx) + (cx-bx)*(ay-cy);
+    if (Math.abs(d) > 1e-14){
+      for (let j = j0; j <= j1; j++){ const y = y0 + j*res;
+        for (let i = i0; i <= i1; i++){ const x = x0 + i*res;
+          const l1 = ((by-cy)*(x-cx) + (cx-bx)*(y-cy))/d, l2 = ((cy-ay)*(x-cx) + (ax-cx)*(y-cy))/d, l3 = 1 - l1 - l2;
+          if (l1 >= -1e-7 && l2 >= -1e-7 && l3 >= -1e-7){ const z = l1*az + l2*bz + l3*cz, k = j*nx + i; if (z > h[k]) h[k] = z; }
+        }
+      }
+    }
+    edge(ax, ay, az, bx, by, bz); edge(bx, by, bz, cx, cy, cz); edge(cx, cy, cz, ax, ay, az);
+  }
+  const floor = m.bb[2];
+  for (let k = 0; k < h.length; k++) if (h[k] < -1e29) h[k] = floor;
+  return {nx, ny, x0, y0, res, h, floor};
+}
+function prof(type, R, cr, r){
+  if (type === 'ball') return R - Math.sqrt(Math.max(0, R*R - r*r));
+  if (type === 'bull' && cr > 0){ const rr = R - cr; return r <= rr ? 0 : cr - Math.sqrt(Math.max(0, cr*cr - (r-rr)*(r-rr))); }
+  return 0;
+}
+// cells under a tool of radius R; 'slack' widens it so grid rounding can never let the tool undercut
+function footprint(R, res, type, cr, slack = 0){
+  const n = Math.ceil((R + slack)/res), di = [], dj = [], dr = [];
+  for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++){ const r = hyp(i, j)*res; if (r <= R + slack + 1e-9){ di.push(i); dj.push(j); dr.push(prof(type, R, cr, Math.min(Math.max(0, r - slack), R))); } }
+  return {di:Int32Array.from(di), dj:Int32Array.from(dj), dr:Float32Array.from(dr)};
+}
+function toolZ(hm, fp, i, j){
+  const {nx, ny, h, floor} = hm, {di, dj, dr} = fp;
+  let m = -1e30;
+  for (let k = 0; k < di.length; k++){
+    const ii = i + di[k], jj = j + dj[k];
+    const v = (ii < 0 || jj < 0 || ii >= nx || jj >= ny ? floor : h[jj*nx + ii]) - dr[k];
+    if (v > m) m = v;
+  }
+  return m;
+}
+
+/* ============================== Fanuc post ============================== */
+function fmt(v, dec){
+  if (dec == null) dec = S.setup.units === 'mm' ? 3 : 4;
+  let s = (Math.round(v*10**dec)/10**dec).toFixed(dec);
+  if (s.includes('.')) s = s.replace(/0+$/, '');
+  if (/^-0\.?$/.test(s)) s = '0.';
+  if (!s.includes('.')) s += '.';
+  return s;
+}
+const fF = f => fmt(f, S.setup.units === 'mm' ? 1 : 2);
+// Fanuc comments: plain upper-case ASCII only
+const cmt = s => '(' + String(s).replace(/[ØøⲐ⌀]/g, 'D').replace(/°/g, 'DEG').replace(/×/g, 'X').normalize('NFKD').replace(/[^\x20-\x7E]/g, '').toUpperCase().replace(/[()]/g, '').slice(0, 60) + ')';
+function post(){
+  const st = S.setup, pp = st.post, L = [], ops = S.ops.filter(o => o.enabled && o.moves && o.moves.length);
+  let n = 0;
+  const out = (s, num = true) => { if (num && pp.lineNums && s && !s.startsWith('(')){ n += pp.nInc; s = 'N' + n + ' ' + s; } L.push(s); return L.length - 1; };
+  out('%', false);
+  out(`O${String(st.progNum).padStart(4, '0')} ${cmt(st.progName)}`, false);
+  out(cmt(`DATE ${new Date().toISOString().slice(0, 10)}`), false);
+  out(cmt(`UNITS ${st.units === 'mm' ? 'MM' : 'INCH'}  WCS ${st.wcs}  Z0 = TOP OF PART`), false);
+  out(cmt(`STOCK X${fmt(st.stock.x0)} TO ${fmt(st.stock.x1)} Y${fmt(st.stock.y0)} TO ${fmt(st.stock.y1)} Z${fmt(st.stock.bottom)} TO ${fmt(st.stock.top)}`), false);
+  const used = [...new Set(ops.map(o => o.toolId))].map(id => S.tools.find(t => t.id === id));
+  used.forEach(t => out(cmt(`T${t.num} D${fmt(t.dia)} ${t.name}`), false));
+  out(`${st.units === 'mm' ? 'G21' : 'G20'}`);
+  out('G17 G40 G49 G80 G90');
+  out(pp.home); if (pp.home.includes('G91')) out('G90');
+  let prevTool = null, prevRpm = null;
+  ops.forEach((op, oi) => {
+    const t = toolOf(op), mv = op.moves, next = ops[oi+1];
+    out(cmt(`${op.name} - T${t.num}`), false);
+    const tc = !prevTool || prevTool.id !== t.id;
+    const first = mv[0];
+    if (tc){
+      let s = pp.tcFmt.replace('#', t.num);
+      if (pp.nextTool){ const nt = ops.slice(oi+1).map(toolOf).find(x => x.id !== t.id); if (nt) s += ` T${nt.num}`; }
+      out(s);
+      out(`G00 G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${Math.round(t.rpm)} M03`);
+      out(`G43 Z${fmt(first.z)} H${String(t.num).padStart(2, '0')}${pp.coolant ? ' ' + pp.coolant : ''}`);
+    } else {
+      out(`G00 X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== t.rpm ? ` S${Math.round(t.rpm)} M03` : ''}`);
+      out(`Z${fmt(first.z)}`);
+    }
+    first.line = L.length - 1;
+    prevRpm = t.rpm;
+    let g = 0, X = first.x, Y = first.y, Z = first.z, F = null;
+    for (let k = 1; k < mv.length; k++){
+      const m = mv[k];
+      if (m.g === 'cyc'){
+        const head = `G98 ${m.code}`;
+        m.lines = [];
+        if (m.code === 'G84' && pp.rigid) out(`M29 S${Math.round(m.rpm)}`);
+        m.pts.forEach((q, qi) => {
+          let s = `X${fmt(q[0])} Y${fmt(q[1])}`;
+          if (qi === 0){
+            s = `${head} ${s} Z${fmt(m.zb)} R${fmt(m.r)}`;
+            if ((m.code === 'G83' || m.code === 'G73') && m.q > 0) s += ` Q${fmt(m.q)}`;
+            if ((m.code === 'G82' || m.code === 'G89') && m.dw > 0) s += ` P${Math.round(m.dw)}`;
+            s += ` F${fF(m.f)}`;
+          }
+          m.lines.push(out(s));
+        });
+        out('G80'); g = -1; F = null; X = m.x; Y = m.y;
+        continue;
+      }
+      let s = '';
+      if (m.g !== g) s += ['G00', 'G01', 'G02', 'G03'][m.g] + ' ';
+      if (Math.abs(m.x - X) > 1e-7 || m.g >= 2) s += `X${fmt(m.x)} `;
+      if (Math.abs(m.y - Y) > 1e-7 || m.g >= 2) s += `Y${fmt(m.y)} `;
+      if (Math.abs(m.z - Z) > 1e-7) s += `Z${fmt(m.z)} `;
+      if (m.g >= 2) s += `I${fmt(m.i)} J${fmt(m.j)} `;
+      if (m.g > 0 && m.f !== F){ s += `F${fF(m.f)} `; F = m.f; }
+      s = s.trim();
+      if (!/[XYZ]/.test(s)){ m.line = L.length - 1; continue; }
+      m.line = out(s);
+      g = m.g; X = m.x; Y = m.y; Z = m.z;
+    }
+    const keep = next && next.toolId === t.id;
+    if (!keep){
+      if (pp.coolant) out('M09');
+      out('M05');
+      out(pp.home); if (pp.home.includes('G91')) out('G90');
+      if (pp.m01 && next) out('M01');
+      prevTool = null;
+    } else prevTool = t;
+    if (!keep) prevRpm = null;
+  });
+  if (pp.endY){ out('G91 G28 Y0.'); out('G90'); }
+  out('M30');
+  out('%', false);
+  return L;
+}
+
+/* ============================== simulation path ============================== */
+function expand(){
+  const pts = [];
+  S.ops.filter(o => o.enabled && o.moves && o.moves.length).forEach(op => {
+    const t = toolOf(op);
+    let c = null;
+    const P = (x, y, z, rapid, line) => { pts.push({x, y, z, rapid, line, op, t}); c = {x, y, z}; };
+    for (const m of op.moves){
+      if (m.g === 'cyc'){
+        const z0 = c.z;
+        m.pts.forEach((q, qi) => { const ln = m.lines ? m.lines[qi] : null; P(q[0], q[1], z0, true, ln); P(q[0], q[1], m.r, true, ln); P(q[0], q[1], m.zb, false, ln); P(q[0], q[1], m.r, m.code !== 'G84' && m.code !== 'G85', ln); P(q[0], q[1], z0, true, ln); });
+        continue;
+      }
+      if ((m.g === 2 || m.g === 3) && c){
+        const cx = c.x + m.i, cy = c.y + m.j, rr = hyp(m.i, m.j);
+        let a0 = Math.atan2(c.y - cy, c.x - cx), a1 = Math.atan2(m.y - cy, m.x - cx);
+        if (m.g === 3 && a1 <= a0) a1 += 2*Math.PI; if (m.g === 2 && a1 >= a0) a1 -= 2*Math.PI;
+        const n = Math.max(2, Math.ceil(Math.abs(a1 - a0)/0.1)), z0 = c.z;
+        for (let k = 1; k <= n; k++){ const a = a0 + (a1 - a0)*k/n; P(cx + rr*Math.cos(a), cy + rr*Math.sin(a), z0 + (m.z - z0)*k/n, false, m.line); }
+        continue;
+      }
+      P(m.x, m.y, m.z, m.g === 0, m.line);
+    }
+  });
+  return pts;
+}
+function cycleTime(op){
+  const t = toolOf(op), st = S.setup; let tm = 0, c = null;
+  for (const m of op.moves || []){
+    if (m.g === 'cyc'){ m.pts.forEach(() => { tm += 2*Math.abs(m.r - m.zb)/m.f; }); if (m.pts.length > 1) for (let k = 1; k < m.pts.length; k++) tm += hyp(m.pts[k][0]-m.pts[k-1][0], m.pts[k][1]-m.pts[k-1][1])/st.rapid; c = {x:m.x, y:m.y, z:m.z}; continue; }
+    if (c){ let d = hyp(m.x-c.x, m.y-c.y, m.z-c.z); if (m.g >= 2){ const rr = hyp(m.i, m.j); d = Math.max(d, rr*0.5); } tm += d/(m.g === 0 ? st.rapid : (m.f || t.feed)); }
+    c = m;
+  }
+  return tm;   // minutes
+}
+const mmss = m => { const s = Math.round(m*60); return `${Math.floor(s/60)}:${String(s%60).padStart(2, '0')}`; };
+
+/* ============================== 3D view ============================== */
+let R3, scene, cam, ctl, G = {};
+function initView(){
+  const el = $('#cv');
+  R3 = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+  R3.setPixelRatio(Math.min(2, devicePixelRatio));
+  el.prepend(R3.domElement);
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0xf4f6f9);
+  cam = new THREE.PerspectiveCamera(40, 1, 0.05, 1e6); cam.up.set(0, 0, 1); cam.position.set(120, -220, 180);
+  ctl = new OrbitControls(cam, R3.domElement);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(1, -2, 3); scene.add(dl);
+  for (const k of ['grid', 'geom', 'mesh', 'stock', 'path', 'tool', 'sim']){ G[k] = new THREE.Group(); scene.add(G[k]); }
+  const ax = new THREE.AxesHelper(1); G.grid.add(ax); G.axes = ax;
+  new ResizeObserver(() => { const w = el.clientWidth, h = el.clientHeight; R3.setSize(w, h); cam.aspect = w/Math.max(1, h); cam.updateProjectionMatrix(); }).observe(el);
+  let down = null;
+  R3.domElement.addEventListener('pointerdown', e => down = [e.clientX, e.clientY]);
+  R3.domElement.addEventListener('pointerup', e => { if (down && hyp(e.clientX - down[0], e.clientY - down[1]) < 5) pick(e); down = null; });
+  (function loop(){ requestAnimationFrame(loop); ctl.update(); R3.render(scene, cam); })();
+}
+function clearG(g){ while (g.children.length){ const o = g.children.pop(); o.geometry && o.geometry.dispose(); o.material && o.material.dispose && o.material.dispose(); } }
+function drawGrid(){
+  const k = S.setup.units === 'mm' ? 1 : 1/25.4, bb = geomBBox();
+  G.grid.children.filter(o => o !== G.axes).forEach(o => G.grid.remove(o));
+  const size = bb ? Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0, 50*k)*2 : 200*k;
+  const step = S.setup.units === 'mm' ? (size > 400 ? 50 : 10) : (size > 16 ? 2 : 0.5);
+  const div = Math.round(size/step);
+  const gh = new THREE.GridHelper(div*step, div, 0xc9ced6, 0xe1e4ea); gh.rotation.x = Math.PI/2; gh.position.z = S.setup.stock.bottom - 0.001;
+  G.grid.add(gh);
+  G.axes.scale.setScalar(Math.max(10*k, size*0.08));
+}
+function drawGeom(){
+  clearG(G.geom);
+  const selIds = new Set(activeOp ? activeOp.sel : []);
+  for (const c of S.geom.chains){
+    const sel = selIds.has(c.id);
+    const col = sel ? 0xF57C00 : (c.closed ? 0x263238 : 0x7B1FA2);
+    let obj;
+    if (c.point){
+      const s = S.setup.units === 'mm' ? 1.5 : 0.06, [x, y] = c.pts[0];
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x-s, y, 0), new THREE.Vector3(x+s, y, 0), new THREE.Vector3(x, y-s, 0), new THREE.Vector3(x, y+s, 0)]);
+      obj = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:col}));
+    } else {
+      const g = new THREE.BufferGeometry().setFromPoints(c.pts.map(p => new THREE.Vector3(p[0], p[1], 0)));
+      obj = c.closed ? new THREE.LineLoop(g, new THREE.LineBasicMaterial({color:col})) : new THREE.Line(g, new THREE.LineBasicMaterial({color:col}));
+    }
+    obj.userData.chain = c.id; obj.renderOrder = 2;
+    G.geom.add(obj);
+    if (sel && c.circle){ // fill selected holes so they are easy to see
+      const m = new THREE.Mesh(new THREE.CircleGeometry(c.circle.r, 32), new THREE.MeshBasicMaterial({color:0xFFB74D, transparent:true, opacity:0.45, depthWrite:false}));
+      m.position.set(c.circle.cx, c.circle.cy, 0.001); G.geom.add(m);
+    }
+  }
+  clearG(G.mesh);
+  if (S.geom.mesh){
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(S.geom.mesh.pos, 3)); g.computeVertexNormals();
+    G.mesh.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0x90A4AE, metalness:0.2, roughness:0.6, transparent:true, opacity:0.85, side:THREE.DoubleSide})));
+  }
+  drawGrid();
+}
+function drawStock(){
+  clearG(G.stock);
+  const s = S.setup.stock;
+  const box = new THREE.Box3(new THREE.Vector3(s.x0, s.y0, s.bottom), new THREE.Vector3(s.x1, s.y1, s.top));
+  const h = new THREE.Box3Helper(box, 0x43A047); G.stock.add(h);
+}
+function drawPaths(){
+  clearG(G.path);
+  if (!simPts.length) return;
+  const rp = [], fp = [], fc = [];
+  const hi = new THREE.Color(0x1565C0), lo = new THREE.Color(0x90CAF9);
+  for (let k = 1; k < simPts.length; k++){
+    const a = simPts[k-1], b = simPts[k];
+    if (a.op !== b.op) continue;
+    if (b.rapid) rp.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    else { fp.push(a.x, a.y, a.z, b.x, b.y, b.z); const c = !activeOp || b.op === activeOp ? hi : lo; fc.push(c.r, c.g, c.b, c.r, c.g, c.b); }
+  }
+  const gr = new THREE.BufferGeometry(); gr.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
+  const lr = new THREE.LineSegments(gr, new THREE.LineDashedMaterial({color:0xE53935, dashSize:S.setup.units === 'mm' ? 2 : 0.08, gapSize:S.setup.units === 'mm' ? 1.5 : 0.06})); lr.computeLineDistances();
+  const gf = new THREE.BufferGeometry(); gf.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); gf.setAttribute('color', new THREE.Float32BufferAttribute(fc, 3));
+  G.path.add(lr, new THREE.LineSegments(gf, new THREE.LineBasicMaterial({vertexColors:true})));
+}
+function drawTool(k){
+  clearG(G.tool);
+  const p = simPts[k]; if (!p) return;
+  const t = p.t, r = t.dia/2, L = Math.max(t.len || t.dia*3, t.dia);
+  const mat = new THREE.MeshStandardMaterial({color:0xFFC107, metalness:0.5, roughness:0.35, transparent:true, opacity:0.85});
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 32), mat); cyl.rotation.x = Math.PI/2;
+  const grp = new THREE.Group(); grp.add(cyl);
+  if (t.type === 'ball'){ cyl.position.z = r + (L - r)/2; cyl.scale.y = (L - r)/L; const sp = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), mat); sp.position.z = r; grp.add(sp); }
+  else if (t.type === 'drill' || t.type === 'spot'){ const h = r/Math.tan((t.angle || 118)/2*Math.PI/180); const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 32), mat); cone.rotation.x = -Math.PI/2; cone.position.z = h/2; cyl.position.z = h + L/2; grp.add(cone); }
+  else cyl.position.z = L/2;
+  const hold = new THREE.Mesh(new THREE.CylinderGeometry(r*1.8, r*1.8, L*0.8, 32), new THREE.MeshStandardMaterial({color:0x78909C, transparent:true, opacity:0.4})); hold.rotation.x = Math.PI/2; hold.position.z = L*1.4 + (t.type === 'drill' ? r : 0);
+  grp.add(hold);
+  grp.position.set(p.x, p.y, p.z);
+  G.tool.add(grp);
+}
+function setView(v){
+  const bb = geomBBox() || {x0:0, y0:0, x1:100, y1:100, z0:-20, z1:0};
+  const s = S.setup.stock;
+  const cx = (s.x0 + s.x1)/2, cy = (s.y0 + s.y1)/2, cz = (s.top + s.bottom)/2;
+  const size = Math.max(s.x1 - s.x0, s.y1 - s.y0, s.top - s.bottom, 1)*1.6;
+  ctl.target.set(cx, cy, cz);
+  const d = size/Math.tan(cam.fov*Math.PI/360);
+  if (v === 'top') cam.position.set(cx, cy - 0.0001, cz + d);
+  else if (v === 'front') cam.position.set(cx, cy - d, cz);
+  else cam.position.set(cx + d*0.45, cy - d*0.7, cz + d*0.55);
+  cam.near = d/1000; cam.far = d*100; cam.updateProjectionMatrix();
+}
+function pick(e){
+  const rc = new THREE.Raycaster(), rect = R3.domElement.getBoundingClientRect();
+  const v = new THREE.Vector2(((e.clientX - rect.left)/rect.width)*2 - 1, -((e.clientY - rect.top)/rect.height)*2 + 1);
+  rc.setFromCamera(v, cam);
+  rc.params.Line.threshold = cam.position.distanceTo(ctl.target)*0.008;
+  const hits = rc.intersectObjects(G.geom.children.filter(o => o.userData.chain), false);
+  if (!hits.length) return;
+  const id = hits[0].object.userData.chain, c = S.geom.chains.find(x => x.id === id);
+  if (!activeOp || !OPDEF[activeOp.type].chains){ status(`Chain ${id} (${c.circle ? 'circle Ø' + fmt(c.circle.r*2) : c.closed ? 'closed' : 'open'}, layer ${c.layer}) — select a Contour, Pocket or Drill operation to use it.`); return; }
+  const i = activeOp.sel.indexOf(id);
+  if (i >= 0) activeOp.sel.splice(i, 1); else activeOp.sel.push(id);
+  status(`${activeOp.name}: ${activeOp.sel.length} chain(s) selected`);
+  activeOp.moves = null; drawGeom(); renderPanel(); schedule();
+}
+
+/* ============================== stock verification ============================== */
+function clearSim(){ clearG(G.sim); }
+async function verify(){
+  if (!simPts.length) return;
+  const s = S.setup.stock, upto = +$('#slider').value;
+  const span = Math.max(s.x1 - s.x0, s.y1 - s.y0);
+  const res = Math.max(span/450, S.setup.units === 'mm' ? 0.05 : 0.002);
+  const nx = Math.ceil((s.x1 - s.x0)/res) + 1, ny = Math.ceil((s.y1 - s.y0)/res) + 1;
+  const h = new Float32Array(nx*ny).fill(s.top);
+  const fps = new Map(), hits = [];
+  busy(true, 'Verifying…'); await tick();
+  for (let k = 1; k <= upto; k++){
+    const a = simPts[k-1], b = simPts[k];
+    if (a.op !== b.op) continue;
+    const t = b.t;
+    let fp = fps.get(t); if (!fp){ fp = footprint(t.dia/2, res, t.type === 'ball' ? 'ball' : t.type === 'bull' ? 'bull' : 'flat', t.type === 'ball' ? t.dia/2 : t.cr || 0); fps.set(t, fp); }
+    const L = hyp(b.x - a.x, b.y - a.y, b.z - a.z), n = Math.max(1, Math.ceil(L/(res*0.7)));
+    if (Math.min(a.z, b.z) > s.top) continue;
+    for (let q = 1; q <= n; q++){
+      const x = a.x + (b.x - a.x)*q/n, y = a.y + (b.y - a.y)*q/n, z = a.z + (b.z - a.z)*q/n;
+      if (z >= s.top) continue;
+      const ci = Math.round((x - s.x0)/res), cj = Math.round((y - s.y0)/res);
+      let hit = false;
+      for (let m = 0; m < fp.di.length; m++){
+        const ii = ci + fp.di[m], jj = cj + fp.dj[m];
+        if (ii < 0 || jj < 0 || ii >= nx || jj >= ny) continue;
+        const idx = jj*nx + ii, zz = z + fp.dr[m];
+        if (h[idx] > zz + 1e-6){ if (b.rapid && h[idx] - zz > res*0.5) hit = true; h[idx] = zz; }
+      }
+      if (hit && hits.length < 50) hits.push({x, y, z, line:b.line, op:b.op.name});
+    }
+    if (k % 3000 === 0){ busy(true, `Verifying… ${Math.round(100*k/upto)}%`); await tick(); }
+  }
+  // mesh of the remaining stock
+  clearSim();
+  const pos = new Float32Array(nx*ny*3), idx = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){ const k = j*nx + i; pos[k*3] = s.x0 + i*res; pos[k*3+1] = s.y0 + j*res; pos[k*3+2] = Math.max(h[k], s.bottom); }
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){ const a = j*nx + i; idx.push(a, a+1, a+nx, a+1, a+nx+1, a+nx); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  G.sim.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0x81C784, roughness:0.55, metalness:0.15, side:THREE.DoubleSide})));
+  busy(false);
+  const wl = $('#warn');
+  wl.querySelectorAll('.e').forEach(d => d.remove());
+  if (hits.length) hits.slice(0, 10).forEach(hh => { const d = document.createElement('div'); d.className = 'e'; d.textContent = `⚠ RAPID INTO MATERIAL — ${hh.op} near X${fmt(hh.x)} Y${fmt(hh.y)} Z${fmt(hh.z)}${hh.line != null ? ` (line ${hh.line + 1})` : ''}`; wl.prepend(d); });
+  status(hits.length ? `Verify found ${hits.length} rapid move(s) cutting material — see warnings.` : `Verify OK up to move ${upto}: no rapid moves cut material.`);
+}
+
+/* ============================== G-code panel ============================== */
+const LH = 18; let curLine = -1;
+function renderCode(){
+  const box = $('#code'), inner = $('#codeIn');
+  inner.style.height = gcode.length*LH + 'px';
+  const a = Math.max(0, Math.floor(box.scrollTop/LH) - 10), b = Math.min(gcode.length, a + Math.ceil(box.clientHeight/LH) + 20);
+  let h = '';
+  for (let i = a; i < b; i++){
+    const s = esc(gcode[i]).replace(/(\(.*\))/, '<span class="cm">$1</span>');
+    h += `<div class="ln${i === curLine ? ' cur' : ''}" style="top:${i*LH}px"><i>${i + 1}</i>${s}</div>`;
+  }
+  inner.innerHTML = h;
+}
+function gotoLine(i){
+  curLine = i; const box = $('#code');
+  if (i != null && i >= 0){ const y = i*LH; if (y < box.scrollTop || y > box.scrollTop + box.clientHeight - LH*2) box.scrollTop = y - box.clientHeight/3; }
+  renderCode();
+}
+
+/* ============================== regenerate ============================== */
+let timer = null, running = false, again = false;
+function schedule(){ clearTimeout(timer); timer = setTimeout(regen, 250); }
+async function regen(){
+  if (running){ again = true; return; }
+  running = true;
+  try {
+    for (const op of S.ops) if (op.enabled && !op.moves){
+      busy(true, `${op.name}…`); await tick();
+      try { await genOp(op); } catch(e){ op.moves = []; op.warn = ['Error: ' + e.message]; console.error(e); }
+    }
+    gcode = post();
+    simPts = expand();
+    const sl = $('#slider'); sl.max = Math.max(0, simPts.length - 1); sl.value = sl.max;
+    drawPaths(); drawTool(+sl.value); clearSim();
+    renderCode(); renderStats(); renderPanel(true); onSlide();
+  } finally { busy(false); running = false; autosave(); }
+  if (again){ again = false; regen(); }
+}
+function renderStats(){
+  const ops = S.ops.filter(o => o.enabled && o.moves);
+  const total = ops.reduce((s, o) => s + cycleTime(o), 0) + ops.length*0.15;
+  $('#stats').innerHTML = `Est. cycle time <b>${mmss(total)}</b> · ${ops.length} op(s) · ${gcode.length} lines`;
+  $('#cinfo').textContent = `O${String(S.setup.progNum).padStart(4, '0')}`;
+  const w = $('#warn'); w.innerHTML = '';
+  S.ops.forEach(o => (o.warn || []).forEach(m => { const d = document.createElement('div'); d.textContent = `${o.name}: ${m}`; w.appendChild(d); }));
+}
+function onSlide(){
+  const k = +$('#slider').value, p = simPts[k];
+  drawTool(k);
+  if (!p){ $('#pinfo').textContent = ''; return; }
+  $('#pinfo').textContent = `${p.op.name} · T${p.t.num} · X${fmt(p.x)} Y${fmt(p.y)} Z${fmt(p.z)}`;
+  gotoLine(p.line);
+}
+
+/* ============================== side panel UI ============================== */
+function fld(path, label, val, kind = 'n', opts){
+  let c;
+  if (kind === 's') c = `<select data-p="${path}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  else if (kind === 'c') c = `<input type="checkbox" data-p="${path}"${val ? ' checked' : ''}>`;
+  else if (kind === 't') c = `<input type="text" data-p="${path}" value="${esc(val)}">`;
+  else c = `<input type="number" step="any" data-k="n" data-p="${path}" value="${val}">`;
+  return `<label class="f"><span>${esc(label)}</span>${c}</label>`;
+}
+function renderPanel(soft){
+  const el = $('#panel');
+  if (soft && el.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') { if (tab === 'ops') updateOpBadges(); return; }
+  const top = el.scrollTop;
+  el.innerHTML = tab === 'setup' ? setupHTML() : tab === 'tools' ? toolsHTML() : opsHTML();
+  el.scrollTop = top;
+}
+function setupHTML(){
+  const s = S.setup, st = s.stock, pp = s.post, u = s.units === 'mm' ? 'mm' : 'in';
+  const layers = Object.keys(S.geom.layers);
+  return `
+  <div class="sec"><h3>Program</h3>
+    ${fld('setup.progNum', 'Program number (O)', s.progNum)}
+    ${fld('setup.progName', 'Program name', s.progName, 't')}
+    ${fld('setup.wcs', 'Work offset', s.wcs, 's', ['G54','G55','G56','G57','G58','G59'].map(x => [x, x]))}
+    ${fld('setup.material', 'Material', s.material, 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}
+  </div>
+  <div class="sec"><h3>Heights (${u})</h3>
+    <div class="info">Z0 is the <b>top of the finished part</b>. Set your ${s.wcs} Z on that face.</div>
+    ${fld('setup.safeZ', 'Safe Z (start/end of op)', s.safeZ)}
+    ${fld('setup.clearZ', 'Clearance Z (between features)', s.clearZ)}
+  </div>
+  <div class="sec"><h3>Stock (${u})</h3>
+    ${fld('setup.stock.auto', 'Size from geometry', st.auto, 'c')}
+    ${fld('setup.stock.margin', 'Margin around part', st.margin)}
+    <div class="g2">${fld('setup.stock.x0', 'X min', st.x0)}${fld('setup.stock.x1', 'X max', st.x1)}${fld('setup.stock.y0', 'Y min', st.y0)}${fld('setup.stock.y1', 'Y max', st.y1)}</div>
+    ${fld('setup.stock.top', 'Stock top Z', st.top)}
+    ${fld('setup.stock.bottom', 'Stock bottom Z', st.bottom)}
+  </div>
+  <div class="sec"><h3>Part position</h3>
+    <div class="mut" style="margin-bottom:6px">${S.geom.name ? esc(S.geom.name) : 'No file loaded'}</div>
+    <div class="g2" style="margin-bottom:6px"><button class="btn" data-a="orig-ll">Origin → lower-left</button><button class="btn" data-a="orig-c">Origin → center</button></div>
+    ${S.geom.mesh ? `<div class="g2" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:6px"><button class="btn" data-a="rot-x">Rotate X 90°</button><button class="btn" data-a="rot-y">Rotate Y 90°</button><button class="btn" data-a="rot-z">Rotate Z 90°</button></div>` : ''}
+    <div class="g2"><button class="btn" data-a="scale-up">Scale ×25.4</button><button class="btn" data-a="scale-dn">Scale ÷25.4</button></div>
+  </div>
+  ${layers.length ? `<div class="sec"><h3>DXF layers</h3><div class="mut" style="margin-bottom:6px">Untick title-block / dimension layers.</div>${layers.map(l => `<label class="f"><span>${esc(l)}</span><input type="checkbox" data-layer="${esc(l)}"${S.geom.layers[l] !== false ? ' checked' : ''}></label>`).join('')}</div>` : ''}
+  <div class="sec"><h3>Machine limits</h3>
+    ${fld('setup.maxRpm', 'Max spindle RPM', s.maxRpm)}
+    ${fld('setup.maxFeed', `Max feed (${u}/min)`, s.maxFeed)}
+    ${fld('setup.rapid', `Rapid rate (${u}/min)`, s.rapid)}
+  </div>
+  <div class="sec"><h3>Fanuc post</h3>
+    ${fld('setup.post.lineNums', 'N line numbers', pp.lineNums, 'c')}
+    ${fld('setup.post.nInc', 'N increment', pp.nInc)}
+    ${fld('setup.post.tcFmt', 'Tool change', pp.tcFmt, 's', [['T# M06', 'T1 M06'], ['M06 T#', 'M06 T1']])}
+    ${fld('setup.post.nextTool', 'Pre-stage next tool', pp.nextTool, 'c')}
+    ${fld('setup.post.home', 'Z home command', pp.home, 's', [['G91 G28 Z0.', 'G91 G28 Z0.'], ['G28 G91 Z0.', 'G28 G91 Z0.'], ['G53 Z0.', 'G53 Z0.']])}
+    ${fld('setup.post.coolant', 'Coolant', pp.coolant, 's', [['M08', 'M08 Flood'], ['M07', 'M07 Mist'], ['', 'Off']])}
+    ${fld('setup.post.arcs', 'Output arcs G02/G03', pp.arcs, 'c')}
+    ${fld('setup.post.rigid', 'Rigid tapping (M29)', pp.rigid, 'c')}
+    ${fld('setup.post.m01', 'M01 between tools', pp.m01, 'c')}
+    ${fld('setup.post.endY', 'Table forward at end (G28 Y0)', pp.endY, 'c')}
+  </div>`;
+}
+function toolsHTML(){
+  const u = S.setup.units === 'mm' ? 'mm' : 'in';
+  return `<div class="info">Speeds & feeds button uses the material from Setup (${esc(MATS[S.setup.material].n)}), carbide tooling. Always check against your tool maker's data.</div>
+  <div class="g2" style="margin-bottom:10px"><button class="btn b" data-a="tool-add">+ Add tool</button><button class="btn" data-a="tool-reset">Reset library</button></div>` +
+  S.tools.slice().sort((a, b) => a.num - b.num).map(t => `
+  <div class="card">
+    <div class="hd" style="margin-bottom:8px"><b>T${t.num} · ${esc(t.name)}</b><button class="btn s" data-a="tool-calc" data-id="${t.id}">Speeds & feeds</button><button class="btn s r" data-a="tool-del" data-id="${t.id}">✕</button></div>
+    ${fld(`tool.${t.id}.name`, 'Name', t.name, 't')}
+    <div class="g2">${fld(`tool.${t.id}.num`, 'T / H number', t.num)}${fld(`tool.${t.id}.type`, 'Type', t.type, 's', TOOL_TYPES)}
+    ${fld(`tool.${t.id}.dia`, `Diameter`, t.dia)}${fld(`tool.${t.id}.flutes`, 'Flutes', t.flutes)}
+    ${fld(`tool.${t.id}.len`, `Flute length`, t.len)}${t.type === 'bull' ? fld(`tool.${t.id}.cr`, 'Corner radius', t.cr) : (t.type === 'drill' || t.type === 'spot') ? fld(`tool.${t.id}.angle`, 'Point angle °', t.angle) : t.type === 'tap' ? fld(`tool.${t.id}.pitch`, `Pitch (${u})`, t.pitch) : '<span></span>'}
+    ${fld(`tool.${t.id}.rpm`, 'RPM', t.rpm)}${fld(`tool.${t.id}.feed`, `Feed ${u}/min`, t.feed)}
+    ${fld(`tool.${t.id}.plunge`, `Plunge ${u}/min`, t.plunge)}</div>
+  </div>`).join('');
+}
+function opsHTML(){
+  const hasG = S.geom.chains.length || S.geom.mesh;
+  let h = '';
+  if (!hasG) h += `<div class="note"><b>Start here:</b> open a customer drawing (<b>DXF</b>) or 3D model (<b>STEP / IGES / STL</b>), or click <b>Demo part</b> to try it out.</div>`;
+  h += `<div class="addops">${Object.entries(OPDEF).map(([k, d]) => `<button class="btn" data-a="op-add" data-type="${k}">${d.icon} ${d.label}</button>`).join('')}</div>`;
+  if (!S.ops.length) h += `<div class="mut">No operations yet. Add one above, then pick the geometry for it by clicking in the view.</div>`;
+  S.ops.forEach((o, i) => {
+    const t = toolOf(o), on = o === activeOp;
+    h += `<div class="card${on ? ' on' : ''}" data-op="${o.id}">
+      <div class="hd" data-a="op-sel" data-id="${o.id}">
+        <input type="checkbox" data-p="op.${o.id}.enabled"${o.enabled ? ' checked' : ''} title="Include in program">
+        <b>${i + 1}. ${esc(o.name)}</b><span class="bdg" id="bd-${o.id}">${badge(o)}</span>
+      </div>
+      <div class="mut" style="margin:3px 0 0 22px">${t ? `T${t.num} ${esc(t.name)}` : 'no tool'}${OPDEF[o.type].chains ? ` · ${o.sel.length} selected` : ''}${o.moves && o.moves.length ? ` · ${mmss(cycleTime(o))}` : ''}</div>`;
+    if (on){
+      const tools = S.tools.filter(x => OPDEF[o.type].tools.includes(x.type)).concat(S.tools.filter(x => !OPDEF[o.type].tools.includes(x.type)));
+      h += `<div style="margin-top:10px">
+        ${fld(`op.${o.id}.name`, 'Name', o.name, 't')}
+        ${fld(`op.${o.id}.toolId`, 'Tool', o.toolId, 's', tools.map(x => [x.id, `T${x.num} ${x.name}`]))}
+        ${FIELDS[o.type].map(([k, l, kind, opts]) => fld(`op.${o.id}.p.${k}`, l, o.p[k], kind, opts)).join('')}
+        ${OPDEF[o.type].chains ? `<div class="info" style="margin-top:8px">Click geometry in the view to select / deselect.</div>
+          <div class="g2" style="margin-bottom:6px">${o.type === 'drill' ? `<button class="btn s" data-a="sel-holes" data-id="${o.id}">All holes</button><button class="btn s" data-a="sel-same" data-id="${o.id}">Same Ø as selected</button>` : `<button class="btn s" data-a="sel-closed" data-id="${o.id}">All closed</button><button class="btn s" data-a="sel-outer" data-id="${o.id}">Largest outline</button>`}</div>
+          <button class="btn s" style="width:100%;margin-bottom:6px" data-a="sel-clear" data-id="${o.id}">Clear selection</button>` : ''}
+        <div class="g2" style="grid-template-columns:1fr 1fr 1fr;margin-top:6px"><button class="btn s" data-a="op-up" data-id="${o.id}">↑ Up</button><button class="btn s" data-a="op-dn" data-id="${o.id}">↓ Down</button><button class="btn s r" data-a="op-del" data-id="${o.id}">Delete</button></div>
+      </div>`;
+    }
+    h += `</div>`;
+  });
+  return h;
+}
+function badge(o){ if (!o.enabled) return 'off'; if (!o.moves) return '…'; if (o.warn && o.warn.some(w => /^Error/.test(w))) return 'error'; if (!o.moves.length) return 'empty'; return o.warn && o.warn.length ? 'check' : 'ok'; }
+function updateOpBadges(){ S.ops.forEach(o => { const b = document.getElementById('bd-' + o.id); if (b){ const t = badge(o); b.textContent = t; b.className = 'bdg ' + ({ok:'ok', check:'w', error:'e', empty:'w'}[t] || ''); } }); }
+
+function setPath(path, v){
+  const seg = path.split('.');
+  let obj;
+  if (seg[0] === 'setup'){ obj = S.setup; seg.shift(); }
+  else if (seg[0] === 'tool'){ obj = S.tools.find(t => t.id === seg[1]); seg.splice(0, 2); }
+  else if (seg[0] === 'op'){ obj = S.ops.find(o => o.id === seg[1]); seg.splice(0, 2); }
+  if (!obj) return;
+  for (let i = 0; i < seg.length - 1; i++) obj = obj[seg[i]];
+  obj[seg[seg.length - 1]] = v;
+}
+$('#panel').addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.layer != null){ S.geom.layers[t.dataset.layer] = t.checked; rebuildChains(false); return; }
+  const path = t.dataset.p; if (!path) return;
+  let v = t.type === 'checkbox' ? t.checked : t.dataset.k === 'n' ? parseFloat(t.value) : t.value;
+  if (typeof v === 'number' && !isFinite(v)) return;
+  setPath(path, v);
+  const root = path.split('.')[0];
+  if (root === 'setup'){
+    if (path.startsWith('setup.stock')){ if (path !== 'setup.stock.auto' && path !== 'setup.stock.margin') S.setup.stock.auto = false; autoStock(); drawStock(); drawGrid(); }
+    S.ops.forEach(o => o.moves = null);
+    if (path === 'setup.material' || path === 'setup.stock.auto') renderPanel();
+  } else if (root === 'tool'){
+    const id = path.split('.')[1];
+    S.ops.forEach(o => { if (o.toolId === id) o.moves = null; });
+    if (/\.(type|num|name)$/.test(path)) renderPanel();
+    store('cam.tools.' + S.setup.units, S.tools);
+  } else {
+    const o = S.ops.find(x => x.id === path.split('.')[1]); if (o) o.moves = null;
+    if (/\.(toolId|name|enabled)$/.test(path)) renderPanel();
+  }
+  schedule();
+});
+$('#panel').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  if (e.target.matches('input')) return;
+  const a = b.dataset.a, id = b.dataset.id, op = S.ops.find(o => o.id === id);
+  if (a === 'op-add'){ const o = defOp(b.dataset.type); S.ops.push(o); activeOp = o; if (o.type === 'drill') autoSelHoles(o); drawGeom(); renderPanel(); schedule(); return; }
+  if (a === 'op-sel'){ activeOp = activeOp === op ? null : op; drawGeom(); drawPaths(); renderPanel(); return; }
+  if (a === 'op-del'){ S.ops = S.ops.filter(o => o !== op); if (activeOp === op) activeOp = null; drawGeom(); renderPanel(); schedule(); return; }
+  if (a === 'op-up' || a === 'op-dn'){ const i = S.ops.indexOf(op), j = i + (a === 'op-up' ? -1 : 1); if (j >= 0 && j < S.ops.length){ [S.ops[i], S.ops[j]] = [S.ops[j], S.ops[i]]; } renderPanel(); schedule(); return; }
+  if (a.startsWith('sel-')){
+    const ch = S.geom.chains;
+    if (a === 'sel-clear') op.sel = [];
+    if (a === 'sel-closed') op.sel = ch.filter(c => c.closed && !c.circle).map(c => c.id);
+    if (a === 'sel-outer'){ const c = ch.filter(c => c.closed).sort((p, q) => Math.abs(area(q.pts)) - Math.abs(area(p.pts)))[0]; op.sel = c ? [c.id] : []; }
+    if (a === 'sel-holes') autoSelHoles(op, true);
+    if (a === 'sel-same'){ const ref = ch.find(c => op.sel.includes(c.id) && c.circle); if (ref) op.sel = ch.filter(c => c.circle && Math.abs(c.circle.r - ref.circle.r) < 1e-4).map(c => c.id); }
+    op.moves = null; drawGeom(); renderPanel(); schedule(); return;
+  }
+  if (a === 'tool-add'){ const k = S.setup.units === 'mm' ? 1 : 1/25.4; const n = Math.max(0, ...S.tools.map(t => t.num)) + 1; S.tools.push({id:uid(), num:n, name:'New tool', type:'flat', dia:rnd(8*k), cr:0, flutes:3, len:rnd(25*k), rpm:3000, feed:rnd(500*k), plunge:rnd(150*k), pitch:0, angle:118}); store('cam.tools.' + S.setup.units, S.tools); renderPanel(); return; }
+  if (a === 'tool-del'){ if (!confirm('Delete this tool?')) return; S.tools = S.tools.filter(t => t.id !== id); store('cam.tools.' + S.setup.units, S.tools); renderPanel(); return; }
+  if (a === 'tool-reset'){ if (!confirm('Replace the tool library with the defaults?')) return; S.tools = defTools(S.setup.units); S.ops.forEach(o => { o.toolId = defOp(o.type).toolId; o.moves = null; }); store('cam.tools.' + S.setup.units, S.tools); renderPanel(); schedule(); return; }
+  if (a === 'tool-calc'){ calcSpeeds(S.tools.find(t => t.id === id)); store('cam.tools.' + S.setup.units, S.tools); S.ops.forEach(o => { if (o.toolId === id) o.moves = null; }); renderPanel(); schedule(); return; }
+  if (a === 'orig-ll' || a === 'orig-c'){ const bb = geomBBox(); if (!bb) return; if (a === 'orig-ll') translateGeom(-bb.x0, -bb.y0); else translateGeom(-(bb.x0 + bb.x1)/2, -(bb.y0 + bb.y1)/2); setView('iso'); renderPanel(); return; }
+  if (a.startsWith('rot-')){ rotateMesh(a.slice(4)); setView('iso'); renderPanel(); return; }
+  if (a === 'scale-up' || a === 'scale-dn'){ scaleGeom(a === 'scale-up' ? 25.4 : 1/25.4); setView('iso'); renderPanel(); return; }
+});
+function autoSelHoles(op, force){ if (force || !op.sel.length) op.sel = S.geom.chains.filter(c => c.circle || c.point).map(c => c.id); }
+function calcSpeeds(t){
+  const m = MATS[S.setup.material], inch = S.setup.units === 'in', D = inch ? t.dia*25.4 : t.dia;
+  if (!(D > 0)) return;
+  let vc = m.vc, rpm, feed;
+  if (t.type === 'drill' || t.type === 'spot'){ vc *= 0.35; rpm = vc*1000/(Math.PI*D); feed = rpm*m.fz*D*2.5; }
+  else if (t.type === 'tap'){ vc *= 0.06; rpm = vc*1000/(Math.PI*D); feed = rpm*(inch ? t.pitch*25.4 : t.pitch); }
+  else if (t.type === 'ream'){ vc *= 0.25; rpm = vc*1000/(Math.PI*D); feed = rpm*m.fz*D*4; }
+  else { if (t.type === 'face') vc *= 0.8; rpm = vc*1000/(Math.PI*D); rpm = Math.min(rpm, S.setup.maxRpm); feed = rpm*t.flutes*m.fz*Math.max(0.3, Math.min(2, D/10)); }
+  rpm = Math.min(rpm, S.setup.maxRpm);
+  if (t.type === 'drill' || t.type === 'spot') feed = rpm*m.fz*D*2.5;
+  if (t.type === 'tap') feed = rpm*(inch ? t.pitch*25.4 : t.pitch);
+  t.rpm = Math.round(rpm/10)*10;
+  const k = inch ? 1/25.4 : 1;
+  t.feed = rnd(Math.round(feed*k*(inch ? 10 : 0.1))/(inch ? 10 : 0.1));
+  t.plunge = MILLS.includes(t.type) ? rnd(t.feed*0.3) : t.feed;
+  status(`T${t.num}: ${t.rpm} RPM, F${t.feed} for ${m.n}`);
+}
+
+/* ============================== file I/O ============================== */
+const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/';
+let occtP = null;
+function loadOCCT(){
+  if (!occtP) occtP = new Promise((res, rej) => { const s = document.createElement('script'); s.src = OCCT + 'occt-import-js.js'; s.onload = () => window.occtimportjs({locateFile:f => OCCT + f}).then(res, rej); s.onerror = () => rej(new Error('Could not load the STEP/IGES reader (needs internet).')); document.head.appendChild(s); });
+  return occtP;
+}
+async function openFile(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'dwg'){ alert('DWG is a closed AutoCAD format that browsers cannot read.\n\nIn AutoCAD/DraftSight use "Save As → DXF", or convert with the free ODA File Converter, then open the DXF here.'); return; }
+  if (ext === 'pdf'){ alert('A PDF drawing has no machinable geometry.\n\nAsk the customer for DXF or STEP. If the PDF is vector (made from CAD), AutoCAD (PDFIMPORT) or Inkscape can convert it to DXF — then check the scale against a known dimension.'); return; }
+  if (S.geom.chains.length || S.geom.mesh){ if (!confirm(`Open ${file.name}? It replaces the current drawing/model (operations and tools are kept).`)) return; }
+  busy(true, 'Reading ' + file.name + '…'); await tick();
+  try {
+    S.geom.items = []; S.geom.layers = {}; S.geom.chains = []; S.geom.mesh = null;
+    S.ops.forEach(o => o.sel = []);
+    if (ext === 'dxf'){
+      const dxf = parseDXF(await file.text());
+      const items = dxfItems(dxf, chordTol());
+      const fu = {1:'in', 4:'mm', 5:'cm', 6:'m', 2:'ft'}[dxf.units];
+      const toMM = {in:25.4, mm:1, cm:10, m:1000, ft:304.8}[fu];
+      const f = toMM ? toMM/(S.setup.units === 'mm' ? 1 : 25.4) : 1;
+      S.geom.items = items; S.geom.layers = {};
+      items.forEach(it => S.geom.layers[it.layer] = true);
+      if (f !== 1) for (const it of items){ if (it.kind === 'circle'){ it.cx *= f; it.cy *= f; it.r *= f; } else if (it.kind === 'point'){ it.x *= f; it.y *= f; } else it.pts.forEach(p => { p[0] *= f; p[1] *= f; }); }
+      S.geom.name = file.name;
+      S.geom.chains = buildChains(items, S.geom.layers);
+      S.ops.forEach(o => { if (OPDEF[o.type].chains) o.sel = []; });
+      status(`${file.name}: ${S.geom.chains.length} chains${fu ? ` (drawing units: ${fu})` : ' (no units in file — assumed ' + S.setup.units + ')'}. Untick unwanted layers in Setup.`);
+    } else if (ext === 'stl'){
+      const g = new STLLoader().parse(await file.arrayBuffer());
+      setMesh(new Float32Array(g.attributes.position.array));
+      S.geom.name = file.name;
+      status(`${file.name}: ${(S.geom.mesh.pos.length/9) | 0} triangles. STL has no units — use Scale in Setup if the size is wrong.`);
+    } else if (['step', 'stp', 'iges', 'igs'].includes(ext)){
+      busy(true, 'Loading STEP/IGES reader…');
+      const occt = await loadOCCT();
+      busy(true, 'Meshing ' + file.name + '…'); await tick();
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const prm = {linearUnit:S.setup.units === 'mm' ? 'millimeter' : 'inch', linearDeflectionType:'absolute_value', linearDeflection:S.setup.units === 'mm' ? 0.01 : 0.0004, angularDeflection:0.1};
+      const r = ext.startsWith('st') ? occt.ReadStepFile(buf, prm) : occt.ReadIgesFile(buf, prm);
+      if (!r.success || !r.meshes.length) throw new Error('Could not read the model.');
+      const out = [];
+      for (const m of r.meshes){ const p = m.attributes.position.array, ix = m.index ? m.index.array : null;
+        if (ix) for (const k of ix) out.push(p[k*3], p[k*3+1], p[k*3+2]); else out.push(...p); }
+      setMesh(new Float32Array(out));
+      S.geom.name = file.name;
+      status(`${file.name}: ${r.meshes.length} bodies, ${(out.length/9) | 0} triangles. Top of part placed at Z0 — rotate in Setup if needed.`);
+    } else { alert('Unsupported file type: .' + ext); return; }
+    afterGeom(); setView('iso'); renderPanel();
+  } catch(e){ console.error(e); alert('Could not open ' + file.name + ':\n' + e.message); }
+  finally { busy(false); }
+}
+$('#fOpen').addEventListener('change', e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
+
+function projectJSON(){
+  const g = S.geom;
+  return JSON.stringify({v:1, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})),
+    geom:{items:g.items, layers:g.layers, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}});
+}
+function applyProject(d){
+  Object.assign(S.setup, defSetup(d.setup.units), d.setup); S.setup.post = Object.assign(defSetup(d.setup.units).post, d.setup.post);
+  S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[]}));
+  S.geom.items = d.geom.items || []; S.geom.layers = d.geom.layers || {}; S.geom.name = d.geom.name || '';
+  S.geom.mesh = d.geom.mesh ? {pos:Float32Array.from(d.geom.mesh)} : null;
+  if (S.geom.mesh) S.geom.mesh.bb = meshBB(S.geom.mesh.pos);
+  S.geom.chains = buildChains(S.geom.items, S.geom.layers);
+  $('#units').value = S.setup.units; activeOp = null;
+  drawGeom(); drawStock(); clearSim(); setView('iso'); renderPanel(); schedule();
+}
+function download(name, text){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type:'text/plain'})); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+$('#bSave').onclick = () => download((S.setup.progName || 'part').replace(/[^\w-]+/g, '_') + '.cam.json', projectJSON());
+$('#fProj').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { applyProject(JSON.parse(await f.text())); } catch(err){ alert('Not a valid project file.'); } });
+function autosave(){ try { const s = projectJSON(); if (s.length < 4e6) localStorage.setItem('cam.project', s); } catch(e){} }
+
+/* ============================== units ============================== */
+$('#units').addEventListener('change', e => {
+  const nu = e.target.value, f = nu === 'in' ? 1/25.4 : 25.4, s = S.setup;
+  if (!confirm(`Convert this project to ${nu === 'in' ? 'inch' : 'metric'}? All sizes, tools and geometry will be converted.`)){ e.target.value = s.units; return; }
+  for (const k of ['safeZ', 'clearZ', 'maxFeed', 'rapid']) s[k] = rnd(s[k]*f);
+  for (const k of ['margin', 'x0', 'y0', 'x1', 'y1', 'top', 'bottom']) s.stock[k] = rnd(s.stock[k]*f);
+  for (const t of S.tools) for (const k of ['dia', 'cr', 'len', 'feed', 'plunge', 'pitch']) t[k] = rnd(t[k]*f);
+  for (const o of S.ops) for (const k of ['zmin', 'top', 'bottom', 'stepdown', 'allowance', 'rplane', 'peck', 'res', 'stepover']) if (o.p[k] != null) o.p[k] = rnd(o.p[k]*f);
+  s.units = nu;
+  scaleGeom(f);
+  renderPanel(); setView('iso');
+});
+
+/* ============================== demo part ============================== */
+function demo(){
+  const u = S.setup.units === 'mm' ? 1 : 1/25.4, it = [];
+  const rr = (x0, y0, x1, y1, r, layer) => {
+    const pts = [];
+    const c = [[x1-r, y0+r, -Math.PI/2], [x1-r, y1-r, 0], [x0+r, y1-r, Math.PI/2], [x0+r, y0+r, Math.PI]];
+    for (const [cx, cy, a] of c) pts.push(...arcPts(cx*u, cy*u, r*u, a, a + Math.PI/2, chordTol()));
+    it.push({kind:'poly', closed:true, pts, layer});
+  };
+  rr(0, 0, 120, 80, 8, 'OUTLINE');
+  rr(30, 22, 90, 58, 6, 'POCKET');
+  it.push({kind:'circle', cx:60*u, cy:40*u, r:7*u, layer:'POCKET'});
+  for (const [x, y] of [[12, 12], [108, 12], [108, 68], [12, 68]]) it.push({kind:'circle', cx:x*u, cy:y*u, r:3.4*u, layer:'HOLES'});
+  S.geom.items = it; S.geom.layers = {OUTLINE:true, POCKET:true, HOLES:true}; S.geom.name = 'Demo plate'; S.geom.mesh = null;
+  S.geom.chains = buildChains(it, S.geom.layers);
+  S.setup.stock.auto = true; S.setup.stock.top = rnd(1*u); S.setup.stock.bottom = rnd(-15*u);
+  autoStock();
+  const ch = S.geom.chains, byL = l => ch.filter(c => c.layer === l);
+  const T = ty => S.tools.find(t => t.type === ty);
+  const face = defOp('face'); face.p.top = S.setup.stock.top; face.p.bottom = 0;
+  const pk = defOp('pocket'); pk.toolId = (S.tools.find(t => t.type === 'flat' && t.dia < 8*u) || T('flat')).id; pk.sel = byL('POCKET').map(c => c.id); pk.p.bottom = rnd(-6*u);
+  const sp = defOp('drill'); sp.name = 'Spot drill'; sp.toolId = T('spot').id; sp.p.cycle = 'G82'; sp.p.bottom = rnd(-1.5*u); sp.p.dwell = 200; sp.p.addTip = false; sp.sel = byL('HOLES').map(c => c.id);
+  const dr = defOp('drill'); dr.name = 'Drill M8 tap holes'; dr.toolId = T('drill').id; dr.p.bottom = rnd(-12*u); dr.sel = sp.sel.slice();
+  const tp = defOp('drill'); tp.name = 'Tap M8'; tp.toolId = T('tap').id; tp.p.cycle = 'G84'; tp.p.bottom = rnd(-10*u); tp.p.addTip = false; tp.sel = sp.sel.slice();
+  const co = defOp('contour'); co.name = 'Outside profile'; co.toolId = (S.tools.find(t => t.type === 'flat' && t.dia >= 8*u) || T('flat')).id; co.sel = byL('OUTLINE').map(c => c.id); co.p.bottom = rnd(-12*u); co.p.stepdown = rnd(4*u);
+  S.ops = [face, pk, sp, dr, tp, co]; activeOp = pk;
+  drawGeom(); drawStock(); clearSim(); setView('iso'); renderPanel(); schedule();
+}
+$('#bDemo').onclick = () => { if (S.ops.length && !confirm('Replace the current project with the demo part?')) return; demo(); };
+
+/* ============================== top bar / view buttons ============================== */
+$('#bPost').onclick = () => { S.ops.forEach(o => o.moves = null); schedule(); };
+$('#bDl').onclick = () => { if (!gcode.length || !S.ops.some(o => o.enabled && o.moves && o.moves.length)){ alert('Nothing to post yet — add operations first.'); return; } download(`O${String(S.setup.progNum).padStart(4, '0')}.nc`, gcode.join('\r\n') + '\r\n'); };
+$('#bCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(gcode.join('\n')).then(() => status('G-code copied.')); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.t; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); renderPanel(); });
+document.querySelectorAll('#vbtns [data-v]').forEach(b => b.onclick = () => setView(b.dataset.v === 'fit' ? 'iso' : b.dataset.v));
+document.querySelectorAll('#vbtns [data-l]').forEach(b => b.onclick = () => { const g = G[b.dataset.l]; g.visible = !g.visible; b.classList.toggle('on', g.visible); if (b.dataset.l === 'path') G.tool.visible = g.visible; });
+$('#slider').addEventListener('input', onSlide);
+$('#code').addEventListener('scroll', renderCode);
+$('#bVerify').onclick = verify;
+let playing = false;
+$('#bPlay').onclick = () => {
+  playing = !playing; $('#bPlay').textContent = playing ? '❚❚' : '▶';
+  const sl = $('#slider');
+  if (playing && +sl.value >= +sl.max) sl.value = 0;
+  const step = () => { if (!playing) return; const v = Math.min(+sl.max, +sl.value + +$('#speed').value); sl.value = v; onSlide(); if (v >= +sl.max){ playing = false; $('#bPlay').textContent = '▶'; return; } requestAnimationFrame(step); };
+  step();
+};
+
+/* ============================== boot ============================== */
+initView();
+const saved = load('cam.project', null);
+if (saved && saved.setup){ try { applyProject(saved); } catch(e){ console.error(e); } }
+else {
+  S.tools = load('cam.tools.mm', null) || defTools('mm');
+  drawGeom(); drawStock(); setView('iso'); renderPanel(); renderCode(); renderStats();
+}
+window.__cam = {S, post, regen, genOp, parseDXF, dxfItems, buildChains, openFile, demo, get gcode(){ return gcode; }, get simPts(){ return simPts; }, verify};
+</script>
+</body>
+</html>
