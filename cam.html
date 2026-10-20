@@ -191,7 +191,7 @@ function prompt_(t){ $('#prompt').textContent = t || ''; }
 const MATS = {
   alu:{n:'ALUMINUM 6061/7075', vc:300, fz:0.010}, mild:{n:'MILD STEEL 1018/1045', vc:120, fz:0.006},
   alloy:{n:'ALLOY/TOOL STEEL P20 4140', vc:90, fz:0.005}, ss:{n:'STAINLESS 304/316', vc:80, fz:0.004},
-  ci:{n:'CAST IRON', vc:100, fz:0.007}, brass:{n:'BRASS/BRONZE', vc:200, fz:0.008}, plastic:{n:'PLASTIC POM/NYLON', vc:250, fz:0.012}
+  ci:{n:'CAST IRON', vc:100, fz:0.007}, brass:{n:'BRASS/BRONZE', vc:200, fz:0.008}, plastic:{n:'PLASTIC POM/NYLON', vc:250, fz:0.012}, bakelite:{n:'BAKELITE/PHENOLIC (G10)', vc:150, fz:0.008}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
 const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20};
@@ -405,24 +405,30 @@ function buildChains(){
   const key = p => Math.round(p[0]/tol) + ',' + Math.round(p[1]/tol), H = new Map();
   const put = (p, s) => { const k = key(p); if (!H.has(k)) H.set(k, []); H.get(k).push(s); };
   open.forEach(s => { put(s.pts[0], s); put(s.pts[s.pts.length-1], s); });
-  const find = p => {
-    const gx = Math.round(p[0]/tol), gy = Math.round(p[1]/tol);
+  // next unused segment touching point p; at a junction prefer the one that continues straightest (dir = incoming direction)
+  const find = (p, dir) => {
+    const gx = Math.round(p[0]/tol), gy = Math.round(p[1]/tol), cand = [];
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++){
       const l = H.get((gx+dx) + ',' + (gy+dy)); if (!l) continue;
       for (const s of l){ if (s.used) continue;
         const a = s.pts[0], b = s.pts[s.pts.length-1];
-        if (hyp(a[0]-p[0], a[1]-p[1]) <= tol) return [s, false];
-        if (hyp(b[0]-p[0], b[1]-p[1]) <= tol) return [s, true];
+        if (hyp(a[0]-p[0], a[1]-p[1]) <= tol) cand.push([s, false, s.pts[1]]);
+        else if (hyp(b[0]-p[0], b[1]-p[1]) <= tol) cand.push([s, true, s.pts[s.pts.length-2]]);
       }
     }
-    return null;
+    if (!cand.length) return null;
+    if (cand.length === 1 || !dir) return cand[0];
+    let best = null, bd = -2;
+    for (const c of cand){ const d = unit(p, c[2]), dot = d[0]*dir[0] + d[1]*dir[1]; if (dot > bd){ bd = dot; best = c; } }
+    return best;
   };
+  const dirAt = (pts, end) => end ? unit(pts[pts.length-2], pts[pts.length-1]) : unit(pts[1], pts[0]);
   for (const s of open){
     if (s.used) continue;
     s.used = true;
     let pts = s.pts.slice(), f, items = [s.it];
-    while ((f = find(pts[pts.length-1]))){ f[0].used = true; items.push(f[0].it); const q = f[1] ? f[0].pts.slice().reverse() : f[0].pts; pts.push(...q.slice(1)); }
-    while ((f = find(pts[0]))){ f[0].used = true; items.push(f[0].it); const q = f[1] ? f[0].pts : f[0].pts.slice().reverse(); pts = q.slice(0, -1).concat(pts); }
+    while ((f = find(pts[pts.length-1], dirAt(pts, true)))){ f[0].used = true; items.push(f[0].it); const q = f[1] ? f[0].pts.slice().reverse() : f[0].pts; pts.push(...q.slice(1)); if (hyp(pts[0][0]-pts[pts.length-1][0], pts[0][1]-pts[pts.length-1][1]) <= tol) break; }
+    while (!(pts.length > 2 && hyp(pts[0][0]-pts[pts.length-1][0], pts[0][1]-pts[pts.length-1][1]) <= tol) && (f = find(pts[0], dirAt(pts, false)))){ f[0].used = true; items.push(f[0].it); const q = f[1] ? f[0].pts : f[0].pts.slice().reverse(); pts = q.slice(0, -1).concat(pts); }
     const a = pts[0], b = pts[pts.length-1];
     const closed = pts.length > 2 && hyp(a[0]-b[0], a[1]-b[1]) <= tol;
     if (closed) pts.pop();
@@ -1288,11 +1294,11 @@ function fmt(v, dec){
   if (!s.includes('.')) s += '.';
   return s;
 }
-const fF = f => fmt(f, isMM() ? 1 : 2);
 const cmt = s => '(' + String(s).replace(/[Øø⌀]/g, 'D').replace(/°/g, 'DEG').replace(/×/g, 'X').normalize('NFKD').replace(/[^\x20-\x7E]/g, '').toUpperCase().replace(/[()]/g, '').slice(0, 70) + ')';
 const coolCode = c => c === 'flood' ? 'M8' : c === 'mist' ? 'M7' : '';
-function post(list){
+function post(list, opt = {}){
   const st = S.setup, pp = st.post, out = [], ops = list.filter(o => o.post !== false && o.moves && o.moves.length);
+  const zs = opt.zShift || 0, fk = opt.feedPct ? opt.feedPct/100 : 1, fZ = v => fmt(v + zs), fF = f => fmt(f*fk, isMM() ? 1 : 2);
   const G = c => pp.short ? c.replace(/^([GM])0(\d)$/, '$1$2') : c.replace(/^([GM])(\d)$/, '$10$2');
   let n = pp.nStart - pp.nInc;
   const emit = (s, num = true) => { if (num && pp.lineNums){ n += pp.nInc; s = 'N' + n + ' ' + s; } out.push(s); return out.length - 1; };
@@ -1304,6 +1310,7 @@ function post(list){
   emit(cmt(`CAM FILE - ${S.file}`), false);
   emit(cmt(`MATERIAL - ${MATS[st.material].n} ${st.units === 'mm' ? 'MM' : 'INCH'}`), false);
   emit(cmt(`${st.wcs} Z0 = TOP OF FINISHED PART`), false);
+  if (zs || fk !== 1) emit(cmt(`*** AIR CUT ONLY - Z RAISED ${fmt(zs)} FEEDS ${Math.round(fk*100)}% ***`), false);
   const used = [...new Set(ops.map(o => o.toolId))].map(id => S.tools.find(t => t.id === id));
   used.forEach(t => emit(`( T${t.num} | ${cmt(t.name).slice(1, -1)} | H${t.hOff || t.num} )`, false));
   emit(st.units === 'mm' ? 'G21' : 'G20');
@@ -1317,11 +1324,11 @@ function post(list){
       if (pp.nextTool){ const nt = ops.slice(oi+1).map(toolOf).find(x => x.id !== t.id); if (nt) s += ` T${nt.num}`; }
       emit(s);
       first.line = emit(`${G('G00')} G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${Math.round(p.rpm)} ${G('M03')}`);
-      emit(`G43 H${t.hOff || t.num} Z${fmt(first.z)}${cool ? ' ' + cool : ''}`);
+      emit(`G43 H${t.hOff || t.num} Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     } else {
       emit(cmt(op.name), false);
       first.line = emit(`${G('G00')} X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== p.rpm ? ` S${Math.round(p.rpm)} ${G('M03')}` : ''}`);
-      emit(`Z${fmt(first.z)}${cool ? ' ' + cool : ''}`);
+      emit(`Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     }
     prevRpm = p.rpm;
     let g = 0, X = first.x, Y = first.y, Z = first.z, F = null;
@@ -1333,7 +1340,7 @@ function post(list){
         m.pts.forEach((q, qi) => {
           let s = `X${fmt(q[0])} Y${fmt(q[1])}`;
           if (qi === 0){
-            s = `${m.ret || 'G98'} ${m.code} ${s} Z${fmt(m.zb)} R${fmt(m.r)}`;
+            s = `${m.ret || 'G98'} ${m.code} ${s} Z${fZ(m.zb)} R${fZ(m.r)}`;
             if ((m.code === 'G83' || m.code === 'G73') && m.q > 0) s += ` Q${fmt(m.q)}`;
             if (m.code === 'G76' && m.sh > 0) s += ` Q${fmt(m.sh)}`;
             if ((m.code === 'G82' || m.code === 'G76' || m.code === 'G89') && m.dw > 0) s += ` P${Math.round(m.dw)}`;
@@ -1349,7 +1356,7 @@ function post(list){
       if (m.comp) s += m.comp + ' ';
       if (Math.abs(m.x - X) > 1e-7 || m.g >= 2 || m.comp) s += `X${fmt(m.x)} `;
       if (Math.abs(m.y - Y) > 1e-7 || m.g >= 2 || m.comp) s += `Y${fmt(m.y)} `;
-      if (Math.abs(m.z - Z) > 1e-7) s += `Z${fmt(m.z)} `;
+      if (Math.abs(m.z - Z) > 1e-7) s += `Z${fZ(m.z)} `;
       if (m.g >= 2) s += `I${fmt(m.i)} J${fmt(m.j)} `;
       if (m.comp && m.comp !== 'G40') s += `D${t.dOff || t.num} `;
       if (m.g > 0 && m.f !== F){ s += `F${fF(m.f)} `; F = m.f; }
@@ -1579,7 +1586,7 @@ function initPointer(){
     const w = worldAt(e);
     if (w && $('#sbXY')) $('#sbXY').textContent = `X: ${fmt(w.x)}  Y: ${fmt(w.y)}  Z: 0.`;
     const sm = $('#snap'), stx = $('#snaptxt');
-    if (mode === 'create' || mode === 'dist'){
+    if (mode === 'create' || mode === 'dist' || mode === 'scale'){
       snapP = findSnap(e);
       if (snapP){ const [sx, sy] = toScreen(snapP[0], snapP[1]); sm.style.display = stx.style.display = 'block'; sm.style.left = sx + 'px'; sm.style.top = sy + 'px'; stx.style.left = (sx + 9) + 'px'; stx.style.top = (sy + 6) + 'px'; stx.textContent = snapP[2]; }
       else sm.style.display = stx.style.display = 'none';
@@ -1601,9 +1608,10 @@ function initPointer(){
       down = null; return;
     }
     down = null;
-    const w = worldAt(e), it = (mode === 'create' || mode === 'dist') ? null : hitItem(e);
+    const w = worldAt(e), it = (mode === 'create' || mode === 'dist' || mode === 'scale') ? null : hitItem(e);
     if (mode === 'create'){ createPick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'dist'){ distPick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
+    if (mode === 'scale'){ scalePick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'analyze'){ if (it) analyzeDlg(it); return; }
     if (mode === 'chain'){ if (it) chainClick(it, w); return; }
     if (it){ selEnt.has(it.id) ? selEnt.delete(it.id) : selEnt.add(it.id); }
@@ -2074,7 +2082,7 @@ function applyCreate(){
 function endMode(){
   if (mode === 'create'){ createCtx = null; clearG(G.prev); $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
   if (mode === 'chain' && chainDlgEl) chainDlgEl.querySelector('.cn').click();
-  mode = null; distPts = []; prompt_(''); $('#snap').style.display = $('#snaptxt').style.display = 'none';
+  mode = null; distPts = []; scalePts = []; prompt_(''); $('#snap').style.display = $('#snaptxt').style.display = 'none';
 }
 
 /* ============================== geometry changes, undo, regen ============================== */
@@ -2292,7 +2300,7 @@ async function postDlg(){
   if (!list.length){ msg('Post', 'No operations to post.'); return; }
   const dirty = list.filter(o => o.dirty || !o.moves);
   if (dirty.length){ if (!confirm(`${dirty.length} operation(s) are dirty (changed since last calculation). Regenerate them before posting?`)) return; await regen(dirty, true); }
-  const W = {edit:true, save:true}, el = document.createElement('div'), issues = preflight(list);
+  const W = {edit:true, save:true, air:false, zShift:rnd(20*K()), feedPct:50}, el = document.createElement('div'), issues = preflight(list);
   const name = `O${String(S.setup.progNum).padStart(4, '0')}.NC`;
   el.innerHTML = `<fieldset><legend>Active post</legend><b>${MACHINE.post}</b> → ${MACHINE.name} (${MACHINE.control})</fieldset>
     ${issues.length ? `<fieldset><legend>Check before posting</legend><div class="warnl">${issues.map(([k, t]) => `<div class="${k === 'stop' ? 'err' : ''}">${k === 'stop' ? '⛔' : '⚠'} ${esc(t)}</div>`).join('')}</div></fieldset>` : '<div class="info">✔ No warnings from the toolpaths.</div>'}
@@ -2301,16 +2309,41 @@ async function postDlg(){
       <label><input type="checkbox" data-ck> Tool length offsets H${[...new Set(list.map(o => toolOf(o).num))].join(', H')} measured for the tools actually loaded</label>
       <label><input type="checkbox" data-ck> Stock is clamped; nothing is in the way of the rapids (clamps, vise jaws, indicator)</label>
       <label><input type="checkbox" data-ck> First run: single block, rapid override 25%, hand on feed hold</label></div></fieldset>` : ''}
+    <fieldset><legend>First run (air cut)</legend>${fRow(W, 'air', 'Make an AIR-CUT version: whole program raised in Z and slowed down', 'c', null, false)}${fRow(W, 'zShift', `Raise Z by (${U()})`, 'n', null, false)}${fRow(W, 'feedPct', 'Feeds at (%)', 'i', null, false)}<div class="hint">Run the air-cut file first with the part clamped: the tool traces the whole program above the stock, so you see every move before it ever touches metal. Then post the real program.</div></fieldset>
     <fieldset><legend>NC file</legend>${fRow(W, 'save', 'Download ' + name, 'c', null, false)}${fRow(W, 'edit', 'Open in NC editor to read / copy', 'c', null, false)}</fieldset>`;
   bindFields(el, W);
   const d = dlg({title:'Post processing', body:el, w:520, okLabel:'Post G-code', ok:close => {
     if (issues.some(i => i[0] === 'stop')){ alert('Fix the ⛔ items first.'); return; }
     const cks = [...el.querySelectorAll('[data-ck]')]; if (cks.length && !cks.every(c => c.checked)){ if (!confirm('Not all checklist items are ticked. Post anyway?')) return; }
     close();
-    const nc = post(list).join('\r\n') + '\r\n';
-    if (W.save) download(name, nc);
+    const nc = post(list, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {}).join('\r\n') + '\r\n';
+    if (W.save) download(W.air ? name.replace('.NC', '-AIRCUT.NC') : name, nc);
     if (W.edit) ncEditor(nc);
   }});
+}
+function setupSheet(){
+  const st = S.setup, s = st.stock, ops = S.ops.filter(o => o.post !== false), tools = [...new Set(ops.map(o => o.toolId))].map(id => S.tools.find(t => t.id === id)).filter(Boolean);
+  const bb = geomBBox(), tot = ops.filter(o => o.moves).reduce((a, o) => a + cycleTime(o), 0);
+  const row = (a, b) => `<tr><td>${a}</td><td>${b}</td></tr>`;
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Setup sheet - O${String(st.progNum).padStart(4, '0')}</title>
+  <style>body{font:13px/1.4 Arial,sans-serif;margin:18px;color:#111}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:16px 0 6px;border-bottom:2px solid #1B3D7A;color:#1B3D7A}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}th{background:#eef}.big{font-size:16px;font-weight:bold}.chk td:first-child{width:24px;text-align:center;font-size:16px}.warn{background:#FFF3CD;border:1px solid #E0B000;padding:6px 8px;margin:8px 0}@media print{button{display:none}}</style></head><body>
+  <button onclick="print()" style="float:right;padding:6px 14px">Print</button>
+  <h1>SETUP SHEET — O${String(st.progNum).padStart(4, '0')} ${esc(st.progName)}</h1>
+  <div>${esc(MACHINE.name)} (${esc(MACHINE.control)}) · File ${esc(S.file)} · ${new Date().toLocaleDateString()} · Est. run time <b>${hms(tot)}</b> per part</div>
+  <h2>Work offset</h2><table>${row('Offset', `<span class="big">${st.wcs}</span>`)}${row('X0 Y0', bb ? `Drawing origin. Part spans X ${fmt(bb.x0)} to ${fmt(bb.x1)}, Y ${fmt(bb.y0)} to ${fmt(bb.y1)} ${U()}` : '—')}${row('Z0', `<b>TOP OF THE FINISHED PART</b>${s.top > 1e-9 ? ` — raw stock top is at Z +${fmt(s.top)} (facing removes it)` : ''}`)}</table>
+  <h2>Stock</h2><table>${row('Size', `${fmt(s.x1 - s.x0)} × ${fmt(s.y1 - s.y0)} × ${fmt(s.top - s.bottom)} ${U()}`)}${row('Material', esc(MATS[st.material].n))}${row('Lowest cut', `Z ${fmt(Math.min(...ops.map(o => o.p.depth != null ? o.p.depth : 0), 0))} — clamps and vise jaws must be below this and outside the toolpath`)}</table>
+  <h2>Tools — measure every H offset for the tools actually loaded</h2><table><tr><th>T</th><th>Tool</th><th>Ø</th><th>H</th><th>D</th><th>Flute len</th><th>RPM</th><th>Stick-out ok?</th></tr>${tools.map(t => `<tr><td class="big">T${t.num}</td><td>${esc(t.name)}</td><td>${fmt(t.dia)}</td><td>H${t.hOff || t.num}</td><td>D${t.dOff || t.num}</td><td>${fmt(t.len)}</td><td>${t.rpm}</td><td>☐</td></tr>`).join('')}</table>
+  <h2>Operations</h2><table><tr><th>#</th><th>Operation</th><th>Tool</th><th>Depth Z</th><th>Time</th><th>Done</th></tr>${ops.map((o, i) => { const t = toolOf(o); return `<tr><td>${i + 1}</td><td>${esc(o.name)}${o.warn && o.warn.length ? `<div class="warn">⚠ ${esc(o.warn[0])}</div>` : ''}</td><td>${t ? 'T' + t.num : ''}</td><td>${o.p.depth != null ? fmt(o.p.depth) : '—'}</td><td>${o.moves ? hms(cycleTime(o)) : '—'}</td><td>☐</td></tr>`; }).join('')}</table>
+  <h2>Before pressing cycle start</h2><table class="chk">
+  <tr><td>☐</td><td>Stock clamped square; nothing above the stock top inside the toolpath area</td></tr>
+  <tr><td>☐</td><td>${st.wcs} set: X0 Y0 at the datum, Z0 touched off on the top of the finished part</td></tr>
+  <tr><td>☐</td><td>All H offsets measured today for the tools in the carousel (T numbers match the table above)</td></tr>
+  <tr><td>☐</td><td>Program O${String(st.progNum).padStart(4, '0')} loaded; ${st.units === 'mm' ? 'G21' : 'G20'} in the header; coolant on</td></tr>
+  <tr><td>☐</td><td>First run: air-cut version or Z+20 offset, SINGLE BLOCK on, rapid override 25%, hand on feed hold</td></tr>
+  <tr><td>☐</td><td>After first part: measure critical dimensions, adjust D wear offsets if needed, then run normally</td></tr></table>
+  <p style="margin-top:14px;color:#555">Programmer: ____________________   Operator: ____________________   Checked by: ____________________</p>
+  </body></html>`;
+  const w = window.open('', '_blank'); if (!w){ download(`setup-O${String(st.progNum).padStart(4, '0')}.html`, html); return; } w.document.write(html); w.document.close();
 }
 function ncEditor(text){
   const name = `O${String(S.setup.progNum).padStart(4, '0')}.NC`, el = document.createElement('div');
@@ -2324,6 +2357,141 @@ function ncEditor(text){
   dlg({title:`NC Editor - ${name}`, body:el, w:Math.min(980, innerWidth - 20), ok:c => c()});
 }
 function download(name, text){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type:'text/plain'})); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+
+
+/* ============================== PDF drawing import (vector plots from CAD) ============================== */
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
+let pdfP = null;
+function loadPDFJS(){ if (!pdfP) pdfP = import(PDFJS + 'pdf.min.mjs').then(m => { m.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs'; return m; }).catch(e => { pdfP = null; throw new Error('Could not load the PDF reader (needs internet).'); }); return pdfP; }
+// walk a pdf.js operator list, return stroked paths in page points: [{color:'r,g,b', w, pts:[[x,y],...], closed}]
+function pdfPaths(fnArray, argsArray, OPS){
+  const out = []; let ctm = [1, 0, 0, 1, 0, 0]; const stack = []; let col = '0,0,0', lw = 1, pend = null;
+  const mul = (a, b) => [a[0]*b[0] + a[2]*b[1], a[1]*b[0] + a[3]*b[1], a[0]*b[2] + a[2]*b[3], a[1]*b[2] + a[3]*b[3], a[0]*b[4] + a[2]*b[5] + a[4], a[1]*b[4] + a[3]*b[5] + a[5]];
+  const T = (x, y) => [ctm[0]*x + ctm[2]*y + ctm[4], ctm[1]*x + ctm[3]*y + ctm[5]];
+  const bez = (p0, p1, p2, p3) => { const n = 12, o = []; for (let k = 1; k <= n; k++){ const t = k/n, u = 1 - t; o.push([u*u*u*p0[0] + 3*u*u*t*p1[0] + 3*u*t*t*p2[0] + t*t*t*p3[0], u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1]]); } return o; };
+  const emit = () => { if (!pend) return; for (const sp of pend) if (sp.pts.length > 1) out.push({color:col, w:lw, pts:sp.pts, closed:sp.closed}); pend = null; };
+  for (let i = 0; i < fnArray.length; i++){
+    const fn = fnArray[i], a = argsArray[i];
+    if (fn === OPS.save) stack.push(ctm.slice());
+    else if (fn === OPS.restore) ctm = stack.pop() || ctm;
+    else if (fn === OPS.transform) ctm = mul(ctm, a);
+    else if (fn === OPS.setStrokeRGBColor) col = Array.from(a).join(',');
+    else if (fn === OPS.setStrokeGray) col = [a[0]*255|0, a[0]*255|0, a[0]*255|0].join(',');
+    else if (fn === OPS.setStrokeCMYKColor) col = [255*(1-a[0])*(1-a[3])|0, 255*(1-a[1])*(1-a[3])|0, 255*(1-a[2])*(1-a[3])|0].join(',');
+    else if (fn === OPS.setLineWidth) lw = a[0];
+    else if (fn === OPS.constructPath){
+      const ops = a[0], d = a[1], subs = []; let cur = null, k = 0, last = null;
+      const start = p => { cur = {pts:[p], closed:false}; subs.push(cur); last = p; };
+      for (const op of ops){
+        if (op === OPS.moveTo){ start(T(d[k], d[k+1])); k += 2; }
+        else if (op === OPS.lineTo){ const p = T(d[k], d[k+1]); k += 2; if (!cur) start(p); else { cur.pts.push(p); last = p; } }
+        else if (op === OPS.curveTo){ const c1 = T(d[k], d[k+1]), c2 = T(d[k+2], d[k+3]), p = T(d[k+4], d[k+5]); k += 6; if (!cur) start(c1); cur.pts.push(...bez(last, c1, c2, p)); last = p; }
+        else if (op === OPS.curveTo2){ const c2 = T(d[k], d[k+1]), p = T(d[k+2], d[k+3]); k += 4; if (!cur) start(c2); cur.pts.push(...bez(last, last, c2, p)); last = p; }
+        else if (op === OPS.curveTo3){ const c1 = T(d[k], d[k+1]), p = T(d[k+2], d[k+3]); k += 4; if (!cur) start(c1); cur.pts.push(...bez(last, c1, p, p)); last = p; }
+        else if (op === OPS.closePath){ if (cur) cur.closed = true; cur = null; }
+        else if (op === OPS.rectangle){ const x = d[k], y = d[k+1], w = d[k+2], h = d[k+3]; k += 4; subs.push({pts:[T(x, y), T(x + w, y), T(x + w, y + h), T(x, y + h)], closed:true}); cur = null; }
+      }
+      pend = subs;
+    }
+    else if (fn === OPS.stroke || fn === OPS.closeStroke || fn === OPS.fillStroke || fn === OPS.closeFillStroke || fn === OPS.eoFillStroke || fn === OPS.closeEOFillStroke){ if (fn === OPS.closeStroke || fn === OPS.closeFillStroke || fn === OPS.closeEOFillStroke) pend && pend.forEach(sp => sp.closed = true); emit(); }
+    else if (fn === OPS.fill || fn === OPS.eoFill || fn === OPS.endPath || fn === OPS.clip || fn === OPS.eoClip) pend = null;    // filled text/arrows and clips are not geometry
+  }
+  return out;
+}
+async function importPDF(file, merge){
+  const pdfjs = await loadPDFJS();
+  busy(true, 'Reading ' + file.name + '…'); await tick();
+  const doc = await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()), isEvalSupported:false}).promise;
+  const page = await doc.getPage(1), ol = await page.getOperatorList(), paths = pdfPaths(ol.fnArray, ol.argsArray, pdfjs.OPS);
+  busy(false);
+  if (!paths.length){ msg('PDF', 'No vector lines found in this PDF — it is probably a scan or a picture. Ask the customer for the CAD PDF, DXF or STEP, or draw the part with the Create menu.'); return false; }
+  // group by colour (AutoCAD plots keep layer colours: black = geometry, cyan = dimensions, red = centre lines)
+  const groups = {}; paths.forEach(p => { const g = groups[p.color] = groups[p.color] || {n:0, segs:0}; g.n++; g.segs += p.pts.length; });
+  const keys = Object.keys(groups).sort((a, b) => groups[b].n - groups[a].n);
+  const isDark = c => c.split(',').reduce((s, v) => s + +v, 0) < 200;
+  const W = {sel:Object.fromEntries(keys.map(k => [k, isDark(k)])), unit:'mm', scale:1, join:true};
+  const el = document.createElement('div');
+  el.innerHTML = `<div class="info">${paths.length} vector paths found (${doc.numPages > 1 ? 'page 1 of ' + doc.numPages + ', ' : ''}${esc(file.name)}). Pick which pen colours to import. In AutoCAD plots the <b>black</b> lines are usually the part; coloured lines are dimensions, centre lines and hatching.</div>
+    <table class="grid"><tr><th></th><th>Colour</th><th>Paths</th></tr>${keys.map(k => `<tr><td><input type="checkbox" data-col="${k}"${W.sel[k] ? ' checked' : ''}></td><td><span style="display:inline-block;width:40px;height:12px;background:rgb(${k});border:1px solid #888;vertical-align:middle"></span> rgb(${k})</td><td>${groups[k].n}</td></tr>`).join('')}</table>
+    <fieldset style="margin-top:8px"><legend>Scale</legend><div class="fr"><span>Plot scale (drawing : paper)</span><input type="text" data-k="scale" value="1" style="width:80px"><div class="hint">Title-block scale, e.g. <b>2</b> for 2:1, <b>0.5</b> for 1:2. If unsure leave 1 and use <b>Analyze ▸ Scale check</b> afterwards: click two ends of a known dimension and type its value.</div></div></fieldset>
+    <div class="hint">After import: window-select the view you want and use <b>Edit ▸ Keep selected only</b> to drop the other views and the title block.</div>`;
+  el.addEventListener('change', e => { if (e.target.dataset.col) W.sel[e.target.dataset.col] = e.target.checked; if (e.target.dataset.k === 'scale') W.scale = parseFloat(e.target.value) || 1; });
+  return new Promise(res => dlg({title:'Import PDF drawing', body:el, w:520, okLabel:'Import', ok:close => {
+    close();
+    const k = (25.4/72)/(W.scale || 1)*(isMM() ? 1 : 1/25.4);
+    const keep = paths.filter(p => W.sel[p.color]).map(p => ({...p, pts:p.pts.map(q => [q[0]*k, q[1]*k])}));
+    snapEnds(keep, isMM() ? 0.08 : 0.003);          // plot rounding leaves 0.02–0.05 mm gaps between segments
+    pushUndo();
+    if (!merge){ S.geom.items = []; S.geom.levels = {}; S.geom.nextId = 1; S.geom.mesh = null; }
+    for (const p of keep){
+      const lv = 'PDF ' + p.color;
+      const pts = p.pts;   // PDF user space is already Y-up, scaled above
+      const simp = dp3(pts.map(q => [q[0], q[1], 0]), isMM() ? 0.003 : 0.0001).map(q => [q[0], q[1]]);
+      if (simp.length === 2) addItem({kind:'line', x1:simp[0][0], y1:simp[0][1], x2:simp[1][0], y2:simp[1][1]}, lv);
+      else if (simp.length > 2){
+        const closed = p.closed || hyp(simp[0][0] - simp[simp.length-1][0], simp[0][1] - simp[simp.length-1][1]) < 1e-6;
+        if (closed && hyp(simp[0][0] - simp[simp.length-1][0], simp[0][1] - simp[simp.length-1][1]) < 1e-6) simp.pop();
+        const circ = closed && fitCircle(simp);
+        if (circ) addItem({kind:'circle', cx:circ[0], cy:circ[1], r:circ[2]}, lv);
+        else if (closed) addItem({kind:'poly', closed:true, pts:simp}, lv);
+        else for (let i = 0; i + 1 < simp.length; i++) addItem({kind:'line', x1:simp[i][0], y1:simp[i][1], x2:simp[i+1][0], y2:simp[i+1][1]}, lv);
+      }
+    }
+    if (!S.geom.levels[S.geom.main]) S.geom.main = Object.keys(S.geom.levels)[0] || '1';
+    ensureLevel(S.geom.main);
+    if (!merge){ S.geom.name = file.name; if (S.file === 'untitled') S.file = file.name.replace(/\.[^.]+$/, ''); stockFromGeom(); }
+    selEnt.clear(); S.ops.forEach(o => { o.dirty = true; o.moves = null; }); clearG(G.path); clearG(G.sim);
+    geomChanged(); drawStock(); setView('top'); updTitle();
+    prompt_(`${file.name}: ${keep.length} paths imported. Window-select the view you need → Edit ▸ Keep selected only, then Analyze ▸ Scale check.`);
+    res(true);
+  }, cancel:c => { c(); res(false); }}));
+}
+// pull segment end points that lie within tol of each other onto one shared point so chaining can join them
+function snapEnds(paths, tol){
+  const ends = []; paths.forEach(p => { if (p.closed || p.pts.length < 2) return; ends.push({p, i:0}); ends.push({p, i:p.pts.length - 1}); });
+  const key = q => Math.round(q[0]/tol) + ',' + Math.round(q[1]/tol), H = new Map();
+  ends.forEach(e => { const q = e.p.pts[e.i], k = key(q); (H.get(k) || H.set(k, []).get(k)).push(e); });
+  const done = new Set();
+  for (const e of ends){
+    if (done.has(e)) continue;
+    const q = e.p.pts[e.i], gx = Math.round(q[0]/tol), gy = Math.round(q[1]/tol), grp = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const o of H.get((gx+dx) + ',' + (gy+dy)) || []) if (!done.has(o) && hyp(o.p.pts[o.i][0] - q[0], o.p.pts[o.i][1] - q[1]) <= tol) grp.push(o);
+    if (grp.length < 2) continue;
+    const cx = grp.reduce((a, o) => a + o.p.pts[o.i][0], 0)/grp.length, cy = grp.reduce((a, o) => a + o.p.pts[o.i][1], 0)/grp.length;
+    grp.forEach(o => { o.p.pts[o.i] = [cx, cy]; done.add(o); });
+  }
+}
+// closed polyline that is really a circle (CAD circles arrive as 4 bezier arcs)
+function fitCircle(pts){
+  if (pts.length < 8) return null;
+  let cx = 0, cy = 0; pts.forEach(p => { cx += p[0]; cy += p[1]; }); cx /= pts.length; cy /= pts.length;
+  const rs = pts.map(p => hyp(p[0] - cx, p[1] - cy)), r = rs.reduce((a, b) => a + b, 0)/rs.length;
+  return rs.every(v => Math.abs(v - r) <= Math.max(r*0.004, isMM() ? 0.01 : 0.0004)) ? [cx, cy, r] : null;
+}
+// Analyze ▸ Scale check: two picked points + the true distance → scale everything about the origin
+let scalePts = [];
+function scalePick(p){
+  if (!p) return; scalePts.push(p);
+  if (scalePts.length === 1){ prompt_('Scale check: click the other end of the known dimension'); return; }
+  const [a, b] = scalePts; scalePts = []; endMode();
+  const d = hyp(b.x - a.x, b.y - a.y);
+  ask('Scale check', `Measured ${fmt(d)} ${U()}. True dimension:`, fmt(d)).then(v => { const t = parseFloat(v); if (!(t > 0) || !(d > 0)) return; const f = t/d; if (Math.abs(f - 1) < 1e-6) return; xformAll(q => [q[0]*f, q[1]*f], false); stockFromGeom(); drawStock(); setView('top'); prompt_(`Drawing scaled by ${f.toFixed(5)} (${fmt(d)} → ${fmt(t)}).`); });
+}
+// bridge open chain ends that are within tol of each other (drawing flaws: tiny gaps, un-trimmed corners)
+function closeGaps(tol, quiet){
+  const ends = []; CH.forEach(c => { if (c.closed || c.point) return; ends.push({c, p:c.pts[0]}); ends.push({c, p:c.pts[c.pts.length-1]}); });
+  const pairs = [];
+  for (let i = 0; i < ends.length; i++) for (let j = i + 1; j < ends.length; j++){ const a = ends[i], b = ends[j]; if (a.c === b.c && a.c.pts.length < 3) continue; const d = hyp(a.p[0]-b.p[0], a.p[1]-b.p[1]); if (d > 1e-9 && d <= tol) pairs.push([d, a, b]); }
+  pairs.sort((x, y) => x[0] - y[0]);
+  const used = new Set(); let n = 0;
+  pushUndo();
+  for (const [, a, b] of pairs){ if (used.has(a) || used.has(b)) continue; used.add(a); used.add(b); addItem({kind:'line', x1:a.p[0], y1:a.p[1], x2:b.p[0], y2:b.p[1]}); n++; }
+  if (n) geomChanged(); else UNDO.pop();
+  if (!quiet) prompt_(n ? `${n} gap(s) closed (up to ${fmt(tol)} ${U()}).` : 'No gaps found within that distance.');
+  return n;
+}
+function closeGapsDlg(){ ask('Close small gaps', `Join open ends closer than (${U()}):`, fmt(isMM() ? 1 : 0.04)).then(v => { const t = parseFloat(v); if (t > 0) closeGaps(t); }); }
+function keepSelected(){ if (!selEnt.size){ msg('Keep selected only', 'Window-select the view you want to keep first.'); return; } pushUndo(); S.geom.items = S.geom.items.filter(it => selEnt.has(it.id) || !visItem(it)); selEnt.clear(); geomChanged(); stockFromGeom(); drawStock(); setView('top'); }
 
 /* ============================== file I/O ============================== */
 const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/';
@@ -2344,7 +2512,7 @@ document.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTra
 async function openCAD(file, merge){
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'dwg'){ msg('DWG', 'DWG is a closed AutoCAD format that a browser cannot read.<br><br>In AutoCAD / DraftSight use <b>Save As ▸ DXF</b>, or convert with the free <b>ODA File Converter</b>, then open the DXF here.'); return false; }
-  if (ext === 'pdf'){ msg('PDF', 'A PDF print has no machinable geometry.<br><br>Ask the customer for DXF or STEP, or draw the part with the <b>Create</b> menu. Vector PDFs made from CAD can be converted to DXF in AutoCAD (PDFIMPORT) or Inkscape — check the scale against a known dimension.'); return false; }
+  if (ext === 'pdf'){ try { return await importPDF(file, merge); } catch(e){ console.error(e); busy(false); alert('Could not read ' + file.name + ':\n' + e.message); return false; } }
   const is3D = ['stl', 'step', 'stp', 'iges', 'igs'].includes(ext);
   if (!merge && (S.geom.items.length || S.geom.mesh) && !confirm(`Open ${file.name}? It replaces the current ${is3D ? 'model' : 'drawing'}. (Use File ▸ Merge to add to it.)`)) return false;
   busy(true, 'Reading ' + file.name + '…'); await tick();
@@ -2427,7 +2595,7 @@ function wizard(){
     const outer = closed.slice().sort((a, b) => Math.abs(area(b.pts)) - Math.abs(area(a.pts)))[0];
     const inner = closed.filter(c => c !== outer);
     const pages = [
-      `<h3>1. Load the drawing</h3><p>Open the customer's <b>DXF</b> (2D) or <b>STEP / STL</b> (3D), or draw the part with the Create menu.</p>
+      `<h3>1. Load the drawing</h3><p>Open the customer's <b>PDF or DXF</b> drawing (2D) or <b>STEP / STL</b> model (3D), or draw the part with the Create menu. For a PDF: keep the black lines, window-select the view you need, then Analyze ▸ Scale check.</p>
        <div class="cards"><div class="card" data-w="open"><b>📐 Open DXF / STEP / STL</b>Customer file</div><div class="card" data-w="demo"><b>🧪 Load the demo plate</b>Try it first</div></div>
        ${bb ? `<div class="info">Loaded: <b>${esc(S.geom.name || S.file)}</b> — ${fmt(bb.x1 - bb.x0)} × ${fmt(bb.y1 - bb.y0)} ${u}, ${CH.length} chains (${closed.length} closed shapes, ${circles.length} circles).</div>` : '<div class="note">Nothing loaded yet.</div>'}
        <p class="hint">Tip: if the drawing has a title block or dimensions, hide those levels in the <b>Levels</b> tab so they are not cut.</p>`,
@@ -2487,7 +2655,7 @@ function wizard(){
   };
   const el = document.createElement('div'); body = el;
   dlgEl = dlg({title:'Job Wizard — from drawing to G-code', body:el, w:720, okLabel:'Next ▸', cancel:c => c(), ok:close => {
-    if (step < 3){ if (step === 0 && !(S.geom.items.length || S.geom.mesh)){ alert('Load a drawing first.'); return; } if (step === 1) applyStock(); step++; render(); return; }
+    if (step < 3){ if (step === 0 && !(S.geom.items.length || S.geom.mesh)){ alert('Load a drawing first.'); return; } if (step === 0 && CH.some(c => !c.closed && !c.point)){ const n = closeGaps(isMM() ? 0.3 : 0.012, true); if (n) render(); } if (step === 1) applyStock(); step++; render(); return; }
     const pl = plan().filter(o => o.type);
     if (!pl.length){ alert('Nothing to create.'); return; }
     pushUndo();
@@ -2517,14 +2685,14 @@ function wizard(){
 function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ? '' : 'Toolpath display off (Alt+T)'); }
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
-  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Open drawing / model (DXF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
-  ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel]]],
+  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
+  ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
-  ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }]]],
+  ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
   ['Create', [['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Rectangle', '', () => startCreate('rect')], ['Bolt circle', '', () => startCreate('bolt')]]],
   ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
-  ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], '-', ['💲 Estimate / quotation…', '', estimateDlg]]],
+  ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['💲 Estimate / quotation…', '', estimateDlg]]],
   ['Screen', [['Toggle toolpath display', 'Alt+T', togglePaths], ['Toggle shading', 'Alt+S', () => { shade = !shade; drawGeom(); }], ['Toggle WCS axes', 'F9', () => { axesOn = !axesOn; drawAxes(); }], ['Clear verify stock', '', () => clearG(G.sim)], ['Clear selection', '', () => { selEnt.clear(); drawGeom(); updStatus(); }]]],
   ['Settings', [[(isMM() ? '✔ ' : '') + 'Configuration ▸ Metric (mm)', '', () => setUnits('mm')], [(!isMM() ? '✔ ' : '') + 'Configuration ▸ English (inch)', '', () => setUnits('in')], '-', [(S.setup.beginner ? '✔ ' : '') + 'Beginner mode (hints & checklists)', '', () => { S.setup.beginner = !S.setup.beginner; renderMenu(); autosave(); }], '-', ['Machine definition…', '', () => propsDlg('machine')], ['Post options…', '', () => propsDlg('post')], ['Claude assistant settings…', '', () => aiSettings()]]],
   ['Help', [['Load demo part', '', () => { if (S.ops.length && !confirm('Replace the current file with the demo part?')) return; demo(); }], ['Keyboard & mouse', 'F1', helpDlg], ['Beginner guide', '', guideDlg], ['About', '', () => msg('About', `<b>Dynamic Intl CAM</b><br>2D/3D milling CAM posting to ${MACHINE.name} (${MACHINE.control}).<br><br>Always backplot and verify. Prove out new programs with single block, reduced rapids and the feed override.`)]]]
@@ -2553,11 +2721,11 @@ function renderMenu(){
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.dd') && !e.target.closest('.mi')) closeMenus(); });
 const TBAR = [
   ['🧭 Job Wizard', 'Step-by-step: drawing → operations → G-code', wizard, 'wiz'], ['✦ Ask Claude', 'Claude assistant: explains, suggests and creates operations', () => aiPanel(), 'wiz'], '|',
-  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['📐', 'Open drawing / model (DXF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
+  ['📄', 'New (Ctrl+N)', newProj], ['📂', 'Open project (Ctrl+O)', () => pick('proj')], ['📐', 'Open drawing / model (DXF, PDF, STEP, IGES, STL)', () => pick('cad')], ['💾', 'Save (Ctrl+S)', () => saveProj(false)], ['↶', 'Undo (Ctrl+Z)', undo], '|',
   ['⤢', 'Fit (Alt+F1)', () => setView(S.gview || 'top')], ['＋', 'Zoom in (PgUp)', () => zoom(0.8)], ['－', 'Un-zoom (PgDn)', () => zoom(1.25)], ['<small>T</small>', 'Top view (Alt+1)', () => setView('top')], ['<small>F</small>', 'Front view (Alt+2)', () => setView('front')], ['<small>R</small>', 'Right view (Alt+5)', () => setView('right')], ['<small>ISO</small>', 'Isometric (Alt+7)', () => setView('iso')], ['◐', 'Toggle shading (Alt+S)', () => { shade = !shade; drawGeom(); }], '|',
   ['·', 'Create point', () => startCreate('point')], ['╱', 'Create line endpoints', () => startCreate('line')], ['◯', 'Create circle center point', () => startCreate('circle')], ['◠', 'Create arc polar', () => startCreate('arc')], ['▭', 'Create rectangle', () => startCreate('rect')], ['⁘', 'Create bolt circle', () => startCreate('bolt')], ['🗑', 'Delete selected entities (Del)', delSel], ['⇥', 'Xform translate', () => xformDlg('translate')], ['⟲', 'Xform rotate', () => xformDlg('rotate')], ['⇋', 'Xform mirror', () => xformDlg('mirror')], ['🔍', 'Analyze entity', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], '|',
   ['⌒', 'Contour toolpath', () => newOp('contour')], ['⊙', 'Drill toolpath', () => newOp('drill')], ['▣', 'Pocket toolpath', () => newOp('pocket')], ['▤', 'Face toolpath', () => newOp('face')], ['◎', 'Circle mill toolpath', () => newOp('cmill')], ['⛰', 'Surface rough parallel', () => newOp('srough')], ['〰', 'Surface finish parallel', () => newOp('sfinish')], ['≋', 'Surface finish contour (waterline)', () => newOp('scont')], '|',
-  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], '|', ['💲 Estimate', 'Cost estimate / quotation from the cycle time', estimateDlg]
+  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['💲 Estimate', 'Cost estimate / quotation from the cycle time', estimateDlg]
 ];
 function renderTbar(){
   $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('');
@@ -2851,7 +3019,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
