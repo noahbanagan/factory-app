@@ -202,31 +202,31 @@ function mkTool(o){ return Object.assign({id:uid(), num:1, name:'', type:'flat',
 function defTools(u){
   const T = (num, name, type, dia, o = {}) => mkTool(Object.assign({num, name, type, dia, hOff:num, dOff:num}, o));
   if (u === 'mm') return [
-    T(1, '50. FACE MILL', 'face', 50, {flutes:5, len:10, rpm:1500, feed:900, plunge:300, retract:2000}),
-    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:4500, feed:900, plunge:250, retract:2000}),
-    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:7000, feed:800, plunge:200, retract:2000}),
-    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:8000, feed:1400, plunge:300, retract:2000}),
-    T(5, '8. SPOT DRILL', 'spot', 8, {flutes:2, angle:90, rpm:2500, feed:200, plunge:200}),
-    T(6, '6.8 DRILL', 'drill', 6.8, {flutes:2, len:45, rpm:2200, feed:250, plunge:250}),
-    T(7, 'M8 X 1.25 TAP RH', 'tap', 8, {len:25, rpm:400, feed:500, plunge:500, pitch:1.25}),
-    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:5000, feed:800, plunge:200, retract:2000}),
-    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:4000, feed:1200, plunge:300, retract:2000})
+    T(1, '50. FACE MILL', 'face', 50, {flutes:5, len:10, rpm:1000, feed:500, plunge:200, retract:2000}),
+    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:3000, feed:500, plunge:250, retract:2000}),
+    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:4500, feed:450, plunge:200, retract:2000}),
+    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:5000, feed:800, plunge:300, retract:2000}),
+    T(5, '8. SPOT DRILL', 'spot', 8, {flutes:2, angle:90, rpm:1500, feed:120, plunge:200}),
+    T(6, '6.8 DRILL', 'drill', 6.8, {flutes:2, len:45, rpm:1400, feed:150, plunge:250}),
+    T(7, 'M8 X 1.25 TAP RH', 'tap', 8, {len:25, rpm:250, feed:312.5, plunge:312.5, pitch:1.25}),
+    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:3000, feed:450, plunge:200, retract:2000}),
+    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:2500, feed:700, plunge:300, retract:2000})
   ];
   return [
-    T(1, '2. FACE MILL', 'face', 2, {flutes:5, len:0.4, rpm:1500, feed:35, plunge:12, retract:80}),
-    T(2, '1/2 FLAT ENDMILL', 'flat', 0.5, {len:1.25, rpm:3600, feed:36, plunge:10, retract:80}),
-    T(3, '1/4 FLAT ENDMILL', 'flat', 0.25, {len:0.75, rpm:7000, feed:32, plunge:8, retract:80}),
-    T(4, '1/4 BALL-NOSE ENDMILL', 'ball', 0.25, {flutes:2, len:0.75, rpm:8000, feed:55, plunge:12, retract:80}),
-    T(5, '3/8 SPOT DRILL', 'spot', 0.375, {flutes:2, angle:90, rpm:2500, feed:8, plunge:8}),
-    T(6, '#7 DRILL', 'drill', 0.201, {flutes:2, len:1.75, rpm:2200, feed:10, plunge:10}),
-    T(7, '1/4-20 TAP RH', 'tap', 0.25, {len:1, rpm:400, feed:20, plunge:20, pitch:0.05}),
-    T(8, '3/8 CHAMFER MILL 90DEG', 'chamfer', 0.375, {flutes:4, angle:90, tipDia:0.04, len:0.2, rpm:5000, feed:30, plunge:8, retract:80}),
-    T(9, '1/2 BULL ENDMILL R.03', 'bull', 0.5, {cr:0.03, flutes:4, len:1.25, rpm:4000, feed:45, plunge:12, retract:80})
+    T(1, '2. FACE MILL', 'face', 2, {flutes:5, len:0.4, rpm:1000, feed:20, plunge:12, retract:80}),
+    T(2, '1/2 FLAT ENDMILL', 'flat', 0.5, {len:1.25, rpm:2400, feed:20, plunge:10, retract:80}),
+    T(3, '1/4 FLAT ENDMILL', 'flat', 0.25, {len:0.75, rpm:4500, feed:18, plunge:8, retract:80}),
+    T(4, '1/4 BALL-NOSE ENDMILL', 'ball', 0.25, {flutes:2, len:0.75, rpm:5000, feed:32, plunge:12, retract:80}),
+    T(5, '3/8 SPOT DRILL', 'spot', 0.375, {flutes:2, angle:90, rpm:1500, feed:5, plunge:8}),
+    T(6, '#7 DRILL', 'drill', 0.201, {flutes:2, len:1.75, rpm:1400, feed:6, plunge:10}),
+    T(7, '1/4-20 TAP RH', 'tap', 0.25, {len:1, rpm:250, feed:12.5, plunge:12.5, pitch:0.05}),
+    T(8, '3/8 CHAMFER MILL 90DEG', 'chamfer', 0.375, {flutes:4, angle:90, tipDia:0.04, len:0.2, rpm:3000, feed:18, plunge:8, retract:80}),
+    T(9, '1/2 BULL ENDMILL R.03', 'bull', 0.5, {cr:0.03, flutes:4, len:1.25, rpm:2500, feed:28, plunge:12, retract:80})
   ];
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.maxRpm, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true,
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.maxRpm, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:60,
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
@@ -1863,7 +1863,7 @@ function propsDlg(tab = 'files'){
     const u = U();
     el.innerHTML = `<div class="tabs2">${[['files','Files'],['tool','Tool Settings'],['stock','Stock Setup'],['machine','Machine'],['post','Post']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>` + ({
       files:`<fieldset><legend>Files</legend><div class="fr"><span>Machine</span><b>${MACHINE.name}</b></div><div class="fr"><span>Control</span><b>${MACHINE.control}</b></div><div class="fr"><span>Post</span><b>${MACHINE.post}</b></div>${fRow(st, 'progName', 'NC name', 't')}${fRow(st, 'progNum', 'Program number (O)', 'i')}<div class="fr"><span>NC file</span><b>O${String(st.progNum).padStart(4, '0')}.NC</b></div></fieldset>`,
-      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}</fieldset>
+      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}${fRow(st, 'safety', 'Speeds & feeds safety factor (% of textbook)', 'i')}<div class="hint">60% = calm, safe cutting for a shop that prefers to run slow. Raise it later once you trust the setups.</div></fieldset>
         <fieldset><legend>Sequence numbers</legend>${fRow(st.post, 'lineNums', 'Output N sequence numbers', 'c')}${fRow(st.post, 'nStart', 'Start', 'i')}${fRow(st.post, 'nInc', 'Increment', 'i')}</fieldset>`,
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
@@ -1891,7 +1891,8 @@ function propsDlg(tab = 'files'){
 function calcSpeeds(t, ret){
   const m = MATS[S.setup.material], inch = !isMM(), D = inch ? t.dia*25.4 : t.dia;
   if (!(D > 0)) return t;
-  let vc = m.vc, rpm, feed;
+  // shop safety factor: scale the textbook cutting speed (feed follows through the RPM)
+  let vc = m.vc*Math.max(10, Math.min(100, S.setup.safety || 60))/100, rpm, feed;
   if (['drill', 'spot', 'center'].includes(t.type)){ vc *= 0.35; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*m.fz*D*2.5; }
   else if (t.type === 'tap'){ vc *= 0.06; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*(inch ? t.pitch*25.4 : t.pitch); }
   else if (t.type === 'ream' || t.type === 'bore'){ vc *= 0.25; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*m.fz*D*4; }
@@ -2770,7 +2771,7 @@ async function aiRunTool(name, inp){
   if (name === 'verify'){ const l = S.ops.filter(o => o.moves && o.moves.length); const hits = await runVerify(l, 'normal'); return {collisions:hits ? hits.length : 0, first:(hits || []).slice(0, 10)}; }
   return {error:'unknown tool'};
 }
-const AI_SYS = () => `You are the CAM and estimating assistant inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for a ${MACHINE.name} (${MACHINE.control}) vertical machining centre. The user is a BEGINNER CNC programmer. Be practical, concrete and brief; explain terms the first time you use them. Use the tools to read the job before advising, and to make changes when the user asks you to program something — then tell them what you did and what to check. Safety rules: Z0 is the top of the finished part; depths are negative; never exceed machine limits; prefer climb milling, depth cuts of ≤½ tool diameter in steel / ≤1× in aluminium, helix or ramp entry for pockets, spot-drill before drilling, peck (G83) for holes deeper than 3× diameter, G84 rigid tapping with feed = pitch × RPM (the app sets it). After creating operations, always suggest Backplot → Verify → Post and a first run in single block with rapid override. Units are ${S.setup.units}. For quotations use get_estimate and present the customer-facing price separately from the confidential cost build-up; label values Provided/Derived/Assumed and never invent material grade, tolerances or finishes. If the user asks for something the app cannot do (lathe, 4/5-axis, DWG/PDF import), say so plainly.`;
+const AI_SYS = () => `You are the CAM and estimating assistant inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for a ${MACHINE.name} (${MACHINE.control}) vertical machining centre. The user is a BEGINNER CNC programmer. Be practical, concrete and brief; explain terms the first time you use them. Use the tools to read the job before advising, and to make changes when the user asks you to program something — then tell them what you did and what to check. Safety rules: Z0 is the top of the finished part; depths are negative; never exceed machine limits; this shop runs conservatively — stay well under the machine limits and use the app's safety factor (${S.setup.safety || 60}% of textbook speeds); prefer climb milling, depth cuts of ≤½ tool diameter in steel / ≤1× in aluminium, helix or ramp entry for pockets, spot-drill before drilling, peck (G83) for holes deeper than 3× diameter, G84 rigid tapping with feed = pitch × RPM (the app sets it). After creating operations, always suggest Backplot → Verify → Post and a first run in single block with rapid override. Units are ${S.setup.units}. For quotations use get_estimate and present the customer-facing price separately from the confidential cost build-up; label values Provided/Derived/Assumed and never invent material grade, tolerances or finishes. If the user asks for something the app cannot do (lathe, 4/5-axis, DWG/PDF import), say so plainly.`;
 async function aiCall(messages){
   const body = {model:AI.model, max_tokens:16000, system:AI_SYS(), tools:AI_TOOLS, tool_choice:{type:'auto'}, messages, output_config:{effort:'medium'}, fallbacks:'default'};
   const r = await fetch('https://api.anthropic.com/v1/messages', {method:'POST', headers:{'content-type':'application/json', 'x-api-key':AI.key, 'anthropic-version':'2023-06-01', 'anthropic-beta':'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access':'true'}, body:JSON.stringify(body)});
