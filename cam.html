@@ -3040,7 +3040,7 @@ async function jobQueue(){
         if (o.dataset.cam === '1'){ applyProject(JSON.parse(await file.text())); }
         else { const ok = await openCAD(file, false); if (!ok) return; if (o.dataset.est){ S.setup.progNum = +o.dataset.est; S.est = Object.assign({}, EST_DEF, S.est || {}, {rfq:o.dataset.est}); } }
         S.drive = {folder:o.dataset.folder, est:o.dataset.est, source:o.dataset.name}; updTitle(); autosave(); d.close();
-        if (o.dataset.cam !== '1' && S.setup.beginner) setTimeout(() => { if (AI.key && confirm('Ask Claude to look at this drawing and suggest a plan now?')){ aiPanel(); aiSend('A new RFQ drawing was just imported from the job queue (' + o.dataset.name + '). Look at the job, say what kind of part it is, which process fits (CNC mill / wire EDM / lathe), which view to keep, and propose the operations in order. Do not create operations yet.'); } else wizard(); }, 300);
+        if (o.dataset.cam !== '1' && S.setup.beginner) setTimeout(() => { if ((AI.key || AI.sample) && confirm('Ask Claude to look at this drawing and suggest a plan now?')){ aiPanel(); aiSend('A new RFQ drawing was just imported from the job queue (' + o.dataset.name + '). Look at the job, say what kind of part it is, which process fits (CNC mill / wire EDM / lathe), which view to keep, and propose the operations in order. Do not create operations yet.'); } else wizard(); }, 300);
       } catch(err){ alert(err.message); } finally { busy(false); }
     }
   });
@@ -3091,11 +3091,13 @@ async function syncToolSheet(){
 }
 
 /* ============================== Claude assistant ============================== */
-const AI = {key:'', model:'claude-opus-5-5', msgs:[], el:null, busy:false};
+const AI = {key:'', model:'claude-opus-5-5', msgs:[], el:null, busy:false, sample:null};
 try { AI.key = localStorage.getItem('cam5.aikey') || ''; } catch(e){}
+// Hosted mode: when this page runs inside a Claude viewer (claude.ai test page) and no API key is set, Claude answers on the viewer's own Claude account.
+AI.sampleP = (window.claude && window.claude.use) ? claude.use('sample').then(s => (AI.sample = s)).catch(() => null) : Promise.resolve(null);
 function aiSettings(){
   const W = {key:AI.key}, el = document.createElement('div');
-  el.innerHTML = `<div class="info">The assistant calls Anthropic's API straight from this browser. Paste an API key from <b>console.anthropic.com</b> → API keys. It is stored only in this browser (local storage) and sent only to api.anthropic.com. Usage is billed to that key.</div>
+  el.innerHTML = `${AI.sample ? '<div class="info" style="margin-bottom:6px">This test page is running inside Claude, so the assistant can use <b>your Claude account</b> with no API key. Leave the key empty to keep using that.</div>' : ''}<div class="info">The assistant calls Anthropic's API straight from this browser. Paste an API key from <b>console.anthropic.com</b> → API keys. It is stored only in this browser (local storage) and sent only to api.anthropic.com. Usage is billed to that key.</div>
     <div class="fr"><span>API key</span><input type="password" data-k="key" value="${esc(W.key)}" style="width:300px" placeholder="sk-ant-…"></div>
     <div class="fr"><span>Model</span><b>Claude Opus 5.5</b></div>`;
   bindFields(el, W);
@@ -3157,12 +3159,36 @@ async function aiCall(messages){
   if (!r.ok){ let t = ''; try { t = (await r.json()).error.message; } catch(e){ t = r.statusText; } throw new Error(`${r.status} ${t}`); }
   return r.json();
 }
+// Hosted mode: Claude runs on the viewer's account through the page runtime; tools run in the page.
+async function aiSendHosted(){
+  const live = {type:'text', text:'…'}, blk = {role:'assistant', content:[live]};
+  AI.msgs.push(blk);
+  const bump = () => { const i = AI.msgs.indexOf(blk); if (i >= 0 && i !== AI.msgs.length - 1){ AI.msgs.splice(i, 1); AI.msgs.push(blk); } };
+  const tools = AI_TOOLS.map(t => ({name:t.name, description:t.description, inputSchema:t.input_schema, execute: async inp => {
+    const i = AI.msgs.indexOf(blk); AI.msgs.splice(i < 0 ? AI.msgs.length : i, 0, {role:'assistant', content:[{type:'tool_use', name:t.name, input:inp || {}}]}); aiRender(); aiStatus(`Running ${t.name}…`);
+    try { return await aiRunTool(t.name, inp || {}); } catch(e){ return {error:e.message}; } }}));
+  const turns = [{role:'user', content:AI_SYS() + '\n\nAlways call get_job first to read the current job before advising or changing anything.'}];
+  for (const m of AI.msgs){
+    if (m === blk) continue;
+    if (m.role === 'user' && typeof m.content === 'string') turns.push({role:'user', content:m.content});
+    else if (m.role === 'assistant'){ const t = m.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); if (t) turns.push({role:'assistant', content:t}); }
+  }
+  try {
+    const r = await AI.sample(turns, {tools, cache:false, modelTier:'default', effort:'medium', onText:({text}) => { live.text = text; bump(); aiRender(); }});
+    live.text = r.text + (r.truncated ? '\n(Answer was cut short — ask for less at a time.)' : '');
+  } catch(e){
+    const why = {not_granted:'You did not allow this page to use Claude. Reload the page to be asked again, or paste an API key in Settings.', rate_limited:'Your Claude usage limit was reached. Try again later.', refused:'Claude declined this request.', tools_unavailable:'This viewer cannot run the CAM tools for Claude. Paste an API key in Settings instead.', cancelled:'Stopped.'}[e && e.code];
+    live.text = (e && e.text ? e.text + '\n\n' : '') + '⚠ ' + (why || (e && e.message) || 'Claude is unavailable right now.');
+  }
+  bump();
+}
 async function aiSend(text){
-  if (!AI.key){ aiSettings(); return; }
+  if (!AI.key){ await AI.sampleP; if (!AI.sample){ aiSettings(); return; } }
   if (AI.busy) return;
   AI.busy = true; AI.msgs.push({role:'user', content:text}); aiRender();
   try {
-    for (let turn = 0; turn < 12; turn++){
+    if (!AI.key){ aiStatus('Claude is thinking… (using your Claude account)'); await aiSendHosted(); }
+    else for (let turn = 0; turn < 12; turn++){
       aiStatus('Claude is thinking…');
       const res = await aiCall(AI.msgs);
       AI.msgs.push({role:'assistant', content:res.content});
@@ -3217,7 +3243,7 @@ function aiPanel(){
   };
   AI.speak = el.querySelector('#aiSpk');
   aiRender();
-  if (!AI.key) aiSettings();
+  if (!AI.key) AI.sampleP.then(s => { if (!s) aiSettings(); else aiStatus('No API key needed here: Claude answers on your own Claude account.'); });
 }
 
 /* ============================== boot ============================== */
