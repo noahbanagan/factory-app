@@ -188,17 +188,18 @@ function busy(on, t){ $('#busy').style.display = on ? 'flex' : 'none'; if (t) $(
 function prompt_(t){ $('#prompt').textContent = t || ''; }
 
 /* ============================== state ============================== */
+// Industry-standard reference values (general-purpose carbide end mills; HSS drills and taps). vc m/min; fz10 = chip load mm/tooth for a Ø10 end mill (scaled by diameter); fr10 = drill feed mm/rev at Ø10.
 const MATS = {
-  alu:{n:'ALUMINUM A2017/A5056/6061', vc:300, fz:0.010, fam:'alu', note:'Free cutting. Sharp tools, flood coolant, high RPM. Chip-weld risk if feed too low.'},
-  mild:{n:'MILD STEEL 1018/1045/S45C', vc:120, fz:0.006, fam:'steel'},
-  alloy:{n:'4140 / SCM440 (SOFT, UNHARDENED)', vc:90, fz:0.005, fam:'steel', note:'Only mill in the soft state. If the drawing gives a hardness (e.g. 50-55 HRC), the part is hardened after machining: leave grind stock, or route to wire EDM / grinding.'},
-  hard:{n:'HARDENED STEEL >40 HRC', vc:0, fz:0, fam:'hard', note:'Not a milling job on this machine. Wire EDM (Mitsubishi BA24) or grinding.'},
-  ss:{n:'SUS304 / SUS316 STAINLESS', vc:80, fz:0.004, fam:'ss', note:'Work-hardens: never dwell or rub, keep the feed up, climb mill, fresh tools. Thin plate (< 3 mm) distorts — clamp well, light depth cuts.'},
-  sscsp:{n:'SUS304CSP SPRING STAINLESS (THIN)', vc:0, fz:0, fam:'hard', note:'Spring-temper sheet 0.3-2 mm: toothcombs, blades. Wire EDM job, not milling.'},
-  ci:{n:'CAST IRON', vc:100, fz:0.007, fam:'steel'}, brass:{n:'BRASS/BRONZE', vc:200, fz:0.008, fam:'alu'},
-  copper:{n:'COPPER / CU-CR ELECTRODE', vc:200, fz:0.008, fam:'alu', note:'Gummy: sharp polished-flute tools, generous feed, coolant. Electrode mods are usually re-machining an existing part — check the datum carefully.'},
-  plastic:{n:'POM (DELRIN) / NYLON', vc:250, fz:0.012, fam:'plastic', note:'High RPM, sharp tools, air blast or light coolant. Clamp gently — it deflects.'},
-  bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:150, fz:0.008, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
+  alu:{n:'ALUMINUM A2017/A5056/6061', vc:350, fz10:0.060, vcD:80, fr10:0.20, vcT:20, fam:'alu', note:'Free cutting. Sharp tools, flood coolant, high RPM. Chip-weld risk if feed too low.'},
+  mild:{n:'MILD STEEL 1018/1045/S45C', vc:150, fz10:0.050, vcD:28, fr10:0.18, vcT:10, fam:'steel'},
+  alloy:{n:'4140 / SCM440 (SOFT, UNHARDENED)', vc:120, fz10:0.045, vcD:22, fr10:0.15, vcT:8, fam:'steel', note:'Only mill in the soft state. If the drawing gives a hardness (e.g. 50-55 HRC), the part is hardened after machining: leave grind stock, or route to wire EDM / grinding.'},
+  hard:{n:'HARDENED STEEL >40 HRC', vc:0, fz10:0, vcD:0, fr10:0, vcT:0, fam:'hard', note:'Not a milling job on this machine. Wire EDM (Mitsubishi BA24) or grinding.'},
+  ss:{n:'SUS304 / SUS316 STAINLESS', vc:80, fz10:0.040, vcD:15, fr10:0.10, vcT:6, fam:'ss', note:'Work-hardens: never dwell or rub, keep the feed up, climb mill, fresh tools. Thin plate (< 3 mm) distorts — clamp well, light depth cuts.'},
+  sscsp:{n:'SUS304CSP SPRING STAINLESS (THIN)', vc:0, fz10:0, vcD:0, fr10:0, vcT:0, fam:'hard', note:'Spring-temper sheet 0.3-2 mm: toothcombs, blades. Wire EDM job, not milling.'},
+  ci:{n:'CAST IRON', vc:130, fz10:0.060, vcD:25, fr10:0.20, vcT:10, fam:'steel'}, brass:{n:'BRASS/BRONZE', vc:250, fz10:0.060, vcD:60, fr10:0.18, vcT:15, fam:'alu'},
+  copper:{n:'COPPER / CU-CR ELECTRODE', vc:200, fz10:0.050, vcD:50, fr10:0.15, vcT:12, fam:'alu', note:'Gummy: sharp polished-flute tools, generous feed, coolant. Electrode mods are usually re-machining an existing part — check the datum carefully.'},
+  plastic:{n:'POM (DELRIN) / NYLON', vc:400, fz10:0.070, vcD:60, fr10:0.20, vcT:15, fam:'plastic', note:'High RPM, sharp tools, air blast or light coolant. Clamp gently — it deflects.'},
+  bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:200, fz10:0.050, vcD:40, fr10:0.15, vcT:10, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
 const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20};
@@ -209,15 +210,15 @@ function mkTool(o){ return Object.assign({id:uid(), num:1, name:'', type:'flat',
 function defTools(u){
   const T = (num, name, type, dia, o = {}) => mkTool(Object.assign({num, name, type, dia, hOff:num, dOff:num}, o));
   if (u === 'mm') return [
-    T(1, '50. FACE MILL', 'face', 50, {flutes:5, len:10, rpm:1000, feed:500, plunge:200, retract:2000}),
-    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:3000, feed:500, plunge:250, retract:2000}),
-    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:4500, feed:450, plunge:200, retract:2000}),
-    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:5000, feed:800, plunge:300, retract:2000}),
-    T(5, '8. SPOT DRILL', 'spot', 8, {flutes:2, angle:90, rpm:1500, feed:120, plunge:200}),
-    T(6, '6.8 DRILL', 'drill', 6.8, {flutes:2, len:45, rpm:1400, feed:150, plunge:250}),
-    T(7, 'M8 X 1.25 TAP RH', 'tap', 8, {len:25, rpm:250, feed:312.5, plunge:312.5, pitch:1.25}),
-    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:3000, feed:450, plunge:200, retract:2000}),
-    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:2500, feed:700, plunge:300, retract:2000})
+    T(1, '50. FACE MILL', 'face', 50, {flutes:5, len:10, rpm:2500, feed:2000, plunge:600, retract:3000}),
+    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:10000, feed:1800, plunge:540, retract:3000}),
+    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:10000, feed:1200, plunge:360, retract:3000}),
+    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:10000, feed:650, plunge:200, retract:3000}),
+    T(5, '8. SPOT DRILL', 'spot', 8, {flutes:2, angle:90, mat:'HSS', rpm:3200, feed:270, plunge:270}),
+    T(6, '6.8 DRILL', 'drill', 6.8, {flutes:2, len:45, mat:'HSS', rpm:3700, feed:570, plunge:570}),
+    T(7, 'M8 X 1.25 TAP RH', 'tap', 8, {len:25, mat:'HSS', rpm:800, feed:1000, plunge:1000, pitch:1.25}),
+    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:10000, feed:1700, plunge:500, retract:3000}),
+    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:9300, feed:2500, plunge:750, retract:3000})
   ];
   return [
     T(1, '2. FACE MILL', 'face', 2, {flutes:5, len:0.4, rpm:1000, feed:20, plunge:12, retract:80}),
@@ -233,7 +234,7 @@ function defTools(u){
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.maxRpm, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:60,
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.maxRpm, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100,
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
@@ -1880,7 +1881,7 @@ function propsDlg(tab = 'files'){
     const u = U();
     el.innerHTML = `<div class="tabs2">${[['files','Files'],['tool','Tool Settings'],['stock','Stock Setup'],['machine','Machine'],['post','Post']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>` + ({
       files:`<fieldset><legend>Files</legend><div class="fr"><span>Machine</span><b>${MACHINE.name}</b></div><div class="fr"><span>Control</span><b>${MACHINE.control}</b></div><div class="fr"><span>Post</span><b>${MACHINE.post}</b></div>${fRow(st, 'progName', 'NC name', 't')}${fRow(st, 'progNum', 'Program number (O)', 'i')}<div class="fr"><span>NC file</span><b>O${String(st.progNum).padStart(4, '0')}.NC</b></div></fieldset>`,
-      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}${fRow(st, 'safety', 'Speeds & feeds safety factor (% of textbook)', 'i')}<div class="hint">60% = calm, safe cutting for a shop that prefers to run slow. Raise it later once you trust the setups.</div></fieldset>
+      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}${fRow(st, 'safety', 'Speed & feed level (% of industry standard)', 'i')}<div class="hint">100% = industry-standard values for carbide end mills and HSS drills/taps in a rigid setup. 70% while a new operator is learning; up to 120% for production once the setup is proven.</div></fieldset>
         <fieldset><legend>Sequence numbers</legend>${fRow(st.post, 'lineNums', 'Output N sequence numbers', 'c')}${fRow(st.post, 'nStart', 'Start', 'i')}${fRow(st.post, 'nInc', 'Increment', 'i')}</fieldset>`,
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
@@ -1907,17 +1908,25 @@ function propsDlg(tab = 'files'){
 /* ---------- tools ---------- */
 function calcSpeeds(t, ret){
   const m = MATS[S.setup.material], inch = !isMM(), D = inch ? t.dia*25.4 : t.dia;
-  if (!(D > 0)) return t;
-  // shop safety factor: scale the textbook cutting speed (feed follows through the RPM)
-  let vc = m.vc*Math.max(10, Math.min(100, S.setup.safety || 60))/100, rpm, feed;
-  if (['drill', 'spot', 'center'].includes(t.type)){ vc *= 0.35; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*m.fz*D*2.5; }
-  else if (t.type === 'tap'){ vc *= 0.06; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*(inch ? t.pitch*25.4 : t.pitch); }
-  else if (t.type === 'ream' || t.type === 'bore'){ vc *= 0.25; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*m.fz*D*4; }
-  else { if (t.type === 'face') vc *= 0.8; rpm = Math.min(vc*1000/(Math.PI*D), S.setup.maxRpm); feed = rpm*(t.flutes || 2)*m.fz*Math.max(0.3, Math.min(2, D/10)); }
-  const k = inch ? 1/25.4 : 1, r = {rpm:Math.round(rpm/10)*10, feed:rnd(Math.round(feed*k*(inch ? 10 : 0.1))/(inch ? 10 : 0.1))};
+  if (!(D > 0) || !(m.vc > 0)) return ret ? {rpm:0, feed:0, plunge:0} : t;
+  // Speed/feed level: 100% = industry-standard values for a rigid setup; lower while learning, higher for production.
+  const lvl = Math.max(30, Math.min(130, S.setup.safety || 100))/100, hss = /hss|cobalt/i.test(t.mat || ''), carbideDrill = !hss && ['drill','spot','center','ream'].includes(t.type);
+  const dk = Math.max(0.25, Math.min(1.6, Math.pow(D/10, 0.75)));          // chip load grows with diameter
+  const fzD = m.fz10*dk, frD = m.fr10*Math.max(0.2, Math.min(1.6, Math.pow(D/10, 0.7)));
+  let vc, rpm, feed;
+  if (['drill','spot','center'].includes(t.type)){ vc = m.vcD*(carbideDrill ? 2.5 : 1); rpm = vc*1000/(Math.PI*D); feed = rpm*frD*(t.type === 'drill' ? 1 : 0.5); }
+  else if (t.type === 'tap'){ vc = m.vcT; rpm = vc*1000/(Math.PI*D); feed = rpm*(inch ? t.pitch*25.4 : t.pitch); }
+  else if (t.type === 'ream' || t.type === 'bore'){ vc = m.vcD*(carbideDrill ? 2 : 0.6); rpm = vc*1000/(Math.PI*D); feed = rpm*frD*2; }
+  else { vc = m.vc*(hss ? 0.35 : 1)*(t.type === 'face' ? 1.2 : 1); rpm = vc*1000/(Math.PI*D); feed = rpm*(t.flutes || 2)*fzD*(t.type === 'face' ? 1.5 : t.type === 'ball' ? 0.8 : t.type === 'chamfer' ? 0.7 : 1); }
+  rpm *= lvl; feed *= lvl;
+  if (rpm > S.setup.maxRpm){ feed *= S.setup.maxRpm/rpm; rpm = S.setup.maxRpm; }   // RPM-limited: keep the chip load, so feed drops with it
+  if (t.type === 'tap') feed = rpm*(inch ? t.pitch*25.4 : t.pitch);
+  const k = inch ? 1/25.4 : 1, r = {rpm:Math.max(50, Math.round(rpm/10)*10), feed:rnd(Math.round(feed*k*(inch ? 10 : 0.1))/(inch ? 10 : 0.1))};
+  if (t.type === 'tap') r.feed = rnd(r.rpm*(inch ? t.pitch : t.pitch)*(inch ? 1 : 1));
   r.plunge = MILLS.includes(t.type) ? rnd(r.feed*0.3) : r.feed;
+  r.basis = {vc_m_min:rnd(vc*lvl), fz_mm_tooth:+(fzD).toFixed(3), fr_mm_rev:+(frD).toFixed(3), tool_material:hss ? 'HSS' : 'carbide', level_pct:Math.round(lvl*100)};
   if (ret) return r;
-  Object.assign(t, r); return t;
+  Object.assign(t, {rpm:r.rpm, feed:r.feed, plunge:r.plunge}); return t;
 }
 function toolDlg(tool, onDone){
   const W = tool ? clone(tool) : mkTool({num:Math.max(0, ...S.tools.map(t => t.num)) + 1, name:'', dia:rnd(8*K()), len:rnd(25*K()), oal:rnd(75*K()), feed:rnd(500*K()), plunge:rnd(150*K()), retract:rnd(1000*K())});
@@ -3130,7 +3139,7 @@ const AI_TOOLS = [
   {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole). replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
     input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
   {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
-  {name:'calc_speeds', description:'Shop speeds-and-feeds calculator for a tool in the current material (uses the shop safety factor). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
+  {name:'calc_speeds', description:'Industry-standard speeds-and-feeds calculator for a tool in the current material, at the shop\'s speed/feed level (100% = standard). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
   {name:'set_material', description:'Set the job material (key from material_keys in get_job) and optionally the part thickness: stock top stays 0, bottom = -thickness.', strict:true, input_schema:{type:'object', properties:{material:{type:'string'}, thickness:{type:['number','null']}}, required:['material','thickness'], additionalProperties:false}}
 ];
 // CAD helpers for the assistant: turn a shape description into geometry items
@@ -3206,7 +3215,8 @@ async function aiRunToolNow(name, inp){
     if (!(tool.dia > 0)) return {error:'Need tool_num or dia'};
     const saveM = S.setup.material; if (inp.material && MATS[inp.material]) S.setup.material = inp.material;
     const m = MATS[S.setup.material], r = calcSpeeds(tool, true); S.setup.material = saveM;
-    return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, rpm:r.rpm, feed:r.feed, plunge:r.plunge, units:S.setup.units, basis:{vc_textbook_m_min:m.vc, fz_mm_per_tooth:m.fz, safety_pct:S.setup.safety || 60, note:'RPM = Vc×1000/(π×D) at the safety factor; feed = RPM × flutes × fz (drills: fz×D×2.5 at 35% Vc; taps: pitch × RPM).'}};
+    if (!(m.vc > 0)) return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, error:'Not a milling material on this machine: ' + (m.note || '')};
+    return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, rpm:r.rpm, feed:r.feed, plunge:r.plunge, units:S.setup.units, basis:Object.assign(r.basis, {note:'Industry-standard reference: RPM = Vc×1000/(π×D); end-mill feed = RPM × flutes × fz (fz scaled by diameter); drill feed = RPM × mm/rev; tap feed = RPM × pitch. Level 100% = standard; the RPM cap of the machine lowers the feed with it.'})};
   }
   if (name === 'set_material'){
     if (!MATS[inp.material]) return {error:'Unknown material key; use one of ' + Object.keys(MATS).join(', ')};
@@ -3218,7 +3228,7 @@ async function aiRunToolNow(name, inp){
 }
 const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer, max ${MACHINE.maxRpm} RPM). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
 You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
-Shop rules (always apply): this shop runs conservatively — the app's safety factor is ${S.setup.safety || 60}% of textbook cutting speed, stay well under machine limits; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
+Shop rules (always apply): speeds and feeds follow INDUSTRY-STANDARD values (carbide end mills, HSS drills and taps, rigid setup) at the shop's speed/feed level of ${S.setup.safety || 100}% (100 = standard) — use calc_speeds for numbers and do not pad them downward; the standard way is the goal, not slow cutting; never exceed machine limits; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
 CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
 Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
 Quoting: use get_estimate; present the customer price separately from the confidential cost build-up; label values Provided / Derived / Assumed; never invent material grade, tolerances or finishes. If something is outside this app (lathe programs, 4/5-axis, DWG import) say so plainly and say which shop process handles it. Units are ${S.setup.units}.`;
