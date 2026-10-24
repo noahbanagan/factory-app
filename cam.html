@@ -52,7 +52,8 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .tn.sel>.lb{background:var(--sel);color:#fff}
 .tn:hover>.lb{border-color:#9BB}
 .tn.dim{color:#888}
-.ok-ic{color:#1E9E2E}.bad-ic{color:#D0312D}
+.ok-ic{color:#1E9E2E}
+.okmsg{background:#EAF7EC;border:1px solid #5FBF6F;padding:6px 8px;border-radius:4px;color:#145A1E}.bad-ic{color:#D0312D}
 #gfx{flex:1;position:relative;min-width:0;min-height:0;background:linear-gradient(#97ADCF,#FFFFFF 88%);overflow:hidden}
 #gfx canvas{display:block;outline:none}
 #prompt{position:absolute;top:6px;left:8px;font-weight:600;color:#000;pointer-events:none;text-shadow:0 0 3px #fff;max-width:70%}
@@ -115,7 +116,7 @@ table.grid tr:not(.on):hover td{background:#E5F1FB}
 .note{background:#FFFDE7;border:1px solid #E8D586;padding:6px 8px;margin-bottom:8px;line-height:1.4}
 .info{background:#E8F1FB;border:1px solid #B5CDEB;padding:6px 8px;margin-bottom:8px;line-height:1.4;color:#123A6B}
 .mdash{display:grid;grid-template-columns:1fr 340px;gap:12px;font-size:12px}
-.mcards{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.mcards{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:10px}
 .mcard{background:#fff;border:1px solid #C8D0DC;border-radius:6px;padding:6px 8px;min-width:0}
 .mcard small{display:block;color:#5A6472;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 .mcard b{font-size:13px;display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -233,7 +234,7 @@ const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic
 const TT = {flat:['Flat endmill','▮'], bull:['Bull endmill','▮'], ball:['Ball endmill','◖'], face:['Face mill','▬'], chamfer:['Chamfer mill','▼'],
   drill:['Drill','⇣'], spot:['Spot drill','▽'], center:['Center drill','▿'], tap:['Tap RH','⌇'], ream:['Reamer','┃'], bore:['Boring bar','┣']};
 const MILLS = ['flat', 'bull', 'ball', 'face', 'chamfer'];
-function mkTool(o){ return Object.assign({id:uid(), num:1, name:'', type:'flat', dia:10, cr:0, tipDia:0, angle:118, flutes:3, len:30, oal:75, hOff:0, dOff:0, rpm:3000, feed:600, plunge:200, retract:1200, pitch:0, mat:'Carbide'}, o); }
+function mkTool(o){ return Object.assign({id:uid(), num:1, name:'', type:'flat', dia:10, cr:0, tipDia:0, angle:118, flutes:3, len:30, oal:75, shank:0, holder:0, stick:0, hOff:0, dOff:0, rpm:3000, feed:600, plunge:200, retract:1200, pitch:0, mat:'Carbide'}, o); }
 function defTools(u){
   const T = (num, name, type, dia, o = {}) => mkTool(Object.assign({num, name, type, dia, hOff:num, dOff:num}, o));
   if (u === 'mm') return [
@@ -263,6 +264,7 @@ function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
   return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, aiOnOpen:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
+    fix:{type:'vise', top:rnd(-15*k), jaw:rnd(15*k), boxes:[]},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
 const S = {setup:defSetup('mm'), tools:defTools('mm'), ops:[], geom:{items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, name:''}, file:'untitled'};
@@ -1531,10 +1533,19 @@ function drawGeom(){
   }
   drawAxes();
 }
+// Fixture solids on the table, as boxes {x0,x1,y0,y1,z0,z1} in part coordinates (Z0 = part top)
+function fixtureBoxes(){
+  const f = S.setup.fix, s = S.setup.stock; if (!f || f.type === 'none') return [];
+  const z0 = s.bottom - 50*K();
+  if (f.type === 'vise'){ const j = f.jaw || 15*K(); return [{x0:s.x0 - 10*K(), x1:s.x1 + 10*K(), y0:s.y0 - j, y1:s.y0, z0, z1:f.top, name:'vise jaw (front)'}, {x0:s.x0 - 10*K(), x1:s.x1 + 10*K(), y0:s.y1, y1:s.y1 + j, z0, z1:f.top, name:'vise jaw (back)'}]; }
+  return (f.boxes || []).map((b, i) => ({x0:Math.min(b.x0, b.x1), x1:Math.max(b.x0, b.x1), y0:Math.min(b.y0, b.y1), y1:Math.max(b.y0, b.y1), z0, z1:b.z1, name:`clamp ${i + 1}`}));
+}
+function fixtureTop(){ const bx = fixtureBoxes(); return bx.length ? Math.max(...bx.map(b => b.z1)) : -Infinity; }
 function drawStock(){
   clearG(G.stock); const s = S.setup.stock;
   if (!s.show) return;
   G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(s.x0, s.y0, s.bottom), new THREE.Vector3(s.x1, s.y1, s.top)), 0x1B8E3A));
+  for (const b of fixtureBoxes()) G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(b.x0, b.y0, Math.max(b.z0, s.bottom - 5*K())), new THREE.Vector3(b.x1, b.y1, b.z1)), 0xE08A00));
 }
 let simPts = [];
 function drawPaths(){
@@ -1668,16 +1679,23 @@ async function runVerify(list, quality){
   if (!pts.length) return null;
   const span = Math.max(s.x1 - s.x0, s.y1 - s.y0), res = Math.max(span/({fast:250, normal:450, fine:750}[quality] || 450), isMM() ? 0.03 : 0.0015);
   const nx = Math.ceil((s.x1 - s.x0)/res) + 1, ny = Math.ceil((s.y1 - s.y0)/res) + 1;
-  const h = new Float32Array(nx*ny).fill(s.top), fps = new Map(), hits = [];
+  const h = new Float32Array(nx*ny).fill(s.top), fps = new Map(), hits = [], fbx = fixtureBoxes(), RING = 16;
+  const ringHit = (x, y, zz, r) => { for (let a = 0; a < RING; a++){ const ii = Math.round((x + r*Math.cos(a*2*Math.PI/RING) - s.x0)/res), jj = Math.round((y + r*Math.sin(a*2*Math.PI/RING) - s.y0)/res); if (ii < 0 || jj < 0 || ii >= nx || jj >= ny) continue; if (h[jj*nx + ii] > zz + res) return true; } return false; };
+  const inFixture = (x, y, z, r) => fbx.find(b => x + r > b.x0 && x - r < b.x1 && y + r > b.y0 && y - r < b.y1 && z < b.z1);
+  const addHit = (kind, x, y, z, b, what) => { if (hits.filter(q => q.kind === kind).length < 40) hits.push({kind, x, y, z, line:b.line, op:b.op.name, what}); };
   busy(true, 'Verifying…'); await tick();
   for (let k = 1; k < pts.length; k++){
     const a = pts[k-1], b = pts[k];
     if (a.op !== b.op || Math.min(a.z, b.z) >= s.top) continue;
     let fp = fps.get(b.t); if (!fp){ fp = footprint(shapeOf(b.t), res); fps.set(b.t, fp); }
     const L = hyp(b.x - a.x, b.y - a.y, b.z - a.z), n = Math.max(1, Math.ceil(L/(res*0.7)));
+    const T = b.t, R = T.dia/2, stick = T.stick > 0 ? T.stick : 0, holderR = T.holder > 0 ? T.holder/2 : 0, shankR = T.shank > R ? T.shank/2 : 0;
     for (let q = 1; q <= n; q++){
       const x = a.x + (b.x - a.x)*q/n, y = a.y + (b.y - a.y)*q/n, z = a.z + (b.z - a.z)*q/n;
+      if (fbx.length){ const fb = inFixture(x, y, z, R); if (fb) addHit('fixture', x, y, z, b, `tool hits the ${fb.name}`); else if (holderR && stick && inFixture(x, y, z + stick, holderR)) addHit('fixture', x, y, z, b, 'holder hits the fixture'); }
       if (z >= s.top) continue;
+      if (stick && holderR && z + stick < s.top && ringHit(x, y, z + stick, holderR)) addHit('holder', x, y, z, b, `holder (Ø${fmt(T.holder)}) touches material at Z${fmt(z + stick)}`);
+      if (shankR && T.len > 0 && z + T.len < s.top && ringHit(x, y, z + T.len, shankR)) addHit('shank', x, y, z, b, `shank (Ø${fmt(T.shank)}) rubs the wall above the flutes`);
       const ci = Math.round((x - s.x0)/res), cj = Math.round((y - s.y0)/res);
       let hit = false;
       for (let m = 0; m < fp.di.length; m++){
@@ -1686,7 +1704,7 @@ async function runVerify(list, quality){
         const idx = jj*nx + ii, zz = z + fp.dr[m];
         if (h[idx] > zz + 1e-6){ if (b.rapid && h[idx] - zz > res*0.5) hit = true; h[idx] = zz; }
       }
-      if (hit && hits.length < 100) hits.push({x, y, z, line:b.line, op:b.op.name});
+      if (hit) addHit('rapid', x, y, z, b, 'rapid move cuts into material');
     }
     if (k % 3000 === 0){ busy(true, `Verifying… ${Math.round(100*k/pts.length)}%`); await tick(); }
   }
@@ -1911,6 +1929,7 @@ function propsDlg(tab = 'files'){
   if (!S.setup.runPct) S.setup.runPct = {proto:60, prod:80, full:100}; if (!S.setup.run) S.setup.run = 'proto';
   const st = clone(S.setup), s = st.stock, el = document.createElement('div');
   const box = {X:rnd(s.x1 - s.x0), Y:rnd(s.y1 - s.y0), Z:rnd(s.top - s.bottom), ox:rnd((s.x0 + s.x1)/2), oy:rnd((s.y0 + s.y1)/2), oz:s.top, margin:s.margin, show:s.show};
+  const fix = Object.assign({type:'vise', top:rnd(-3*K()), jaw:rnd(15*K()), boxes:[]}, st.fix || {}); if (!Array.isArray(fix.boxes)) fix.boxes = [];
   const render = () => {
     const u = U();
     el.innerHTML = `<div class="tabs2">${[['files','Files'],['tool','Tool Settings'],['stock','Stock Setup'],['machine','Machine'],['post','Post']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>` + ({
@@ -1919,11 +1938,18 @@ function propsDlg(tab = 'files'){
         <fieldset><legend>Sequence numbers</legend>${fRow(st.post, 'lineNums', 'Output N sequence numbers', 'c')}${fRow(st.post, 'nStart', 'Start', 'i')}${fRow(st.post, 'nInc', 'Increment', 'i')}</fieldset>`,
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
-        <fieldset><legend>From geometry</legend>${fRow(box, 'margin', 'Margin around part')}<div style="display:flex;gap:6px"><button class="btn" data-act="bbox">Bounding box</button></div></fieldset>${fRow(box, 'show', 'Display stock', 'c')}`,
+        <fieldset><legend>From geometry</legend>${fRow(box, 'margin', 'Margin around part')}<div style="display:flex;gap:6px"><button class="btn" data-act="bbox">Bounding box</button></div></fieldset>
+        <fieldset><legend>Fixture on the table (for collision checks)</legend>${fRow(fix, 'type', 'How the part is held', 's', [['vise', 'Vise (jaws along X, either side in Y)'], ['clamps', 'Clamps / toe clamps (list them below)'], ['none', 'Nothing above the part (vacuum, tape, fixture below)']])}
+          ${fRow(fix, 'top', `Highest point of the fixture, Z (${u}; part top = 0, below = negative)`)}${fix.type === 'vise' ? fRow(fix, 'jaw', `Jaw thickness (${u})`) : ''}
+          ${fix.type === 'clamps' ? `<table class="grid"><tr><th>Clamp</th><th>X from</th><th>X to</th><th>Y from</th><th>Y to</th><th>Top Z</th><th></th></tr>${fix.boxes.map((b, i) => `<tr><td>${i + 1}</td>${['x0', 'x1', 'y0', 'y1', 'z1'].map(k => `<td><input type="number" step="any" data-fb="${i}" data-f="${k}" value="${b[k]}" style="width:62px"></td>`).join('')}<td><button class="btn" data-fbdel="${i}">✕</button></td></tr>`).join('')}</table><button class="btn" data-fbadd style="margin-top:4px">+ Add clamp</button>` : ''}
+          <div class="hint">The rapids and every move are checked against the vise jaws or the clamps, and the clearance plane must be above them. Measure the real jaw or clamp height at the machine.</div></fieldset>${fRow(box, 'show', 'Display stock', 'c')}`,
       machine:`<fieldset><legend>${MACHINE.name} limits</legend>${fRow(st, 'maxRpm', 'Spindle speed cap (RPM)', 'i')}<div class="hint">Programs never ask for more than this. Shop policy: ${MACHINE.rpmCap} on the ${MACHINE.taper} belt-drive spindle (machine capability ${MACHINE.maxRpm}). Feeds for small cutters in aluminium scale down with the cap, chip load stays correct.</div>${fRow(st, 'maxFeed', `Max feed rate (${u}/min)`)}${fRow(st, 'rapid', `Rapid rate (${u}/min)`)}${fRow(st.travel, 'x', `X travel (${u})`)}${fRow(st.travel, 'y', `Y travel (${u})`)}${fRow(st.travel, 'z', `Z travel (${u})`)}</fieldset><div class="note">Defaults are dealer figures for a QP1620-L (${MACHINE.taper}, ${MACHINE.tools}-tool). Check them against your machine's plate and parameters.</div>`,
       post:`<fieldset><legend>Post (${MACHINE.control})</legend>${fRow(st.post, 'short', 'Short codes (G0 G1 M3 M6) instead of G00 M03', 'c')}${fRow(st.post, 'tcFmt', 'Tool change', 's', SEL(['T# M6', 'T1 M6'], ['M6 T#', 'M6 T1']))}${fRow(st.post, 'nextTool', 'Pre-stage next tool after M6', 'c')}${fRow(st.post, 'home', 'Z home', 's', SEL('G91 G28 Z0.', 'G28 G91 Z0.', 'G53 Z0.'))}${fRow(st.post, 'endY', 'Bring table forward at end (G28 Y0.)', 'c')}${fRow(st.post, 'm01', 'M1 optional stop between tools', 'c')}${fRow(st.post, 'arcs', 'Output arcs G2/G3 (incl. helical)', 'c')}${fRow(st.post, 'rigid', 'Rigid tapping M29', 'c')}${fRow(st.post, 'toolCmt', 'Tool comment at each tool change', 'c')}</fieldset>`
     })[tab];
-    el.querySelectorAll('fieldset').forEach(f => { const h = f.innerHTML; bindFields(f, h.includes('data-k="X"') || h.includes('data-k="ox"') || h.includes('data-k="margin"') ? box : h.includes('lineNums') || h.includes('short') ? st.post : h.includes('data-k="x"') ? st.travel : st); });
+    el.querySelectorAll('fieldset').forEach(f => { const h = f.innerHTML; bindFields(f, h.includes('data-k="X"') || h.includes('data-k="ox"') || h.includes('data-k="margin"') ? box : h.includes('data-k="type"') && h.includes('data-k="top"') ? fix : h.includes('lineNums') || h.includes('short') ? st.post : h.includes('data-k="x"') ? st.travel : st, k => { if (k === 'type' && fix.type !== undefined && h.includes('data-k="top"')) render(); }); });
+    el.querySelectorAll('[data-fb]').forEach(inp => inp.onchange = () => { fix.boxes[+inp.dataset.fb][inp.dataset.f] = parseFloat(inp.value) || 0; });
+    el.querySelectorAll('[data-fbdel]').forEach(b => b.onclick = () => { fix.boxes.splice(+b.dataset.fbdel, 1); render(); });
+    const fba = el.querySelector('[data-fbadd]'); if (fba) fba.onclick = () => { const sb = S.setup.stock; fix.boxes.push({x0:rnd(sb.x0), x1:rnd(sb.x0 + 20*K()), y0:rnd(sb.y0 - 5*K()), y1:rnd(sb.y0 + 10*K()), z1:rnd(15*K())}); render(); };
     const sh = el.querySelector('[data-k="show"]'); if (sh) sh.onchange = () => box.show = sh.checked;
   };
   el.addEventListener('click', e => {
@@ -1933,7 +1959,7 @@ function propsDlg(tab = 'files'){
   render();
   dlg({title:'Machine Group Properties', body:el, w:580, ok:close => {
     pushUndo();
-    st.stock = {x0:rnd(box.ox - box.X/2), x1:rnd(box.ox + box.X/2), y0:rnd(box.oy - box.Y/2), y1:rnd(box.oy + box.Y/2), top:box.oz, bottom:rnd(box.oz - box.Z), margin:box.margin, show:box.show};
+    st.stock = {x0:rnd(box.ox - box.X/2), x1:rnd(box.ox + box.X/2), y0:rnd(box.oy - box.Y/2), y1:rnd(box.oy + box.Y/2), top:box.oz, bottom:rnd(box.oz - box.Z), margin:box.margin, show:box.show}; st.fix = fix;
     const matChanged = st.material !== S.setup.material; Object.assign(S.setup, st); S.ops.forEach(o => o.dirty = true);
     if (matChanged){ const n = applyMaterialSpeeds(); if (n) prompt_(`Material changed: speeds and feeds of ${n} operation(s) recalculated for ${MATS[st.material].n}.`); }
     close(); drawStock(); renderMgr(); updTitle(); renderMenu();
@@ -1970,7 +1996,7 @@ function toolDlg(tool, onDone){
   const render = () => {
     const u = U();
     el.innerHTML = `<fieldset><legend>Tool type</legend><div class="ttype">${Object.entries(TT).map(([k, [l, ic]]) => `<button data-tt="${k}" class="${W.type === k ? 'on' : ''}"><b>${ic}</b>${l}</button>`).join('')}</div></fieldset>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><fieldset><legend>Geometry</legend>${fRow(W, 'dia', `Diameter (${u})`, 'n', null, false)}${W.type === 'bull' ? fRow(W, 'cr', `Corner radius (${u})`, 'n', null, false) : ''}${['drill', 'spot', 'center', 'chamfer'].includes(W.type) ? fRow(W, 'angle', 'Tip angle (deg)', 'n', null, false) : ''}${W.type === 'chamfer' ? fRow(W, 'tipDia', `Tip diameter (${u})`, 'n', null, false) : ''}${W.type === 'tap' ? fRow(W, 'pitch', `Pitch (${u})`, 'n', null, false) : ''}${fRow(W, 'len', `Flute length (${u})`, 'n', null, false)}${fRow(W, 'oal', `Overall length (${u})`, 'n', null, false)}${fRow(W, 'flutes', 'Number of flutes', 'i', null, false)}${fRow(W, 'mat', 'Material', 's', SEL('Carbide', 'HSS', 'Cobalt', 'Ceramic'))}</fieldset>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><fieldset><legend>Geometry</legend>${fRow(W, 'dia', `Diameter (${u})`, 'n', null, false)}${W.type === 'bull' ? fRow(W, 'cr', `Corner radius (${u})`, 'n', null, false) : ''}${['drill', 'spot', 'center', 'chamfer'].includes(W.type) ? fRow(W, 'angle', 'Tip angle (deg)', 'n', null, false) : ''}${W.type === 'chamfer' ? fRow(W, 'tipDia', `Tip diameter (${u})`, 'n', null, false) : ''}${W.type === 'tap' ? fRow(W, 'pitch', `Pitch (${u})`, 'n', null, false) : ''}${fRow(W, 'len', `Flute length (${u})`, 'n', null, false)}${fRow(W, 'shank', `Shank diameter (${u}, 0 = same as cutter)`, 'n', null, false)}${fRow(W, 'holder', `Holder nose diameter (${u}, 0 = not measured)`, 'n', null, false)}${fRow(W, 'stick', `Stick-out: tip to holder nose (${u}, 0 = not measured)`, 'n', null, false)}${fRow(W, 'oal', `Overall length (${u})`, 'n', null, false)}${fRow(W, 'flutes', 'Number of flutes', 'i', null, false)}${fRow(W, 'mat', 'Material', 's', SEL('Carbide', 'HSS', 'Cobalt', 'Ceramic'))}</fieldset>
       <fieldset><legend>Parameters</legend>${fRow(W, 'num', 'Tool number (T)', 'i', null, false)}${fRow(W, 'hOff', 'Length offset (H)', 'i', null, false)}${fRow(W, 'dOff', 'Diameter offset (D)', 'i', null, false)}${fRow(W, 'rpm', 'Spindle speed (RPM)', 'i', null, false)}${fRow(W, 'feed', `Feed rate (${u}/min)`, 'n', null, false)}${fRow(W, 'plunge', `Plunge rate (${u}/min)`, 'n', null, false)}${fRow(W, 'retract', `Retract rate (${u}/min)`, 'n', null, false)}<button class="btn" data-act="calc" style="margin-top:4px">Calc speeds/feeds (${esc(MATS[S.setup.material].n)})</button></fieldset></div>
       ${fRow(W, 'name', 'Tool name', 't')}<div class="hint">T number = pocket in the tool changer. H and D must match the offset numbers you set on the control (normally the same as T).</div>`;
   };
@@ -2341,7 +2367,9 @@ function verifyDlg(){
     G.path.visible = !el.querySelector('#vHide').checked;
     const hits = await runVerify(list, el.querySelector('#vq').value);
     if (!hits) return;
-    el.querySelector('#vRes').innerHTML = hits.length ? `<div class="err"><b>${hits.length} collision(s): rapid moves cutting material</b></div>` + hits.slice(0, 30).map(h => `<div class="err">${esc(h.op)} at X${fmt(h.x)} Y${fmt(h.y)} Z${fmt(h.z)}${h.line != null ? ' (NC line ' + (h.line + 1) + ')' : ''}</div>`).join('') : '<div class="ok-ic"><b>✔ No collisions — no rapid moves cut material.</b></div><div>Checks tool vs. stock only. Holder, vise and fixtures are not checked.</div>';
+    const KIND = {rapid:'Rapid moves cutting material', fixture:'Tool or holder hits the fixture', holder:'Holder touches the part', shank:'Shank rubs the wall'};
+    const byKind = {}; hits.forEach(h => (byKind[h.kind || 'rapid'] = byKind[h.kind || 'rapid'] || []).push(h));
+    el.querySelector('#vRes').innerHTML = hits.length ? Object.entries(byKind).map(([k, L]) => `<div class="err"><b>${L.length} × ${KIND[k] || k}</b></div>` + L.slice(0, 8).map(h => `<div class="err">${esc(h.op)} at X${fmt(h.x)} Y${fmt(h.y)} Z${fmt(h.z)}${h.what ? ' — ' + esc(h.what) : ''}${h.line != null ? ` (N${h.line})` : ''}</div>`).join('')).join('') + (hits.length > 30 ? '<div class="hint">…</div>' : '') : '<div class="okmsg">✔ No collisions. Rapids clear the material, the fixture is clear, and the holder and shank stay out of the part (where their sizes are known).</div>';
   };
   el.querySelector('#vClr').onclick = () => clearG(G.sim);
 }
@@ -2353,6 +2381,19 @@ function preflight(list){
   const nums = tools.map(t => t.num); if (new Set(nums).size !== nums.length) issues.push(['stop', 'Two different tools share the same T number.']);
   tools.forEach(t => { if ((t.hOff || t.num) !== t.num) issues.push(['warn', `T${t.num} uses H${t.hOff} — make sure that offset register is set on the control.`]); });
   if (!list.some(o => o.type === 'face') && st.stock.top > 1e-9) issues.push(['warn', `Stock top is Z${fmt(st.stock.top)} but there is no facing operation — Z0 must still be the finished top.`]);
+  // tool reach: flute length and stick-out against the depth below the stock top
+  const ftop = fixtureTop();
+  for (const o of list){
+    const t = toolOf(o); if (!t || !o.moves) continue;
+    let minZ = Infinity; for (const m of o.moves){ if (m.g === 'cyc') minZ = Math.min(minZ, m.zb); else if (m.g > 0 && m.z != null) minZ = Math.min(minZ, m.z); }
+    if (!isFinite(minZ)) continue;
+    const depth = st.stock.top - minZ;
+    if (t.len > 0 && depth > t.len + 1e-6) issues.push([t.stick > 0 && depth > t.stick ? 'stop' : 'warn', `${o.name}: cuts ${fmt(depth)} ${U()} below the stock top but T${t.num} has only ${fmt(t.len)} ${U()} of flute — the shank will rub the wall. Use a longer tool, or finish the lower part with another tool.`]);
+    if (t.stick > 0 && depth > t.stick - 1e-6) issues.push(['stop', `${o.name}: the holder of T${t.num} reaches the stock top (stick-out ${fmt(t.stick)} ${U()}, depth ${fmt(depth)}). It WILL collide. Longer stick-out or a longer tool.`]);
+    if (!(t.stick > 0) && depth > 0.6*(t.oal || 0) && t.oal > 0) issues.push(['warn', `${o.name}: deep cut for T${t.num} (${fmt(depth)} of ${fmt(t.oal)} overall length) and its stick-out is not measured — measure tip-to-holder at the machine and enter it in the tool.`]);
+    if (isFinite(ftop)){ const cl = o.p.clearInc ? (o.p.top || 0) + o.p.clear : o.p.clear; if (cl != null && cl < ftop + 2*K()) issues.push(['stop', `${o.name}: clearance plane Z${fmt(cl)} is below the fixture top Z${fmt(ftop)} — rapids will hit the ${st.fix.type === 'vise' ? 'vise jaws' : 'clamps'}. Raise the clearance to at least Z${fmt(ftop + 5*K())}.`]); }
+  }
+  for (const t of tools) if (t.stick > 0 && t.holder > 0 && t.shank > 0 && t.len > 0) {} else if (t && !(t.len > 0)) issues.push(['warn', `T${t.num}: flute length not set — depth checks are off for this tool.`]);
   return issues;
 }
 async function postDlg(){
@@ -2648,7 +2689,7 @@ function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.fil
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
-  S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {}); S.setup.runPct = Object.assign(base.runPct, d.setup.runPct || {}); if (!S.setup.run) S.setup.run = 'proto';
+  S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {}); S.setup.runPct = Object.assign(base.runPct, d.setup.runPct || {}); S.setup.fix = Object.assign(base.fix, d.setup.fix || {}); if (!Array.isArray(S.setup.fix.boxes)) S.setup.fix.boxes = []; if (!S.setup.run) S.setup.run = 'proto';
   S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {}; S.drive = d.drive || null;
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
@@ -3080,7 +3121,7 @@ function gdSettings(){
     <div class="fr"><span>OAuth client ID</span><input type="text" data-k="clientId" value="${esc(W.clientId)}" style="width:320px" placeholder="xxxx.apps.googleusercontent.com"></div>
     <div class="fr"><span>RFQ drawings folder ID</span><input type="text" data-k="root" value="${esc(W.root)}" style="width:320px"><div class="hint">Default = "Dynamic RFQ Drawings" shared drive folder used by the RFQ intake agent.</div></div>
     <div class="fr"><span>Tool inventory sheet ID</span><input type="text" data-k="sheet" value="${esc(W.sheet)}" style="width:320px" placeholder="from the sheet URL: /spreadsheets/d/<ID>/"></div>
-    <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Fixed (yes = use the sheet's RPM/Feed as-is; otherwise the CAM computes them per material), Notes.</div></div>
+    <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Fixed (yes = use the sheet's RPM/Feed as-is; otherwise the CAM computes them per material), ShankDia, HolderDia, Stickout (tip to holder nose — measured at the machine, used for collision checks), Notes.</div></div>
     <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div></fieldset>`;
   bindFields(el, W);
   dlg({title:'Google Drive & Sheets connection', body:el, w:640, ok:close => { Object.assign(GD, W); gdSave(); close(); if (GD.csv || GD.sheet) syncToolSheet(true); }});
@@ -3185,7 +3226,7 @@ async function syncToolSheet(quiet){
     if (rows.length < 2) throw new Error('The sheet range is empty.');
     const H = rows[0].map(h => String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
     const col = (...names) => { for (const n of names){ const i = H.indexOf(n); if (i >= 0) return i; } return -1; };
-    const C = {num:col('t', 'tool', 'toolno', 'tno', 'num'), name:col('name', 'description', 'tooln'), type:col('type'), dia:col('dia', 'diameter', 'd'), cr:col('cornerrad', 'cr', 'cornerradius', 'r'), flutes:col('flutes', 'fl'), len:col('flutelen', 'flutelength', 'loc'), oal:col('oal', 'overall'), rpm:col('rpm', 's'), feed:col('feed', 'f'), plunge:col('plunge'), pitch:col('pitch'), angle:col('angle', 'tipangle'), hOff:col('h', 'hoff', 'lengthoffset'), dOff:col('d2', 'doff', 'diaoffset', 'dnum'), fixed:col('fixed', 'fixedspeeds', 'lock', 'locked'), pocket:col('pocket', 'pot', 'station'), loaded:col('loaded', 'inmachine', 'mounted'), notes:col('notes', 'note')};
+    const C = {num:col('t', 'tool', 'toolno', 'tno', 'num'), name:col('name', 'description', 'tooln'), type:col('type'), dia:col('dia', 'diameter', 'd'), cr:col('cornerrad', 'cr', 'cornerradius', 'r'), flutes:col('flutes', 'fl'), len:col('flutelen', 'flutelength', 'loc'), oal:col('oal', 'overall'), rpm:col('rpm', 's'), feed:col('feed', 'f'), plunge:col('plunge'), pitch:col('pitch'), angle:col('angle', 'tipangle'), hOff:col('h', 'hoff', 'lengthoffset'), dOff:col('d2', 'doff', 'diaoffset', 'dnum'), shank:col('shankdia', 'shank'), holder:col('holderdia', 'holder'), stick:col('stickout', 'stick', 'gauge', 'gaugelength'), fixed:col('fixed', 'fixedspeeds', 'lock', 'locked'), pocket:col('pocket', 'pot', 'station'), loaded:col('loaded', 'inmachine', 'mounted'), notes:col('notes', 'note')};
     if (C.num < 0 || C.dia < 0 || C.type < 0) throw new Error('Header row must have at least T, Type and Dia columns.');
     const types = Object.keys(TT), alias = {endmill:'flat', flatendmill:'flat', em:'flat', bullnose:'bull', bullendmill:'bull', ballnose:'ball', ballendmill:'ball', facemill:'face', chamfermill:'chamfer', spotdrill:'spot', centerdrill:'center', centredrill:'center', reamer:'ream', boringbar:'bore'};
     const num = (i, d) => { if (i < 0) return d; const v = parseFloat(String(rows[0] && '').length ? '' : ''); return d; };
@@ -3197,7 +3238,7 @@ async function syncToolSheet(quiet){
       const f = (i, d) => { const v = parseFloat(g(i)); return isFinite(v) ? v : d; };
       const old = S.tools.find(t => t.num === n) || {};
       tools.push(mkTool({id:old.id || uid(), num:n, name:g(C.name) || old.name || `${fmt(f(C.dia, 10))} ${TT[ty][0].toUpperCase()}`, type:ty, dia:f(C.dia, old.dia || 10), cr:f(C.cr, old.cr || 0), flutes:f(C.flutes, old.flutes || 2), len:f(C.len, old.len || 20), oal:f(C.oal, old.oal || 60),
-        rpm:f(C.rpm, old.rpm || 2000), feed:f(C.feed, old.feed || 300), plunge:f(C.plunge, old.plunge || 100), retract:old.retract || 1000, pitch:f(C.pitch, old.pitch || 0), angle:f(C.angle, old.angle || (ty === 'chamfer' ? 90 : 118)), hOff:f(C.hOff, n), dOff:f(C.dOff, n),
+        shank:f(C.shank, old.shank || 0), holder:f(C.holder, old.holder || 0), stick:f(C.stick, old.stick || 0), rpm:f(C.rpm, old.rpm || 2000), feed:f(C.feed, old.feed || 300), plunge:f(C.plunge, old.plunge || 100), retract:old.retract || 1000, pitch:f(C.pitch, old.pitch || 0), angle:f(C.angle, old.angle || (ty === 'chamfer' ? 90 : 118)), hOff:f(C.hOff, n), dOff:f(C.dOff, n),
         fixed:/^(y|yes|1|true|x|fixed|lock)$/i.test(g(C.fixed)), pocket:g(C.pocket), loaded:/^(y|yes|1|true|x|loaded|in)$/i.test(g(C.loaded)) || (!!g(C.pocket) && C.loaded < 0), notes:g(C.notes)}));
     }
     if (!tools.length) throw new Error('No tool rows found.');
@@ -3232,6 +3273,7 @@ function machineDash(){
     if (a.dataset.da === 'ask' && t){ aiPanel(); aiSend(`Explain tool T${t.num} (${t.name}) to me like I am a new operator: what it is for, how deep per pass I can cut with it in ${MATS[S.setup.material].n}, the speed and feed you would use, and what to watch for.`); }
     if (a.dataset.da === 'askjob'){ aiPanel(); aiSend('Look at this job and the tools in the machine. Tell me which tools you would use for each operation and why, which pockets they are in, and whether any tool is missing. Keep it simple.'); }
     if (a.dataset.da === 'sync') syncToolSheet();
+    if (a.dataset.da === 'fix') propsDlg('stock');
     if (a.dataset.da === 'sheet') window.open(`https://docs.google.com/spreadsheets/d/${GD.sheet}/edit`, '_blank');
     if (a.dataset.da === 'new'){ const t2 = mkTool({num:Math.max(0, ...S.tools.map(x => x.num)) + 1}); toolDlg(t2, () => { S.tools.push(t2); saveTools(); renderMgr(); renderDash(); }); }
     if (a.dataset.da === 'run'){ S.setup.run = a.dataset.v; autosave(); renderTbar(); updStatus(); renderMgr(); renderDash(); }
@@ -3258,6 +3300,8 @@ function renderDash(){
       <table><tr><td>Pocket</td><td><b>${pk.n || '—'}</b>${pk.assumed ? ' <span class="hint" style="display:inline">(assumed = T number; write the real pocket in the sheet)</span>' : ''}</td></tr>
       <tr><td>In the machine?</td><td>${t.loaded === false ? '<b style="color:#B00">No — on the shelf</b>' : '<b style="color:#1E9E2E">Yes</b>'}</td></tr>
       <tr><td>Offsets</td><td>H${t.hOff || t.num} length, D${t.dOff || t.num} wear</td></tr>
+      <tr><td>Reach</td><td>flutes ${t.len > 0 ? fmt(t.len) + ' ' + u : '<b style="color:#B00">not set</b>'} · stick-out ${t.stick > 0 ? fmt(t.stick) + ' ' + u : '<b style="color:#B00">not measured</b>'}<br>shank Ø${t.shank > 0 ? fmt(t.shank) : fmt(t.dia)} · holder Ø${t.holder > 0 ? fmt(t.holder) : '<b style="color:#B00">?</b>'}</td></tr>
+      ${(() => { const miss = []; if (!(parseInt(t.pocket) > 0)) miss.push('pocket number'); if (!(t.len > 0)) miss.push('flute length'); if (!(t.stick > 0)) miss.push('stick-out (tip to holder nose)'); if (!(t.holder > 0)) miss.push('holder nose diameter'); if (!(t.shank > 0)) miss.push('shank diameter'); return miss.length ? `<tr><td>☐ Check at the machine</td><td style="color:#8A5A00">${miss.join(', ')}.<br><span class="hint" style="display:inline">Measure with a caliper and type them into the tool sheet or Edit tool. They switch on the holder and shank collision checks.</span></td></tr>` : '<tr><td>✔ Measured</td><td>All reach data present — holder and shank collisions are checked in Verify.</td></tr>'; })()}
       ${ok ? `<tr><td>Standard speed for<br>${esc(m.n)}</td><td><b>${r.rpm} rpm</b>, feed <b>${fmt(r.feed)} ${u}/min</b>${t.type === 'tap' ? ' (= rpm × pitch)' : ''}${r.rpm >= cap ? `<br><span class="hint" style="display:inline">held at the shop cap of ${cap} rpm, feed lowered to match</span>` : ''}</td></tr>
       <tr><td>In the program now<br>(${esc(RUN[mode])} ${Math.round(k*100)}%)</td><td><b>${Math.round(Math.min(r.rpm*k, cap))} rpm</b>, feed <b>${fmt(r.feed*k)} ${u}/min</b></td></tr>
       ${dPass ? `<tr><td>Depth per pass, max</td><td>${fmt(dPass)} ${u} (${m.fam === 'alu' || m.fam === 'plastic' ? '1 × diameter in ' + m.n.split(' ')[0].toLowerCase() : '½ diameter in steel / stainless'})</td></tr>` : ''}` : `<tr><td>Speeds</td><td><b style="color:#B00">${esc(m.n)} is not a milling material here.</b> ${esc(m.note || '')}</td></tr>`}
@@ -3274,6 +3318,7 @@ function renderDash(){
       <div class="mcard"><small>Spindle</small><b>${cap} rpm cap</b><span>machine max ${MACHINE.maxRpm}</span></div>
       <div class="mcard"><small>Material of this job</small><b>${esc(m.n)}</b><span>${m.vc > 0 ? 'milling OK' : 'not a milling job'}</span></div>
       <div class="mcard"><small>Run mode</small><b>${esc(RUN[mode])} ${Math.round(k*100)}%</b><span>${Object.keys(RUN).map(x => `<a href="#" data-da="run" data-v="${x}" style="margin-right:6px;${x === mode ? 'font-weight:700' : ''}">${x === 'proto' ? 'Prototype' : x === 'prod' ? 'Production' : 'Full'}</a>`).join('')}</span></div>
+      <div class="mcard"><small>Fixture</small><b>${S.setup.fix ? ({vise:'Vise', clamps:(S.setup.fix.boxes || []).length + ' clamp(s)', none:'none above part'})[S.setup.fix.type] : 'not set'}</b><span>${S.setup.fix && S.setup.fix.type !== 'none' ? `top Z${fmt(fixtureTop())} · <a href="#" data-da="fix">edit</a>` : '<a href="#" data-da="fix">set up</a>'}</span></div>
       <div class="mcard"><small>Tool inventory sheet</small><b>${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced.split(', ').pop()) : GD.sheetErr ? 'not reachable' : 'local library'}</b><span><a href="#" data-da="sync">⟳ sync now</a> · <a href="#" data-da="sheet">open sheet</a></span></div></div>
     ${miss.length ? `<div class="info" style="background:#FFF3CD;border-color:#E0B000;color:#5A4500">⚠ This job uses ${miss.length} tool(s) that are not in the machine: ${miss.map(t => `T${t.num} ${esc(t.name)}`).join(', ')}. Load them, mark them Loaded in the sheet, or ask Claude for a loaded alternative.</div>` : S.ops.length ? '<div class="info">✔ Every tool this job needs is in the machine.</div>' : ''}
     <div class="mdash"><div><div class="mag">${pockets}</div>
@@ -3304,7 +3349,7 @@ function camContext(){
   const chains = CH.map(c => ({no:c.no, type:c.circle ? `circle dia ${fmt(c.circle.r*2)} at X${fmt(c.circle.cx)} Y${fmt(c.circle.cy)}` : c.point ? `point X${fmt(c.pts[0][0])} Y${fmt(c.pts[0][1])}` : c.closed ? `closed, area ${fmt(Math.abs(area(c.pts)), 1)}, bbox X${fmt(Math.min(...c.pts.map(p => p[0])))}..${fmt(Math.max(...c.pts.map(p => p[0])))} Y${fmt(Math.min(...c.pts.map(p => p[1])))}..${fmt(Math.max(...c.pts.map(p => p[1])))}` : `open, ${c.items.length} entities`, entities:c.items.length}));
   const ops = S.ops.map((o, i) => { const t = toolOf(o); return {index:i + 1, id:o.id, type:o.type, name:o.name, tool:t ? `T${t.num} ${t.name}` : null, chains:(o.sel || []).map(x => CHK.get(x.key)).filter(Boolean).map(c => c.no), params:o.p, warnings:o.warn || [], dirty:o.dirty, cycle_min:o.moves ? +cycleTime(o).toFixed(2) : null}; });
   return {machine:MACHINE, units:s.units, wcs:s.wcs, material:MATS[s.material].n, program:`O${s.progNum} ${s.progName}`, limits:{maxRpm:s.maxRpm, maxFeed:s.maxFeed, rapid:s.rapid, travel:s.travel},
-    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, fixed:!!t.fixed, pocket:t.pocket ?? null, notes:t.notes || ''})), operations:ops, material_keys:Object.keys(MATS), run_mode:{current:S.setup.run || 'proto', percent_of_standard:Math.round(runK()*100), modes:S.setup.runPct},
+    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, fixed:!!t.fixed, pocket:t.pocket ?? null, flute_len:t.len, stick_out:t.stick || null, holder_dia:t.holder || null, shank_dia:t.shank || null, notes:t.notes || ''})), fixture:S.setup.fix ? Object.assign({top_z:isFinite(fixtureTop()) ? fixtureTop() : null}, S.setup.fix) : null, operations:ops, material_keys:Object.keys(MATS), run_mode:{current:S.setup.run || 'proto', percent_of_standard:Math.round(runK()*100), modes:S.setup.runPct},
     param_keys:{contour:Object.keys(defP('contour')), pocket:Object.keys(defP('pocket')), drill:Object.keys(defP('drill')), face:Object.keys(defP('face')), cmill:Object.keys(defP('cmill')), srough:Object.keys(defP('srough')), sfinish:Object.keys(defP('sfinish')), scont:Object.keys(defP('scont'))}};
 }
 const AI_TOOLS = [
@@ -3415,7 +3460,7 @@ const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic 
 You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
 Shop rules (always apply): the CAM computes speeds and feeds for each operation from the TOOL and the JOB MATERIAL using industry-standard values (carbide end mills, HSS drills and taps, rigid setup) — the operator never has to calculate or assume them, and the RPM/Feed columns of the tool sheet are only a reference unless a tool is marked Fixed. Tool choice: pick sizes from the inventory (loaded=true) that fit the features — a cutter smaller than the smallest inside radius, a drill matching the hole or the tap drill size, the largest face mill that fits — and say why. Run modes: new jobs start in ${runLabel('proto')} (prototype / first article); once the first part is good the operator switches to ${runLabel('prod')} and posts again; ${runLabel('full')} is the industry standard. Operations keep standard values, only the posted S and F change (use set_run_mode when asked). Use calc_speeds for numbers; do not pad them downward; never exceed the shop RPM cap; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
 CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
-Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
+Collision rules: check each operation's depth against the tool's flute_len and stick_out; never let the holder reach the stock top; the clearance plane must be above fixture.top_z; when stick_out or holder_dia is null tell the operator to measure it at the machine (tip to holder nose with a caliper). Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
 Time estimates: when asked how long a job takes or to quote hours, make sure the operations exist (create them if the user agrees), then call get_time_estimate and present the total hours for the lot, the first piece and each next piece, with the breakdown and the assumptions (setups, operator level, run mode, efficiency). State what is not included (wire EDM, grinding, turning, heat treatment). No prices — pricing is done separately by Noah. Never invent material grade, tolerances or finishes; mark guesses as Assumed. If something is outside this app (lathe programs, 4/5-axis, DWG import) say so plainly and say which shop process handles it. Units are ${S.setup.units}.`;
 // keep the request bounded: drop the oldest turns, never splitting a tool_use from its tool_result
 function aiTrim(msgs){ if (msgs.length <= 40) return msgs; let i = msgs.length - 40; while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++; return msgs.slice(i); }
@@ -3535,7 +3580,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
