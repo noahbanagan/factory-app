@@ -1486,7 +1486,7 @@ const hms = m => { const s = Math.round(m*60); return `${Math.floor(s/3600)}h ${
 let R3, scene, cam, ctl, G = {}, axesOn = true;
 const COL_LIGHT = {ent:0x0A1E8C, sel:0xE0A800, chain:0xD84315, point:0x101010, feed:0x1F5FE0, feedLo:0x7FA6EE, rapid:0xD4A000, stock:0x1B8E3A, fixture:0xE08A00, sim:0x8FBF6F};
 // Classic Mastercam X5 look: black screen, green geometry, yellow rapids, blue feeds, orange axis cross
-const COL_X5 = {ent:0x00E000, sel:0xFFD000, chain:0xFF6A00, point:0xE0E0E0, feed:0x3C8CFF, feedLo:0x6AA8FF, rapid:0xFFE600, stock:0x40C070, fixture:0xFF9A20, sim:0x8FBF6F};
+const COL_X5 = {ent:0x00E000, sel:0xFFFFFF, chain:0xFF6A00, point:0xE0E0E0, feed:0x3C8CFF, feedLo:0x6AA8FF, rapid:0xFFE600, stock:0x40C070, fixture:0xFF9A20, sim:0x8FBF6F};
 let x5Look = true; try { x5Look = localStorage.getItem('cam5.x5look') !== '0'; } catch(e){}
 const COL = Object.assign({}, x5Look ? COL_X5 : COL_LIGHT);
 function setX5Look(on){ x5Look = !!on; try { localStorage.setItem('cam5.x5look', on ? '1' : '0'); } catch(e){} Object.assign(COL, on ? COL_X5 : COL_LIGHT); document.body.classList.toggle('x5', on); drawAxes(); drawGeom(); drawStock(); drawPaths(); renderMenu(); };
