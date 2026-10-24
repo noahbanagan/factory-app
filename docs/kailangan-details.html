@@ -54,11 +54,14 @@ footer{color:var(--muted);font-size:.9rem;margin-top:30px;border-top:1px solid v
 <p>Isulat: CNC1 serial <span class="blank"></span> · CNC2 serial <span class="blank"></span></p>
 <div class="send">Send: 2 pictures per machine.</div></div></div>
 
-<div class="card"><div class="n">2</div><div><h3>Ethernet screen ng control <span class="who">operator</span></h3>
-<p>Sa Fanuc: pindutin <b>SYSTEM</b>, tapos hanapin sa soft keys ang <b>ETHPRM</b>, <b>Ethernet</b>, o <b>EMBED</b> (pindutin ang ▶ arrow soft key para makita ang iba pang keys). Picture ng screen na lumabas. Kailangan makita kung may <b>IP address</b>, at kung may nakasulat na <b>FTP</b>, <b>Data Server</b> o <b>FOCAS</b>.</p>
-<p>Kung walang Ethernet na lalabas, picture pa rin ng SYSTEM screen at sabihin "wala".</p>
-<p>IP ng CNC1 <span class="blank"></span> · IP ng CNC2 <span class="blank"></span></p>
-<div class="send">Send: picture ng screen per machine, at ang IP kung meron.</div></div></div>
+<div class="card"><div class="n">2</div><div><h3>Paano nilo-load ang program sa Fanuc (disk o card) <span class="who">operator</span></h3>
+<p>Walang LAN ang CNC1 at CNC2, kaya kailangan malaman ng CAM kung anong media ang gamit para tama ang file name at format. Picture ng: (a) ang slot sa tabi ng screen o sa front panel, (b) ang mismong disk/card/USB na ginagamit, (c) ang screen pag nag-lo-load (PROG → OPRT → READ o ang card browser).</p>
+<ul>
+  <li>Uri ng media: <span class="blank"></span> (PCMCIA / CF card sa adapter, USB stick, floppy o floppy emulator, RS-232 cable)</li>
+  <li>Paano pinapangalanan ang file sa card ngayon (hal. O1001, O1001.NC, 1001): <span class="blank"></span></li>
+  <li>Kung RS-232: baud rate at software sa PC: <span class="blank"></span></li>
+</ul>
+<div class="send">Send: 3 pictures per machine + ang mga sagot.</div></div></div></div>
 
 <div class="card"><div class="n">3</div><div><h3>Isang proven program na tumakbo na sa machine <span class="who">programmer</span></h3>
 <p>Kumuha ng isang .NC file na galing sa X5 na na-run na nang maayos sa QP1620, kasama ang DXF ng parehong parte. Mas maganda kung job na may pocket, drill at tap. Halimbawa: Mahle lower mold, o kahit anong Semitec plate.</p>
