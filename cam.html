@@ -261,7 +261,7 @@ function defTools(u){
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, aiOnOpen:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
@@ -1915,7 +1915,7 @@ function propsDlg(tab = 'files'){
     const u = U();
     el.innerHTML = `<div class="tabs2">${[['files','Files'],['tool','Tool Settings'],['stock','Stock Setup'],['machine','Machine'],['post','Post']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>` + ({
       files:`<fieldset><legend>Files</legend><div class="fr"><span>Machine</span><b>${MACHINE.name}</b></div><div class="fr"><span>Control</span><b>${MACHINE.control}</b></div><div class="fr"><span>Post</span><b>${MACHINE.post}</b></div>${fRow(st, 'progName', 'NC name', 't')}${fRow(st, 'progNum', 'Program number (O)', 'i')}<div class="fr"><span>NC file</span><b>O${String(st.progNum).padStart(4, '0')}.NC</b></div></fieldset>`,
-      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}<div class="fr"><span>Run mode now</span>${SEL_RUN(st)}</div>${fRow(st.runPct, 'proto', 'Prototype / first article (% of standard)', 'i')}${fRow(st.runPct, 'prod', 'Production (% of standard)', 'i')}<div class="hint">Operations always hold the industry-standard speeds and feeds for the job material. The run mode scales S and F in the posted program: start a new job in Prototype, then switch to Production and post again once the first part is good.</div></fieldset>
+      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}${fRow(st, 'aiOnOpen', 'After opening a drawing, offer Claude\'s first look (material, view, plan)', 'c')}<div class="fr"><span>Run mode now</span>${SEL_RUN(st)}</div>${fRow(st.runPct, 'proto', 'Prototype / first article (% of standard)', 'i')}${fRow(st.runPct, 'prod', 'Production (% of standard)', 'i')}<div class="hint">Operations always hold the industry-standard speeds and feeds for the job material. The run mode scales S and F in the posted program: start a new job in Prototype, then switch to Production and post again once the first part is good.</div></fieldset>
         <fieldset><legend>Sequence numbers</legend>${fRow(st.post, 'lineNums', 'Output N sequence numbers', 'c')}${fRow(st.post, 'nStart', 'Start', 'i')}${fRow(st.post, 'nInc', 'Increment', 'i')}</fieldset>`,
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
@@ -2483,7 +2483,7 @@ async function importPDF(file, merge){
     el.innerHTML = `<div class="info">This PDF is a <b>scanned drawing</b> (a picture, no CAD lines). The CAM cannot trace it, but Claude can read it and draw the part for you to check.</div>
       ${AI.drawingImg ? `<img src="${AI.drawingImg}" style="max-width:100%;max-height:300px;border:1px solid #C8D0DC;display:block;margin:6px auto">` : ''}
       <ol style="margin:6px 0 6px 18px;line-height:1.5"><li><b>Ask Claude to read it</b>: Claude lists the sizes it can read, draws the part, sets material and stock, and proposes the tools. You confirm the unclear numbers.</li><li>Or describe the part to Claude in your own words in the ✦ panel.</li><li>Or draw it yourself with the Create menu, using the print beside you.</li></ol>`;
-    return new Promise(res => dlg({title:'Scanned PDF — ' + file.name, body:el, w:560, okLabel:'✦ Ask Claude to read it', ok:close => { close(); aiPanel(); aiSend(SCAN_PROMPT(file.name), {image:AI.drawingImg}); res(true); }, onClose:() => res(false)}));
+    return new Promise(res => dlg({title:'Scanned PDF — ' + file.name, body:el, w:560, okLabel:'✦ Ask Claude to read it', ok:close => { close(); AI.lastScanOffer = Date.now(); aiPanel(); aiSend(SCAN_PROMPT(file.name), {image:AI.drawingImg}); res(true); }, onClose:() => { AI.lastScanOffer = Date.now(); res(false); }}));
   }
   // group by colour (AutoCAD plots keep layer colours: black = geometry, cyan = dimensions, red = centre lines)
   const groups = {}; paths.forEach(p => { const g = groups[p.color] = groups[p.color] || {n:0, segs:0}; g.n++; g.segs += p.pts.length; });
@@ -2585,10 +2585,21 @@ function pick(m, cb){ pickMode = m; pickCb = cb || null; const f = $('#fFile'); 
 $('#fFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   if (pickMode === 'proj' || /\.(json|cam)$/i.test(f.name)){ try { applyProject(JSON.parse(await f.text())); S.file = f.name.replace(/\.cam\.json$|\.json$/i, ''); updTitle(); } catch(err){ alert('Not a valid project file.'); } return; }
-  await openCAD(f, pickMode === 'merge'); if (pickCb) pickCb();
+  const ok = await openCAD(f, pickMode === 'merge'); if (pickCb) pickCb(); else if (ok && pickMode !== 'merge') offerClaudeLook(f.name);
 });
 document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openCAD(f, false); });
+document.addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return; if (/\.(json|cam)$/i.test(f.name)){ try { applyProject(JSON.parse(await f.text())); S.file = f.name.replace(/\.cam\.json$|\.json$/i, ''); updTitle(); } catch(err){ alert('Not a valid project file.'); } return; } const ok = await openCAD(f, false); if (ok) offerClaudeLook(f.name); });
+// After a drawing opens: offer Claude's first look (beginner mode), otherwise continue to the Job Wizard.
+function offerClaudeLook(name){
+  if (S.setup.aiOnOpen === false || !S.setup.beginner) return;
+  if (!(AI.key || AI.sample)) return;
+  if (/scanned/i.test(S.geom.name || '') || (AI.lastScanOffer && Date.now() - AI.lastScanOffer < 5000)) return;   // the scan dialog already offered it
+  setTimeout(() => {
+    if (!confirm(`${name} is open.\n\nAsk Claude to look at it now and suggest the material, the view to machine and the operations?\n(Cancel = continue with the Job Wizard yourself.)`)){ if (!document.querySelector('.dlg')) wizard(); return; }
+    aiPanel();
+    aiSend(`I just opened the drawing "${name}" in the CAM. Look at the job (get_job) and, if a drawing picture is attached, read it too. Tell me: what kind of part it is, the material and thickness you read or assume, which process fits (CNC mill / wire EDM / lathe), which view to keep and where X0 Y0 should be, and the operations in order with the tools loaded in the machine. Do not create operations yet — ask me to confirm first.`, AI.drawingImg && AI.drawingName === name ? {image:AI.drawingImg} : {});
+  }, 400);
+}
 async function openCAD(file, merge){
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'dwg'){ msg('DWG', 'DWG is a closed AutoCAD format that a browser cannot read.<br><br>In AutoCAD / DraftSight use <b>Save As ▸ DXF</b>, or convert with the free <b>ODA File Converter</b>, then open the DXF here.'); return false; }
