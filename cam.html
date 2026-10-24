@@ -2475,8 +2475,16 @@ async function importPDF(file, merge){
   busy(true, 'Reading ' + file.name + '…'); await tick();
   const doc = await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()), isEvalSupported:false}).promise;
   const page = await doc.getPage(1), ol = await page.getOperatorList(), paths = pdfPaths(ol.fnArray, ol.argsArray, pdfjs.OPS);
+  // keep a picture of the page so Claude can read the title block, dimensions and notes (vector or scan)
+  try { const vp0 = page.getViewport({scale:1}), sc = Math.min(2.5, 1800/Math.max(vp0.width, vp0.height)), vp = page.getViewport({scale:sc}), cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height); const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); await page.render({canvasContext:cx, viewport:vp}).promise; AI.drawingImg = cv.toDataURL('image/jpeg', 0.85); AI.drawingName = file.name; } catch(e){ console.warn('page render', e); }
   busy(false);
-  if (!paths.length){ msg('PDF', 'No vector lines found in this PDF — it is probably a scan or a picture. Ask the customer for the CAD PDF, DXF or STEP, or draw the part with the Create menu.'); return false; }
+  if (paths.length < 12){   // a scan or a photo: no usable lines
+    const el = document.createElement('div');
+    el.innerHTML = `<div class="info">This PDF is a <b>scanned drawing</b> (a picture, no CAD lines). The CAM cannot trace it, but Claude can read it and draw the part for you to check.</div>
+      ${AI.drawingImg ? `<img src="${AI.drawingImg}" style="max-width:100%;max-height:300px;border:1px solid #C8D0DC;display:block;margin:6px auto">` : ''}
+      <ol style="margin:6px 0 6px 18px;line-height:1.5"><li><b>Ask Claude to read it</b>: Claude lists the sizes it can read, draws the part, sets material and stock, and proposes the tools. You confirm the unclear numbers.</li><li>Or describe the part to Claude in your own words in the ✦ panel.</li><li>Or draw it yourself with the Create menu, using the print beside you.</li></ol>`;
+    return new Promise(res => dlg({title:'Scanned PDF — ' + file.name, body:el, w:560, okLabel:'✦ Ask Claude to read it', ok:close => { close(); aiPanel(); aiSend(SCAN_PROMPT(file.name), {image:AI.drawingImg}); res(true); }, onClose:() => res(false)}));
+  }
   // group by colour (AutoCAD plots keep layer colours: black = geometry, cyan = dimensions, red = centre lines)
   const groups = {}; paths.forEach(p => { const g = groups[p.color] = groups[p.color] || {n:0, segs:0}; g.n++; g.segs += p.pts.length; });
   const keys = Object.keys(groups).sort((a, b) => groups[b].n - groups[a].n);
@@ -3380,7 +3388,7 @@ async function aiCall(messages){
   return r.json();
 }
 // Hosted mode: Claude runs on the viewer's account through the page runtime; tools run in the page.
-async function aiSendHosted(){
+async function aiSendHosted(img){
   const live = {type:'text', text:'…'}, blk = {role:'assistant', content:[live]};
   AI.msgs.push(blk);
   const bump = () => { const i = AI.msgs.indexOf(blk); if (i >= 0 && i !== AI.msgs.length - 1){ AI.msgs.splice(i, 1); AI.msgs.push(blk); } };
@@ -3390,24 +3398,29 @@ async function aiSendHosted(){
   const turns = [{role:'user', content:AI_SYS() + '\n\nAlways call get_job first to read the current job before advising or changing anything.'}];
   for (const m of aiTrim(AI.msgs)){
     if (m === blk) continue;
-    if (m.role === 'user' && typeof m.content === 'string') turns.push({role:'user', content:m.content});
+    if (m.role === 'user'){ const tx = typeof m.content === 'string' ? m.content : m.content.filter(b => b.type === 'text').map(b => b.text).join('\n'); if (tx) turns.push({role:'user', content:tx}); }
     else if (m.role === 'assistant'){ const t = m.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); if (t) turns.push({role:'assistant', content:t}); }
   }
   try {
-    const r = await AI.sample(turns, {tools, cache:false, modelTier:'default', effort:'medium', onText:({text}) => { live.text = text; bump(); aiRender(); }});
+    const o = {tools, cache:false, modelTier:'default', effort:'medium', onText:({text}) => { live.text = text; bump(); aiRender(); }};
+    if (img){ const lim = await AI.sample.limits().catch(() => null); if (!lim || !lim.images) throw {code:'images_unavailable', message:'This page cannot send pictures to Claude.'}; o.images = [await (await fetch(img)).blob()]; }
+    const r = await AI.sample(turns, o);
     live.text = r.text + (r.truncated ? '\n(Answer was cut short — ask for less at a time.)' : '');
   } catch(e){
-    const why = {not_granted:'You did not allow this page to use Claude. Reload the page to be asked again, or paste an API key in Settings.', rate_limited:'Your Claude usage limit was reached. Try again later.', refused:'Claude declined this request.', tools_unavailable:'This viewer cannot run the CAM tools for Claude. Paste an API key in Settings instead.', cancelled:'Stopped.'}[e && e.code];
+    const why = {images_unavailable:'This hosted page cannot send the drawing picture to Claude. Paste an API key in Settings, or describe the part in words.', not_granted:'You did not allow this page to use Claude. Reload the page to be asked again, or paste an API key in Settings.', rate_limited:'Your Claude usage limit was reached. Try again later.', refused:'Claude declined this request.', tools_unavailable:'This viewer cannot run the CAM tools for Claude. Paste an API key in Settings instead.', cancelled:'Stopped.'}[e && e.code];
     live.text = (e && e.text ? e.text + '\n\n' : '') + '⚠ ' + (why || (e && e.message) || 'Claude is unavailable right now.');
   }
   bump();
 }
-async function aiSend(text){
+const SCAN_PROMPT = name => `Attached is a scanned customer drawing (${name}). Read it carefully. First list what you can read with confidence: part name and drawing number, material, overall length × width × thickness, every hole (size, position, thread or counterbore), slots and pockets with depths, chamfers, tolerances and notes. Then list what is unclear or unreadable. Then draw the part with draw_shapes (replace=true; X0 Y0 at the part centre unless the drawing shows a datum corner), set_material with the thickness, and set_stock. Finish with the machining plan using only tools loaded in the machine, and ask me to confirm the unclear dimensions before you create operations.`;
+const dataUrlParts = u => { const m = /^data:([^;]+);base64,(.*)$/.exec(u || ''); return m ? {media:m[1], data:m[2]} : null; };
+async function aiSend(text, opt = {}){
   if (!AI.key){ await AI.sampleP; if (!AI.sample){ aiSettings(); return; } }
   if (AI.busy) return;
-  AI.busy = true; AI.msgs.push({role:'user', content:text}); aiRender();
+  const img = opt.image && dataUrlParts(opt.image) ? opt.image : null;
+  AI.busy = true; AI.msgs.push(img ? {role:'user', content:[{type:'image', source:{type:'base64', media_type:dataUrlParts(img).media, data:dataUrlParts(img).data}}, {type:'text', text}], img:true} : {role:'user', content:text}); aiRender();
   try {
-    if (!AI.key){ aiStatus('Claude is thinking… (using your Claude account)'); await aiSendHosted(); }
+    if (!AI.key){ aiStatus('Claude is thinking… (using your Claude account)'); await aiSendHosted(img); }
     else for (let turn = 0; turn < 12; turn++){
       aiStatus('Claude is thinking…');
       const res = await aiCall(aiTrim(AI.msgs));
@@ -3437,7 +3450,7 @@ function aiRender(){
     return h.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n(?!<)/g, '<br>').replace(/(<\/(?:ul|ol|table|pre|div)>)<br>/g, '$1');
   };
   box.innerHTML = AI.msgs.map(m => {
-    if (m.role === 'user') return typeof m.content === 'string' ? `<div style="background:#E8F1FB;border-radius:6px;padding:6px 8px;margin:4px 0 4px 30px">${md(m.content)}</div>` : '';
+    if (m.role === 'user'){ if (typeof m.content === 'string') return `<div style="background:#E8F1FB;border-radius:6px;padding:6px 8px;margin:4px 0 4px 30px">${md(m.content)}</div>`; const tx = m.content.filter(b => b.type === 'text').map(b => b.text).join('\n'); return tx ? `<div style="background:#E8F1FB;border-radius:6px;padding:6px 8px;margin:4px 0 4px 30px">${m.img ? '<div class="hint">📎 drawing attached</div>' : ''}${md(tx)}</div>` : ''; }
     return m.content.map(b => b.type === 'text' ? `<div style="background:#fff;border:1px solid #D7DCE4;border-radius:6px;padding:6px 8px;margin:4px 30px 4px 0;line-height:1.45">${md(b.text)}</div>` : b.type === 'tool_use' ? `<div class="hint" style="margin-left:4px">⚙ ${esc(b.name)}${b.name === 'create_operation' ? ': ' + esc(b.input.name || b.input.type) : ''}</div>` : '').join('');
   }).join('') || `<div class="hint">Ask like you would ask a senior programmer: "What RPM and feed for a Ø6 carbide end mill in SUS304?", "How do I hold a 3 mm thin plate without it lifting?", "What does G43 H5 do?", "Is 4140 at 50 HRC a milling job?" — or about this job: "Draw a 100 × 60 plate, 10 mm aluminium, with four Ø8 holes 10 mm from each corner and a Ø30 hole in the middle, then program it with the tools in the machine" — or "Program this part: cut the outside, pocket the slot 6 deep, M8 tapped holes" — or "Why is operation 3 warning?"</div>`;
   box.scrollTop = box.scrollHeight;
@@ -3447,7 +3460,7 @@ function aiPanel(){
   const el = document.createElement('div'); el.style.cssText = 'display:flex;flex-direction:column;height:72vh;min-height:360px';
   el.innerHTML = `<div id="aiLog" style="flex:1;overflow:auto;padding:2px"></div><div id="aiSt" class="hint" style="min-height:14px;margin:4px 0"></div>
     <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask anything about machining or this job… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn" id="aiMic" title="Speak (Chrome / Edge)">🎤</button><button class="btn pri" id="aiGo">Send</button></div>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="I will describe a new part for you to draw. First tell me what you need from me: outside size, thickness, material, hole sizes and positions, slots or pockets with depths, and where X0 Y0 should be. Then wait.">Draw a part</button><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why. Use only the tools loaded in the machine.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr" title="Start a new conversation">New chat</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
+    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="I will describe a new part for you to draw. First tell me what you need from me: outside size, thickness, material, hole sizes and positions, slots or pockets with depths, and where X0 Y0 should be. Then wait.">Draw a part</button><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why. Use only the tools loaded in the machine.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr" title="Start a new conversation">New chat</button><button class="btn" id="aiImg" title="Send the imported drawing (PDF page picture) to Claude with your next message">📎 Drawing</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
   AI.el = el;
   dlg({title:'✦ Claude — CAM assistant', body:el, w:600, modal:false, footer:false, x:innerWidth - 620, y:70});
   const send = () => { const i = el.querySelector('#aiIn'), t = i.value.trim(); if (!t) return; i.value = ''; aiSend(t); };
@@ -3455,6 +3468,7 @@ function aiPanel(){
   el.querySelector('#aiIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
   el.querySelector('#aiClr').onclick = () => { AI.msgs = []; aiRender(); aiSave(); };
   el.querySelector('#aiKey').onclick = aiSettings;
+  el.querySelector('#aiImg').onclick = () => { if (!AI.drawingImg){ msg('No drawing picture', 'Open a PDF drawing first (File ▸ Open or drop it on the window). The page picture is kept so Claude can read the title block, dimensions and notes.'); return; } const i = el.querySelector('#aiIn'); const t = i.value.trim() || `Read this drawing (${AI.drawingName}): material, sizes, thickness, holes, slots, tolerances and notes. Compare it with the geometry in the job and tell me if anything is missing or wrong.`; i.value = ''; aiSend(t, {image:AI.drawingImg}); };
   el.querySelectorAll('[data-q]').forEach(b => b.onclick = () => aiSend(b.dataset.q));
   // voice input (Web Speech API — Chrome / Edge) and spoken replies
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = el.querySelector('#aiMic');
@@ -3483,7 +3497,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
