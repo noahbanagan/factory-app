@@ -1,0 +1,162 @@
+<title>Shop Details Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: a one-time data collection form for the shop; each task card says what to get, how, and where to send it. Printable. */
+:root{
+  --bg:#F7F6F2; --fg:#1C2430; --muted:#5B6673; --line:#D9DCE1; --card:#FFFFFF;
+  --accent:#1F5FA8; --accent-ink:#FFFFFF; --ok:#1E7F3A; --ok-bg:#E6F4EA; --warn:#8A5A00; --warn-bg:#FFF4D6;
+  --display:"Source Serif 4", Georgia, "Times New Roman", serif; --body:"Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#14181E; --fg:#E8ECF1; --muted:#A3ADB8; --line:#2C3440; --card:#1C222B; --accent:#6FA8E8; --accent-ink:#0E1620; --ok:#7ED49A; --ok-bg:#16301F; --warn:#F2C56B; --warn-bg:#352A10; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#14181E; --fg:#E8ECF1; --muted:#A3ADB8; --line:#2C3440; --card:#1C222B; --accent:#6FA8E8; --accent-ink:#0E1620; --ok:#7ED49A; --ok-bg:#16301F; --warn:#F2C56B; --warn-bg:#352A10; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+main{max-width:760px;margin:0 auto}
+header{padding:28px 0 8px}
+h1{font:700 2rem/1.15 var(--display);margin:0 0 6px;text-wrap:balance}
+.sub{color:var(--muted);margin:0}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--muted);margin:0 0 6px}
+h2{font:700 1.3rem/1.2 var(--display);margin:30px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
+p{margin:0 0 8px}
+ul,ol{margin:0 0 8px 22px;padding:0}
+li{margin:0 0 4px}
+.who{display:inline-block;font-size:.78rem;border-radius:999px;padding:1px 10px;background:var(--ok-bg);color:var(--ok);margin-left:6px;vertical-align:middle;font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;display:grid;grid-template-columns:36px 1fr;gap:12px}
+.card .n{width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 1rem/36px var(--display);text-align:center}
+.card > div{min-width:0}
+.card h3{font:700 1.02rem/1.3 var(--body);margin:0 0 4px}
+.blank{display:inline-block;min-width:140px;border-bottom:1px solid var(--fg);margin:0 4px;vertical-align:baseline}
+.send{background:var(--ok-bg);border-left:4px solid var(--ok);border-radius:8px;padding:6px 10px;margin:6px 0 0;font-size:.95rem}
+.note{background:var(--warn-bg);border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;margin:10px 0}
+table{border-collapse:collapse;width:100%;margin:6px 0 8px;font-size:.93rem}
+td,th{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--card)}
+.wrap{overflow-x:auto}
+.check li{list-style:none;margin:0 0 6px}
+.check li::before{content:"☐";display:inline-block;width:1.4em;color:var(--accent)}
+footer{color:var(--muted);font-size:.9rem;margin-top:30px;border-top:1px solid var(--line);padding-top:12px}
+@media print{ body{background:#fff;color:#000} .card{break-inside:avoid} }
+</style>
+
+<main>
+<header>
+  <p class="eyebrow">Dynamic Int'l · one-time lang</p>
+  <h1>Mga Details na Kukunin sa Shop</h1>
+  <p class="sub">Checklist para sa operators at programmer. Lahat ng ito ay kailangan para ma-finish ang CAM setup para sa CNC1, CNC2 at BA24. One-time lang, pero kailangan tama. I-print, i-fill up, tapos i-send kay Sir Noah.</p>
+</header>
+
+<div class="note"><b>Paano i-send:</b> picture o file sa group chat o email kay Sir Noah, with label kung aling machine (CNC1 / CNC2 / BA24). Ang tool measurements ay direkta sa Google Sheet <b>Dynamic CNC Tool Inventory - QP1620</b>, tab <b>CNC1</b> o <b>CNC2</b>.</div>
+
+<h2>A. Sa CNC1 at CNC2 (Fanuc 0i-MD)</h2>
+
+<div class="card"><div class="n">1</div><div><h3>Spindle at machine plate <span class="who">operator</span></h3>
+<p>Picture ng name plate ng machine (sa gilid o likod) at ng spindle plate. Kailangan makita: model, serial number, year, max RPM.</p>
+<p>Isulat: CNC1 serial <span class="blank"></span> · CNC2 serial <span class="blank"></span></p>
+<div class="send">Send: 2 pictures per machine.</div></div></div>
+
+<div class="card"><div class="n">2</div><div><h3>Ethernet screen ng control <span class="who">operator</span></h3>
+<p>Sa Fanuc: pindutin <b>SYSTEM</b>, tapos hanapin sa soft keys ang <b>ETHPRM</b>, <b>Ethernet</b>, o <b>EMBED</b> (pindutin ang ▶ arrow soft key para makita ang iba pang keys). Picture ng screen na lumabas. Kailangan makita kung may <b>IP address</b>, at kung may nakasulat na <b>FTP</b>, <b>Data Server</b> o <b>FOCAS</b>.</p>
+<p>Kung walang Ethernet na lalabas, picture pa rin ng SYSTEM screen at sabihin "wala".</p>
+<p>IP ng CNC1 <span class="blank"></span> · IP ng CNC2 <span class="blank"></span></p>
+<div class="send">Send: picture ng screen per machine, at ang IP kung meron.</div></div></div>
+
+<div class="card"><div class="n">3</div><div><h3>Isang proven program na tumakbo na sa machine <span class="who">programmer</span></h3>
+<p>Kumuha ng isang .NC file na galing sa X5 na na-run na nang maayos sa QP1620, kasama ang DXF ng parehong parte. Mas maganda kung job na may pocket, drill at tap. Halimbawa: Mahle lower mold, o kahit anong Semitec plate.</p>
+<p>Program number <span class="blank"></span> · Part <span class="blank"></span> · Material <span class="blank"></span></p>
+<div class="send">Send: ang .NC file + ang .DXF file (hindi screenshot).</div></div></div>
+
+<div class="card"><div class="n">4</div><div><h3>Parameter 3741 (max spindle RPM sa control) <span class="who">operator</span></h3>
+<p>Sa Fanuc: <b>SYSTEM</b> → <b>PARAM</b> → i-type <b>3741</b> → <b>NO.SRH</b>. Picture ng value. Ito ang confirm kung 10000 talaga ang max ng machine.</p>
+<p>CNC1 value <span class="blank"></span> · CNC2 value <span class="blank"></span></p>
+<div class="send">Send: picture per machine.</div></div></div>
+
+<h2>B. Tools sa bawat machine</h2>
+
+<div class="card"><div class="n">5</div><div><h3>I-measure lahat ng tools na nasa magazine <span class="who">operator</span></h3>
+<p>Para sa bawat tool na nakalagay sa tool changer ng CNC1, tapos ng CNC2. Ilagay sa Google Sheet, tab ng machine na iyon, isang row per tool. Caliper ang gamit, mm lahat.</p>
+<div class="wrap"><table>
+  <tr><th>Column sa sheet</th><th>Paano kunin</th></tr>
+  <tr><td>Pocket</td><td>Number ng pocket sa magazine kung saan nakalagay</td></tr>
+  <tr><td>T</td><td>Tool number na tinatawag sa program (usually same sa pocket)</td></tr>
+  <tr><td>Type at Dia</td><td>flat / ball / bull / face / chamfer / drill / spot / tap / ream, at diameter</td></tr>
+  <tr><td>Flutes</td><td>Bilangin ang cutting edges</td></tr>
+  <tr><td>FluteLen</td><td>Caliper: haba ng may cutting edge (flutes)</td></tr>
+  <tr><td>Stickout</td><td>Caliper: tip ng tool hanggang flat na nose ng holder, habang nakakabit sa holder</td></tr>
+  <tr><td>HolderDia</td><td>Caliper: pinakamalapad na part ng nose ng holder</td></tr>
+  <tr><td>ShankDia</td><td>Diameter ng shank kung iba sa cutter (hal. 6 mm cutter na 8 mm shank)</td></tr>
+  <tr><td>Loaded</td><td><b>yes</b> kung nasa machine ngayon</td></tr>
+  <tr><td>Pitch</td><td>Taps lang: pitch ng thread (M8 = 1.25, M6 = 1.0, M3 = 0.5)</td></tr>
+  <tr><td>Angle</td><td>Drills at spot drills lang: 118 o 135 para sa drill; 90 para sa spot/chamfer</td></tr>
+</table></div>
+<div class="send">Send: nothing, direkta sa sheet. Tapos sabihin "tapos na ang CNC1" / "tapos na ang CNC2".</div></div></div>
+
+<div class="card"><div class="n">6</div><div><h3>Tools sa shelf na hindi nakakabit <span class="who">operator</span></h3>
+<p>Same sheet, isang row per tool, pero <b>Loaded = no</b> at walang Pocket. Lalo na ang maliliit: Ø2, Ø2.5, Ø3, Ø4 end mills at drills. Dito malalaman ng CAM kung ano ang puwedeng gamitin sa slots ng Semitec.</p>
+<p>Pinakamaliit na end mill na meron <span class="blank"></span> · pinakamaliit na drill <span class="blank"></span></p>
+<div class="send">Send: direkta sa sheet.</div></div></div>
+
+<div class="card"><div class="n">7</div><div><h3>Holders at collets <span class="who">operator</span></h3>
+<p>Ilang BT40 holders meron (ER32, ER16, side lock, face mill arbor, drill chuck) at ilang piraso bawat isa.</p>
+<div class="send">Send: listahan o picture ng holder rack.</div></div></div>
+
+<h2>C. Paano naka-clamp ang parte</h2>
+
+<div class="card"><div class="n">8</div><div><h3>Vise at clamps <span class="who">operator</span></h3>
+<p>Picture ng vise sa table na may naka-clamp na plate, from the side. Caliper o steel rule:</p>
+<ul>
+  <li>Taas ng jaw mula sa table <span class="blank"></span> mm</li>
+  <li>Kapal ng jaw (front to back) <span class="blank"></span> mm</li>
+  <li>Max opening ng vise <span class="blank"></span> mm</li>
+  <li>Parallels na gamit: kapal <span class="blank"></span> mm</li>
+  <li>Kung toe clamps: taas ng clamp pag nakakabit <span class="blank"></span> mm</li>
+</ul>
+<p>Sabihin din: usually <b>gaano kalalim</b> nakapasok ang plate sa jaw (hal. 5 mm lang) at kung may soft jaws.</p>
+<div class="send">Send: 2 pictures per machine + ang mga numero.</div></div></div>
+
+<h2>D. Wire cut, Mitsubishi BA24</h2>
+
+<div class="card"><div class="n">9</div><div><h3>Control at program file <span class="who">wire cut operator</span></h3>
+<p>Picture ng screen pag-power-on (makikita ang control model) at ng name plate ng machine. Kumuha ng isang program file na tumakbo na (sa USB o floppy, .NC o .PRG), kasama ang drawing ng parte.</p>
+<p>Control model <span class="blank"></span> · wire diameter na gamit <span class="blank"></span> · ilang passes usually <span class="blank"></span></p>
+<p>Paano naka-clamp ang parte sa table (clamp sa frame, magnet, fixture): <span class="blank"></span></p>
+<div class="send">Send: 2 pictures + program file + drawing.</div></div></div>
+
+<h2>E. Tungkol sa mga tao at daloy</h2>
+
+<div class="card"><div class="n">10</div><div><h3>Mga operator <span class="who">supervisor</span></h3>
+<ul class="check">
+  <li>Ilang operators, at sino ang sa CNC1, CNC2, BA24</li>
+  <li>Kaya ba nilang mag-set ng G54 at tool length (H) mag-isa? (yes / no / partly)</li>
+  <li>Marunong bang magbasa ng drawing na may tolerance?</li>
+  <li>Gmail address ng bawat operator (para sa login at Google Sheet)</li>
+  <li>English o Taglish ang gusto sa screen</li>
+</ul></div></div>
+
+<div class="card"><div class="n">11</div><div><h3>Daloy ng trabaho <span class="who">supervisor</span></h3>
+<ul class="check">
+  <li>Saan nagsisimula ang job para sa operator: printed drawing, email, o Drive</li>
+  <li>Sino ang nag-a-approve ng program at setup sheet bago mag-run</li>
+  <li>Sino ang nagdedesisyon kung mill o wire cut ang parte</li>
+  <li>Paano nilo-load ang program ngayon: USB, RS-232, o network</li>
+</ul></div></div>
+
+<div class="card"><div class="n">12</div><div><h3>Hosting at accounts <span class="who">Sir Noah</span></h3>
+<ul class="check">
+  <li>I-on ang GitHub Pages (Settings → Pages → main, root) para may permanent link</li>
+  <li>I-publish ang CNC1 at CNC2 tabs ng tool sheet bilang CSV, i-paste ang 2 links sa CAM Settings</li>
+  <li>Google Cloud: API key (Drive links) at OAuth client (job queue, sign-in)</li>
+  <li>Anthropic API key, o hintayin ang installer login</li>
+</ul></div></div>
+
+<h2>Pag tapos na</h2>
+<ul class="check">
+  <li>A1 – A4 na-send (CNC1 at CNC2)</li>
+  <li>B5 – B7 nasa sheet na (CNC1 at CNC2)</li>
+  <li>C8 na-send</li>
+  <li>D9 na-send (BA24)</li>
+  <li>E10 – E12 nasagot</li>
+</ul>
+<p>Pag kumpleto ito, magagawa na: ang tunay na collision check sa bawat tool, ang LAN transfer ng program sa machine, ang wire cut post, at ang side-by-side ng CAM vs X5 sa sarili ninyong parte.</p>
+
+<footer>Dynamic Int'l · Shop Details Checklist · Oktubre 2026 · Itanong kay Sir Noah kung may hindi malinaw.</footer>
+</main>
