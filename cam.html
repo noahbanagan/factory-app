@@ -121,18 +121,19 @@ table.grid tr:not(.on):hover td{background:#E5F1FB}
 .mcard small{display:block;color:#5A6472;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 .mcard b{font-size:13px;display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mag{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.pk{position:relative;border:2px solid #C8D0DC;border-radius:8px;background:#F7F8FA;padding:6px 6px 6px 8px;min-height:64px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.pk{position:relative;border:2px solid #C8D0DC;border-radius:10px;background:#F7F8FA;padding:8px 8px 8px 10px;min-height:72px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
 .pk:hover{border-color:#3399FF}
 .pk.sel{outline:3px solid #3399FF;outline-offset:1px}
 .pk.loaded{background:#EAF7EC;border-color:#5FBF6F}
 .pk.need{background:#FFF3CD;border-color:#E0B000}
 .pk.empty{background:#F2F3F5;border-style:dashed;color:#8A94A3}
-.pk .pn{font-size:16px;font-weight:800;line-height:1}
+.pk .pn{font-size:18px;font-weight:800;line-height:1}
 .pk .pg{position:absolute;right:6px;top:4px;font-size:18px;opacity:.75}
-.pk .pt{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pk .ps{font-size:10px;color:#5A6472}
+.pk .pt{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk .ps{font-size:11px;color:#5A6472}
 .mdet{background:#fff;border:1px solid #C8D0DC;border-radius:6px;padding:10px;line-height:1.5;align-self:start;position:sticky;top:0}
-.mdet h3{margin:0 0 6px;font-size:14px}
+.mdet h3{margin:0 0 6px;font-size:16px}
+.mdet p{margin:4px 0}
 .mdet table{border-collapse:collapse;width:100%;margin:6px 0}
 .mdet td{padding:3px 4px;border-bottom:1px solid #EEF1F5;vertical-align:top}
 .mdet td:first-child{color:#5A6472;width:42%}
@@ -3399,45 +3400,47 @@ function renderDash(){
   const byPocket = new Map(), shelf = [], dup = new Set();
   for (const t of S.tools){ if (t.loaded === false){ shelf.push(t); continue; } const {n} = toolPocket(t); if (!n || n > MACHINE.tools){ shelf.push(t); continue; } if (byPocket.has(n)) dup.add(n); byPocket.set(n, t); }
   const miss = [...needed].map(id => S.tools.find(t => t.id === id)).filter(t => t && (t.loaded === false || ![...byPocket.values()].includes(t)));
+  const ICON = {flat:'🟦', bull:'🟪', ball:'🔵', face:'⬛', chamfer:'🔻', drill:'🪛', spot:'📍', center:'📍', tap:'🔩', ream:'🧷', bore:'🧷'};
+  const plainType = t => ({flat:'end mill', bull:'end mill (round corner)', ball:'ball end mill', face:'face mill', chamfer:'chamfer tool', drill:'drill', spot:'spot drill', center:'center drill', tap:'tap', ream:'reamer', bore:'boring bar'})[t.type] || t.type;
+  const modeWords = {proto:'slow and safe for the first piece', prod:'normal production speed', full:'full standard speed'}[mode];
   const pockets = Array.from({length:MACHINE.tools}, (_, i) => i + 1).map(n => {
-    const t = byPocket.get(n); if (!t) return `<div class="pk empty" data-pk=""><div class="pn">${n}</div><div class="pt">empty</div><div class="ps">free pocket</div></div>`;
-    const cls = needed.has(t.id) ? 'loaded' : 'loaded', sel = dashSel === t.id ? ' sel' : '';
-    return `<div class="pk ${cls}${sel}" data-pk="${t.id}" title="${esc(t.name)}"><div class="pn">${n}${dup.has(n) ? ' ⚠' : ''}</div><div class="pg">${TT[t.type] ? TT[t.type][1] : ''}</div><div class="pt">T${t.num} · Ø${fmt(t.dia)}</div><div class="ps">${esc(TT[t.type] ? TT[t.type][0] : t.type)}${needed.has(t.id) ? ' · <b style="color:#1E9E2E">used by this job</b>' : ''}</div></div>`;
+    const t = byPocket.get(n); if (!t) return `<div class="pk empty" data-pk=""><div class="pn">${n}</div><div class="pt">Empty</div><div class="ps">nothing here</div></div>`;
+    const sel = dashSel === t.id ? ' sel' : '', need = needed.has(t.id);
+    return `<div class="pk loaded${sel}" data-pk="${t.id}" title="${esc(t.name)}"><div class="pn">${n}${dup.has(n) ? ' ⚠' : ''}</div><div class="pg">${ICON[t.type] || '🔧'}</div><div class="pt">${fmt(t.dia)} ${u} ${esc(plainType(t))}</div><div class="ps">T${t.num}${need ? ' · <b style="color:#1E9E2E">needed for this job</b>' : ' · in the machine'}</div></div>`;
   }).join('');
   const t = S.tools.find(x => x.id === dashSel);
   let det = '';
   if (t){
     const r = calcSpeeds(t, true), ok = r.rpm > 0, pk = toolPocket(t), ops = S.ops.filter(o => o.toolId === t.id), dPass = MILLS.includes(t.type) ? (m.fam === 'alu' || m.fam === 'plastic' ? t.dia : t.dia/2) : null;
-    det = `<h3>T${t.num} — ${esc(t.name)}</h3><div>${esc(plainTool(t))}</div>
-      <table><tr><td>Pocket</td><td><b>${pk.n || '—'}</b>${pk.assumed ? ' <span class="hint" style="display:inline">(assumed = T number; write the real pocket in the sheet)</span>' : ''}</td></tr>
-      <tr><td>In the machine?</td><td>${t.loaded === false ? '<b style="color:#B00">No — on the shelf</b>' : '<b style="color:#1E9E2E">Yes</b>'}</td></tr>
-      <tr><td>Offsets</td><td>H${t.hOff || t.num} length, D${t.dOff || t.num} wear</td></tr>
-      <tr><td>Reach</td><td>flutes ${t.len > 0 ? fmt(t.len) + ' ' + u : '<b style="color:#B00">not set</b>'} · stick-out ${t.stick > 0 ? fmt(t.stick) + ' ' + u : '<b style="color:#B00">not measured</b>'}<br>shank Ø${t.shank > 0 ? fmt(t.shank) : fmt(t.dia)} · holder Ø${t.holder > 0 ? fmt(t.holder) : '<b style="color:#B00">?</b>'}</td></tr>
-      ${(() => { const miss = []; if (!(parseInt(t.pocket) > 0)) miss.push('pocket number'); if (!(t.len > 0)) miss.push('flute length'); if (!(t.stick > 0)) miss.push('stick-out (tip to holder nose)'); if (!(t.holder > 0)) miss.push('holder nose diameter'); if (!(t.shank > 0)) miss.push('shank diameter'); return miss.length ? `<tr><td>☐ Check at the machine</td><td style="color:#8A5A00">${miss.join(', ')}.<br><span class="hint" style="display:inline">Measure with a caliper and type them into the tool sheet or Edit tool. They switch on the holder and shank collision checks.</span></td></tr>` : '<tr><td>✔ Measured</td><td>All reach data present — holder and shank collisions are checked in Verify.</td></tr>'; })()}
-      ${ok ? `<tr><td>Standard speed for<br>${esc(m.n)}</td><td><b>${r.rpm} rpm</b>, feed <b>${fmt(r.feed)} ${u}/min</b>${t.type === 'tap' ? ' (= rpm × pitch)' : ''}${r.rpm >= cap ? `<br><span class="hint" style="display:inline">held at the shop cap of ${cap} rpm, feed lowered to match</span>` : ''}</td></tr>
-      <tr><td>In the program now<br>(${esc(RUN[mode])} ${Math.round(k*100)}%)</td><td><b>${Math.round(Math.min(r.rpm*k, cap))} rpm</b>, feed <b>${fmt(r.feed*k)} ${u}/min</b></td></tr>
-      ${dPass ? `<tr><td>Depth per pass, max</td><td>${fmt(dPass)} ${u} (${m.fam === 'alu' || m.fam === 'plastic' ? '1 × diameter in ' + m.n.split(' ')[0].toLowerCase() : '½ diameter in steel / stainless'})</td></tr>` : ''}` : `<tr><td>Speeds</td><td><b style="color:#B00">${esc(m.n)} is not a milling material here.</b> ${esc(m.note || '')}</td></tr>`}
-      ${t.fixed ? '<tr><td>Note</td><td>Marked <b>Fixed</b> in the sheet: its own RPM/feed are used as written.</td></tr>' : ''}
-      <tr><td>Used by</td><td>${ops.length ? ops.map(o => esc(o.name)).join('<br>') : 'no operation in this job'}</td></tr>
-      ${t.notes ? `<tr><td>Notes</td><td>${esc(t.notes)}</td></tr>` : ''}</table>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-da="edit">✎ Edit tool…</button><button class="btn pri" data-da="ask">✦ Ask Claude about this tool</button></div>
-      <div class="hint" style="margin-top:8px">You do not have to calculate anything: the CAM sets the speed and feed from the tool and the material. Change the material in Settings and every operation is recalculated.</div>`;
-  } else det = `<h3>Pick a pocket</h3><div>Click a pocket on the left to see what the tool is for and the speed and feed the CAM will use for <b>${esc(m.n)}</b>.</div>
-      <div class="hint" style="margin-top:8px">Green = tool in the machine. Dashed = empty pocket. ⚠ = two tools claim the same pocket (fix the Pocket column in the sheet).</div>
-      <div style="margin-top:10px"><button class="btn pri" data-da="askjob">✦ Ask Claude which tools to use for this job</button></div>`;
-  el.innerHTML = tabs + `<div class="mcards">
-      <div class="mcard"><small>Machine</small><b>${esc(MACHINE.name)}</b><span>${esc(MACHINE.control)} · ${MACHINE.taper} · ${MACHINE.tools} pockets</span></div>
-      <div class="mcard"><small>Spindle</small><b>${cap} rpm cap</b><span>machine max ${MACHINE.maxRpm}</span></div>
-      <div class="mcard"><small>Material of this job</small><b>${esc(m.n)}</b><span>${m.vc > 0 ? 'milling OK' : 'not a milling job'}</span></div>
-      <div class="mcard"><small>Run mode</small><b>${esc(RUN[mode])} ${Math.round(k*100)}%</b><span>${Object.keys(RUN).map(x => `<a href="#" data-da="run" data-v="${x}" style="margin-right:6px;${x === mode ? 'font-weight:700' : ''}">${x === 'proto' ? 'Prototype' : x === 'prod' ? 'Production' : 'Full'}</a>`).join('')}</span></div>
-      <div class="mcard"><small>Fixture</small><b>${S.setup.fix ? ({vise:'Vise', clamps:(S.setup.fix.boxes || []).length + ' clamp(s)', none:'none above part'})[S.setup.fix.type] : 'not set'}</b><span>${S.setup.fix && S.setup.fix.type !== 'none' ? `top Z${fmt(fixtureTop())} · <a href="#" data-da="fix">edit</a>` : '<a href="#" data-da="fix">set up</a>'}</span></div>
-      <div class="mcard"><small>Tool sheet · tab ${esc(MACHINE.sheetTab)}</small><b>${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced.split(', ').pop()) : GD.sheetErr ? 'not reachable' : 'local library'}</b><span><a href="#" data-da="sync">⟳ sync now</a> · <a href="#" data-da="sheet">open sheet</a></span></div></div>
-    ${miss.length ? `<div class="info" style="background:#FFF3CD;border-color:#E0B000;color:#5A4500">⚠ This job uses ${miss.length} tool(s) that are not in the machine: ${miss.map(t => `T${t.num} ${esc(t.name)}`).join(', ')}. Load them, mark them Loaded in the sheet, or ask Claude for a loaded alternative.</div>` : S.ops.length ? '<div class="info">✔ Every tool this job needs is in the machine.</div>' : ''}
+    const use = {flat:'pockets, slots and the outside shape', bull:'pockets and floors that need a small corner radius', ball:'curved 3D surfaces', face:'making the top face flat', chamfer:'breaking sharp edges', drill:'drilling holes', spot:'starting a hole exactly on position', center:'starting a hole on position', tap:'cutting the thread in a hole', ream:'finishing a hole to exact size', bore:'finishing a hole to exact size'}[t.type] || 'cutting';
+    const todo = []; if (!(parseInt(t.pocket) > 0)) todo.push(`write its pocket number in the tool sheet (I am guessing pocket ${pk.n})`); if (!(t.len > 0)) todo.push('measure how long the cutting part (flutes) is'); if (!(t.stick > 0)) todo.push('measure from the tool tip to the holder nose (stick-out)'); if (!(t.holder > 0)) todo.push('measure the holder nose diameter');
+    det = `<div class="pg" style="position:static;font-size:34px;line-height:1;margin-bottom:4px">${ICON[t.type] || '🔧'}</div><h3>T${t.num} — ${fmt(t.dia)} ${u} ${esc(plainType(t))}</h3>
+      <p>${t.loaded === false ? '<b style="color:#B00">This tool is NOT in the machine right now.</b>' : `It sits in <b>pocket ${pk.n}</b>${pk.assumed ? ' (guessed from the T number)' : ''}.`} Use it for <b>${use}</b>.${t.flutes && MILLS.includes(t.type) ? ` It has ${t.flutes} cutting edges.` : ''}</p>
+      ${ok ? `<p><b>For ${esc(m.n.split('/')[0].trim().toLowerCase())}</b> the CAM runs it at <b>${Math.round(Math.min(r.rpm*k, cap))} rpm</b> and <b>${fmt(r.feed*k)} ${u}/min</b> right now (${modeWords}). You do not need to set this yourself.${r.rpm >= cap ? ` The machine is held at its ${cap} rpm limit.` : ''}</p>` : `<p><b style="color:#B00">${esc(m.n)} is not cut on this machine.</b> ${esc(m.note || '')}</p>`}
+      ${dPass ? `<p>Do not cut deeper than <b>${fmt(dPass)} ${u}</b> in one pass with it.</p>` : ''}
+      ${ops.length ? `<p>This job uses it for: ${ops.map(o => esc(o.name)).join(', ')}.</p>` : '<p>This job does not use it.</p>'}
+      ${todo.length ? `<div class="info" style="background:#FFF3CD;border-color:#E0B000;color:#5A4500;margin:6px 0"><b>Before you trust the collision check, please:</b><ul style="margin:4px 0 0 18px">${todo.map(x => `<li>${x}</li>`).join('')}</ul><div class="hint" style="margin:4px 0 0">Use a caliper, then type the numbers in the tool sheet or press Edit tool.</div></div>` : '<div class="okmsg" style="margin:6px 0">✔ Fully measured. The CAM checks the holder and shank of this tool for collisions.</div>'}
+      ${t.notes ? `<p><i>Note: ${esc(t.notes)}</i></p>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button class="btn pri" data-da="ask">✦ Explain this tool to me</button><button class="btn" data-da="edit">✎ Edit tool</button></div>
+      <details style="margin-top:8px"><summary class="hint" style="cursor:pointer;display:inline">Technical details</summary><div class="hint">Offsets H${t.hOff || t.num} / D${t.dOff || t.num} · standard ${r.rpm} rpm, ${fmt(r.feed)} ${u}/min at 100% · flutes ${t.len > 0 ? fmt(t.len) : '?'} · stick-out ${t.stick > 0 ? fmt(t.stick) : '?'} · shank Ø${t.shank > 0 ? fmt(t.shank) : fmt(t.dia)} · holder Ø${t.holder > 0 ? fmt(t.holder) : '?'}${t.fixed ? ' · speeds fixed by the sheet' : ''}</div></details>`;
+  } else det = `<h3>👋 Click a pocket</h3><p>Each box on the left is one pocket of the tool changer. Click one and I will tell you what the tool is for and how fast it runs for <b>${esc(m.n)}</b>.</p>
+      <p><span style="display:inline-block;width:12px;height:12px;background:#EAF7EC;border:1px solid #5FBF6F;border-radius:3px;vertical-align:-1px"></span> green = a tool is in the machine<br><span style="display:inline-block;width:12px;height:12px;background:#F2F3F5;border:1px dashed #999;border-radius:3px;vertical-align:-1px"></span> grey = empty pocket<br>⚠ = two tools claim the same pocket</p>
+      <div style="margin-top:10px"><button class="btn pri" data-da="askjob">✦ Which tools should I use for this job?</button></div>`;
+  const hello = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  el.innerHTML = tabs + `<div class="info" style="font-size:14px;line-height:1.5"><b>${hello}!</b> <b>${esc(MACHINE.short)}</b> is set up for <b>${esc(m.n)}</b> and runs in <b>${esc(RUN[mode])}</b> mode (${modeWords}).
+      <span class="hint" style="display:inline;margin-left:6px">Change: ${Object.keys(RUN).map(x => x === mode ? '' : `<a href="#" data-da="run" data-v="${x}">${RUN[x]}</a>`).filter(Boolean).join(' · ')}</span></div>
+    <div class="mcards">
+      <div class="mcard"><small>Machine</small><b>${esc(MACHINE.short)}</b><span>${esc(MACHINE.model)} · ${MACHINE.tools} pockets</span></div>
+      <div class="mcard"><small>Speed limit</small><b>${cap} rpm</b><span>set by the shop</span></div>
+      <div class="mcard"><small>Tools in the machine</small><b>${byPocket.size} of ${MACHINE.tools}</b><span>${shelf.length} on the shelf</span></div>
+      <div class="mcard"><small>Part held by</small><b>${S.setup.fix ? ({vise:'Vise', clamps:(S.setup.fix.boxes || []).length + ' clamp(s)', none:'nothing on top'})[S.setup.fix.type] : 'not set'}</b><span><a href="#" data-da="fix">change</a></span></div>
+      <div class="mcard"><small>Tool list</small><b>${GD.sheetSynced ? 'from the sheet' : 'on this PC'}</b><span>${GD.sheetSynced ? 'updated ' + esc(GD.sheetSynced.split(', ').pop()) : GD.sheetErr ? 'sheet not reachable' : ''} · <a href="#" data-da="sync">refresh</a></span></div>
+      <div class="mcard"><small>Need help?</small><b>Ask Claude</b><span><a href="#" data-da="askjob">which tools for this job?</a></span></div></div>
+    ${miss.length ? `<div class="info" style="background:#FFF3CD;border-color:#E0B000;color:#5A4500;font-size:13px">⚠ <b>Before you start:</b> this job needs ${miss.length} tool${miss.length > 1 ? 's that are' : ' that is'} not in the machine — ${miss.map(t => `<b>T${t.num}</b> (${fmt(t.dia)} ${u} ${esc(plainType(t))})`).join(', ')}. Load ${miss.length > 1 ? 'them' : 'it'}, then mark Loaded = yes in the tool sheet.</div>` : S.ops.length ? '<div class="okmsg" style="font-size:13px">✔ Everything this job needs is in the machine. You can go ahead.</div>' : '<div class="info" style="font-size:13px">No job is open yet. Open a drawing from the 🏠 Home screen when you are ready.</div>'}
     <div class="mdash"><div><div class="mag">${pockets}</div>
-      <div class="legend"><span><i style="background:#EAF7EC;border-color:#5FBF6F"></i>in the machine</span><span><i style="background:#F2F3F5;border-style:dashed"></i>empty pocket</span><span>⚠ pocket used twice</span></div>
-      ${shelf.length ? `<div style="margin-top:10px"><b>On the shelf (not in the machine):</b> ${shelf.map(t => `<span class="pk" data-pk="${t.id}" style="display:inline-block;min-height:0;padding:2px 8px;margin:2px 4px 0 0;background:#fff">T${t.num} Ø${fmt(t.dia)} ${esc(TT[t.type] ? TT[t.type][0] : t.type)}</span>`).join('')}</div>` : ''}
-      <div style="margin-top:10px"><button class="btn" data-da="new">＋ Add a tool</button> <span class="hint" style="display:inline">The sheet is the master list: changes made there arrive here automatically.</span></div></div>
-      <div class="mdet">${det}</div></div>`;
+      ${shelf.length ? `<div style="margin-top:10px;font-size:13px"><b>On the shelf, not in the machine:</b> ${shelf.map(t => `<span class="pk" data-pk="${t.id}" style="display:inline-block;min-height:0;padding:3px 8px;margin:3px 4px 0 0;background:#fff">${ICON[t.type] || '🔧'} T${t.num} ${fmt(t.dia)} ${esc(plainType(t))}</span>`).join('')}</div>` : ''}
+      <div style="margin-top:10px"><button class="btn" data-da="new">＋ Add a tool</button> <span class="hint" style="display:inline">The Google Sheet is the master list. Edit it there and this screen follows.</span></div></div>
+      <div class="mdet" style="font-size:13px;line-height:1.55">${det}</div></div>`;
 }
 
 /* ============================== Claude assistant ============================== */
