@@ -1,4 +1,4 @@
-<title>Gabay ng Operator sa Dynamic CAM</title>
+<title>Operator Guide sa Dynamic CAM</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
 <style>
@@ -47,122 +47,122 @@ footer{color:var(--muted);font-size:.9rem;margin-top:34px;border-top:1px solid v
 <main>
 <header>
   <p class="eyebrow">Dynamic Int'l · CNC1 · CNC2 · BA24</p>
-  <h1>Gabay ng Operator sa Dynamic CAM</h1>
-  <p class="sub">Isang beses na setup at araw-araw na hakbang, mula drawing hanggang G-code. Nakasulat para sa operator na hindi pa sanay sa CAM. Basahin isang beses, saka itabi sa tabi ng machine.</p>
+  <h1>Operator Guide sa Dynamic CAM</h1>
+  <p class="sub">One-time setup at daily steps, from drawing hanggang G-code. Para sa operator na hindi pa sanay sa CAM. Basahin once, tapos itabi sa tabi ng machine.</p>
 </header>
 
-<nav class="toc" aria-label="Nilalaman">
-  <a href="#setup"><b>1. Isang beses na setup</b>Browser, link, Google Sheet, permiso</a>
-  <a href="#araw"><b>2. Araw-araw na daloy</b>Pitong hakbang bawat trabaho</a>
-  <a href="#tools"><b>3. Tools at pockets</b>Ano ang isusulat sa sheet, paano sukatin</a>
-  <a href="#bilis"><b>4. Bilis at Run mode</b>Prototype muna, saka Production</a>
-  <a href="#check"><b>5. Bago paandarin</b>Verify, checklist, pag-load sa machine</a>
-  <a href="#claude"><b>6. Ask Claude</b>Paano magtanong at ano ang hindi dapat</a>
-  <a href="#bawal"><b>7. Mga bawal at kanino lalapit</b>Mga patakaran ng shop</a>
+<nav class="toc" aria-label="Contents">
+  <a href="#setup"><b>1. One-time setup</b>Browser, link, Google Sheet, permissions</a>
+  <a href="#araw"><b>2. Daily flow</b>7 steps per job</a>
+  <a href="#tools"><b>3. Tools at pockets</b>Ano ang isusulat sa sheet, paano i-measure</a>
+  <a href="#bilis"><b>4. Speed at Run mode</b>Prototype muna, tapos Production</a>
+  <a href="#check"><b>5. Bago mag-run</b>Verify, checklist, load sa machine</a>
+  <a href="#claude"><b>6. Ask Claude</b>Paano magtanong, ano ang hindi dapat</a>
+  <a href="#bawal"><b>7. Mga bawal at kanino lalapit</b>Rules ng shop</a>
 </nav>
 
-<h2 id="setup">1. Isang beses na setup sa PC</h2>
-<p>Gagawin ito nang isang beses lang kada PC. Kung may tumulong na sa iyo dito, laktawan at dumiretso sa Bahagi 2.</p>
+<h2 id="setup">1. One-time setup sa PC</h2>
+<p>Gagawin mo ito once lang per PC. Kung may nag-setup na para sa iyo, skip na at dumiretso sa Part 2.</p>
 <div class="steps">
-  <div class="step"><div class="n">1</div><div><h3>Buksan ang CAM sa Chrome o Edge</h3><p>Gamitin ang link na ibinigay ni Sir Noah (ang hosted na pahina, o ang address sa GitHub Pages). I-bookmark ito: pindutin ang ★ sa address bar. Palaging ganito ang pagbubukas, walang i-install.</p><p>Kapag binuksan ang CAM, lalabas ang <b>🏠 Home</b>. Doon ka laging magsisimula.</p></div></div>
-  <div class="step"><div class="n">2</div><div><h3>Piliin ang machine mo</h3><p>Sa Home, sa ilalim ng <b>Machines</b>, pindutin ang <b>CNC1</b> o <b>CNC2</b>. Ang BA24 (wire cut) ay para sa routing lang muna. Naaalala ng PC ang pinili mo.</p></div></div>
-  <div class="step"><div class="n">3</div><div><h3>Tool sheet sa Google Sheet</h3><p>Ang listahan ng tools ay nasa Google Sheet na <b>Dynamic CNC Tool Inventory - QP1620</b>. May tab na <b>CNC1</b> at <b>CNC2</b>. Humingi ng access kay Sir Noah gamit ang Gmail mo. Ang CAM ang mismong magbabasa ng sheet; wala kang ita-type sa CAM para sa tools.</p></div></div>
-  <div class="step"><div class="n">4</div><div><h3>Permiso para kay Claude (sa hosted na pahina)</h3><p>Sa unang pagpindot ng <b>✦ Ask Claude</b>, magtatanong ang browser kung papayagan ang pahina na gumamit ng Claude. Pindutin <b>Allow</b>. Kung may ibinigay na API key si Sir Noah, i-paste ito sa ✦ → <b>API key…</b>, isang beses lang.</p></div></div>
-  <div class="step"><div class="n">5</div><div><h3>Mikropono (opsyonal)</h3><p>Kung gusto mong magsalita kay Claude, pindutin ang 🎤 at payagan ang mikropono sa address bar. Gumagana sa Chrome at Edge.</p></div></div>
+  <div class="step"><div class="n">1</div><div><h3>Buksan ang CAM sa Chrome o Edge</h3><p>Gamitin ang link na binigay ni Sir Noah (ang hosted page, o ang GitHub Pages address). I-bookmark: pindutin ang ★ sa address bar. Ganito lagi ang pag-open, walang i-install.</p><p>Pag-open ng CAM, lalabas ang <b>🏠 Home</b>. Doon ka laging magsisimula.</p></div></div>
+  <div class="step"><div class="n">2</div><div><h3>Piliin ang machine mo</h3><p>Sa Home, under <b>Machines</b>, i-click ang <b>CNC1</b> o <b>CNC2</b>. Ang BA24 (wire cut) ay for routing lang muna. Maaalala ng PC ang pinili mo.</p></div></div>
+  <div class="step"><div class="n">3</div><div><h3>Tool sheet sa Google Sheet</h3><p>Ang listahan ng tools ay nasa Google Sheet na <b>Dynamic CNC Tool Inventory - QP1620</b>. May tab na <b>CNC1</b> at <b>CNC2</b>. Humingi ng access kay Sir Noah gamit ang Gmail mo. Ang CAM mismo ang magbabasa ng sheet; wala kang ita-type sa CAM para sa tools.</p></div></div>
+  <div class="step"><div class="n">4</div><div><h3>Permission para kay Claude (sa hosted page)</h3><p>Sa unang click ng <b>✦ Ask Claude</b>, magtatanong ang browser kung i-a-allow ang page na gumamit ng Claude. I-click <b>Allow</b>. Kung may binigay na API key si Sir Noah, i-paste sa ✦ → <b>API key…</b>, once lang.</p></div></div>
+  <div class="step"><div class="n">5</div><div><h3>Mic (optional)</h3><p>Kung gusto mong magsalita kay Claude, i-click ang 🎤 at i-allow ang microphone sa address bar. Gumagana sa Chrome at Edge.</p></div></div>
 </div>
-<div class="note ok"><b>Tandaan:</b> Nasa browser ng PC na ito ang mga job at setting. Gamitin palagi ang parehong PC at parehong browser para sa machine mo.</div>
+<div class="note ok"><b>Tandaan:</b> Naka-save ang jobs at settings sa browser ng PC na ito. Same PC at same browser lagi para sa machine mo.</div>
 
-<h2 id="araw">2. Araw-araw na daloy: pitong hakbang bawat trabaho</h2>
-<p>Ganito ang order sa bawat trabaho. Sinasabi rin ito ng Home screen sa berdeng kahon na <b>Next step</b>; sundin lang ang nakasulat doon.</p>
+<h2 id="araw">2. Daily flow: 7 steps bawat job</h2>
+<p>Ganito ang order sa bawat job. Sinasabi rin ito ng Home screen sa green box na <b>Next step</b>; sundin lang ang nakasulat doon.</p>
 <div class="steps">
-  <div class="step"><div class="n">1</div><div><h3>Buksan ang drawing</h3><p>I-drag ang PDF, DXF o STEP file mula sa folder papunta sa CAM window, o pindutin <b>New job from a drawing</b> sa Home, o <b>Open a Drive link</b> kung link ang ibinigay sa iyo.</p><ul><li><b>PDF na galing sa CAD</b> (karamihan ng Semitec at JTEKT): lalabas ang pagpili ng kulay ng linya. Itim ang parte; cyan ang dimensyon; pula ang centerline. Iwan ang itim na naka-check, pindutin <b>Import</b>.</li><li><b>Scan o litrato</b> (SMYPC at mga lumang print): sasabihin ng CAM na scan ito. Pindutin <b>✦ Ask Claude to read it</b>. Ibabasa ni Claude ang sukat at iguguhit ang parte, saka itatanong sa iyo ang mga hindi niya mabasa. Ikumpara sa print bago sumagot.</li></ul></div></div>
-  <div class="step"><div class="n">2</div><div><h3>Hayaan si Claude tumingin, o ikaw mismo sa Wizard</h3><p>Pagkabukas, magtatanong ang CAM: <i>Ask Claude to look at it now?</i></p><ul><li><b>OK</b>: sasabihin ni Claude kung anong parte ito, ang material, aling view ang gagamitin, kung saan ang X0 Y0, at ang mga operation sa tamang pagkakasunod. Hindi siya gagawa ng operation hangga't hindi mo sinasabi.</li><li><b>Cancel</b>: bubukas ang <b>🧭 Job Wizard</b> at ikaw ang sasagot: Drawing → Material at stock → What to cut → Review.</li></ul></div></div>
-  <div class="step"><div class="n">3</div><div><h3>Scale check sa PDF</h3><p>Ang PDF ay madalas "fit to paper", kaya mali ang laki. Sa Wizard o sa <b>Analyze ▸ Scale check</b>: pindutin ang dalawang dulo ng isang kilalang sukat (hal. 150), i-type ang 150, OK. Kapag hindi ito ginawa, mali ang laki ng parte.</p></div></div>
-  <div class="step"><div class="n">4</div><div><h3>Material, kapal, at paano nakaipit</h3><p>Piliin ang material (ALUMINUM, SUS304, 4140 soft, POM, atbp.) at kapal. <b>Ang CAM ang magkakalkula ng RPM at feed</b> mula sa tool at material. Wala kang kokompyutin at wala kang hahalawin sa preset ng tool.</p><p>Sa <b>Stock setup</b>, sabihin kung vise o clamps ang gamit at kung gaano kataas ang jaw o clamp mula sa ibabaw ng parte. Ginagamit ito sa collision check.</p></div></div>
-  <div class="step"><div class="n">5</div><div><h3>Gumawa ng operations</h3><p>Sabihin kay Claude sa ✦: <i>"Program this part with the tools in the machine"</i>, o pindutin <b>Suggest a plan</b>. Gagamit lang siya ng tools na naka-<b>Loaded = yes</b> sa sheet. Kung may kulang na tool, sasabihin niya kung ano ang ilo-load at saang pocket.</p><p>Makikita ang bawat operation sa kaliwa (Toolpath Manager). Pulang ✖ = kailangang i-regenerate; berdeng ✔ = handa.</p></div></div>
-  <div class="step"><div class="n">6</div><div><h3>Verify at Post</h3><p>Pindutin <b>◆ Verify</b>: makikita ang pagputol sa stock at ang anumang banggaan. Kapag malinis, pindutin <b>G1 Post</b>. Lalabas ang checklist; i-tick lahat bago mag-post. Para sa unang piraso, <b>Prototype</b> ang Run mode (tingnan ang Bahagi 4).</p><p>Ise-save ang file na <b>O####-PROTO.NC</b>. Ilipat sa USB, i-load sa machine.</p></div></div>
-  <div class="step"><div class="n">7</div><div><h3>Sa machine, at pagkatapos</h3><p>Unang piraso: single block, rapid override 25%, kamay sa feed hold. Kapag maayos ang unang piraso, i-tick ang <b>Done at machine</b> sa bawat operation. Magtatanong ang CAM kung lilipat sa <b>Production</b>; sagutin OK at mag-post ulit para sa susunod na mga piraso (<b>O####-PROD.NC</b>).</p></div></div>
+  <div class="step"><div class="n">1</div><div><h3>Buksan ang drawing</h3><p>I-drag ang PDF, DXF o STEP file mula sa folder papunta sa CAM window. O i-click ang <b>New job from a drawing</b> sa Home, o <b>Open a Drive link</b> kung link ang binigay sa iyo.</p><ul><li><b>PDF galing sa CAD</b> (karamihan ng Semitec at JTEKT): lalabas ang pagpili ng line colors. Black ang parte, cyan ang dimensions, red ang centerline. Iwan na naka-check ang black, i-click <b>Import</b>.</li><li><b>Scan o picture</b> (SMYPC at mga lumang print): sasabihin ng CAM na scan ito. I-click <b>✦ Ask Claude to read it</b>. Babasahin ni Claude ang sizes at iguguhit ang parte, tapos itatanong sa iyo ang hindi niya mabasa. I-compare sa print bago sumagot.</li></ul></div></div>
+  <div class="step"><div class="n">2</div><div><h3>Patingin kay Claude, o ikaw sa Wizard</h3><p>Pagka-open, magtatanong ang CAM: <i>Ask Claude to look at it now?</i></p><ul><li><b>OK</b>: sasabihin ni Claude kung anong parte ito, ang material, aling view ang gagamitin, saan ang X0 Y0, at ang operations in order. Hindi siya gagawa ng operation hangga't hindi mo sinasabi.</li><li><b>Cancel</b>: bubukas ang <b>🧭 Job Wizard</b> at ikaw ang sasagot: Drawing → Material at stock → What to cut → Review.</li></ul></div></div>
+  <div class="step"><div class="n">3</div><div><h3>Scale check sa PDF</h3><p>Madalas "fit to paper" ang PDF, kaya mali ang size. Sa Wizard o sa <b>Analyze ▸ Scale check</b>: i-click ang dalawang dulo ng kilalang dimension (hal. 150), i-type 150, OK. Pag hindi ginawa, mali ang laki ng parte.</p></div></div>
+  <div class="step"><div class="n">4</div><div><h3>Material, thickness, at paano naka-clamp</h3><p>Piliin ang material (ALUMINUM, SUS304, 4140 soft, POM, etc.) at thickness. <b>Ang CAM ang magko-compute ng RPM at feed</b> galing sa tool at material. Wala kang iko-compute at hindi mo gagamitin ang preset ng tool.</p><p>Sa <b>Stock setup</b>, sabihin kung vise o clamps ang gamit at gaano kataas ang jaw o clamp mula sa top ng parte. Gamit ito sa collision check.</p></div></div>
+  <div class="step"><div class="n">5</div><div><h3>Gumawa ng operations</h3><p>Sabihin kay Claude sa ✦: <i>"Program this part with the tools in the machine"</i>, o i-click <b>Suggest a plan</b>. Tools lang na <b>Loaded = yes</b> sa sheet ang gagamitin niya. Kung may kulang na tool, sasabihin niya kung ano ang ilo-load at saang pocket.</p><p>Makikita ang bawat operation sa left side (Toolpath Manager). Red ✖ = kailangan i-regenerate; green ✔ = ready.</p></div></div>
+  <div class="step"><div class="n">6</div><div><h3>Verify at Post</h3><p>I-click <b>◆ Verify</b>: makikita ang cutting sa stock at kung may banggaan. Pag malinis, i-click <b>G1 Post</b>. Lalabas ang checklist; i-tick lahat bago mag-post. Para sa first piece, <b>Prototype</b> ang Run mode (tingnan Part 4).</p><p>Mase-save ang file na <b>O####-PROTO.NC</b>. Ilipat sa USB, i-load sa machine.</p></div></div>
+  <div class="step"><div class="n">7</div><div><h3>Sa machine, at after</h3><p>First piece: single block, rapid override 25%, kamay sa feed hold. Pag okay ang first piece, i-tick ang <b>Done at machine</b> sa bawat operation. Magtatanong ang CAM kung lilipat sa <b>Production</b>; i-OK at mag-post ulit para sa susunod na pieces (<b>O####-PROD.NC</b>).</p></div></div>
 </div>
 
 <h2 id="tools">3. Tools at pockets: ang isusulat mo sa sheet</h2>
-<p>Ang Google Sheet ang pinagmumulan ng totoo. Kapag nagpalit ka ng tool sa machine, <b>i-edit ang sheet</b>, hindi ang CAM. Binabasa ng CAM ang sheet sa pagbukas at tuwing 10 minuto; pindutin <b>⟳ Sync</b> sa Tools tab kung gusto mo agad.</p>
+<p>Ang Google Sheet ang master list. Pag nagpalit ka ng tool sa machine, <b>i-edit ang sheet</b>, hindi ang CAM. Binabasa ng CAM ang sheet pag-open at every 10 minutes; i-click <b>⟳ Sync</b> sa Tools tab kung gusto mo agad.</p>
 <div class="wrap"><table>
-  <tr><th>Column</th><th>Isusulat</th><th>Halimbawa</th></tr>
+  <tr><th>Column</th><th>Isusulat</th><th>Example</th></tr>
   <tr><td>T</td><td>Tool number na tatawagin ng program</td><td>3</td></tr>
   <tr><td>Name</td><td>Pangalan na maiintindihan ng tao</td><td>6 FLAT ENDMILL 3FL</td></tr>
   <tr><td>Type</td><td>flat, ball, bull, face, chamfer, drill, spot, tap, ream</td><td>flat</td></tr>
   <tr><td>Dia</td><td>Diameter sa mm</td><td>6</td></tr>
-  <tr><td>Flutes</td><td>Bilang ng cutting edge</td><td>3</td></tr>
+  <tr><td>Flutes</td><td>Bilang ng cutting edges</td><td>3</td></tr>
   <tr><td>FluteLen</td><td>Haba ng cutting part (flutes), mm</td><td>20</td></tr>
-  <tr><td>Stickout</td><td>Mula dulo ng tool hanggang ilong ng holder, mm. <b>Sukatin ng caliper.</b></td><td>38</td></tr>
-  <tr><td>HolderDia</td><td>Diameter ng ilong ng holder, mm</td><td>40</td></tr>
+  <tr><td>Stickout</td><td>Mula tip ng tool hanggang nose ng holder, mm. <b>I-measure gamit caliper.</b></td><td>38</td></tr>
+  <tr><td>HolderDia</td><td>Diameter ng nose ng holder, mm</td><td>40</td></tr>
   <tr><td>ShankDia</td><td>Diameter ng shank kung iba sa cutter</td><td>6</td></tr>
-  <tr><td>H, D</td><td>Offset numbers sa control. Karaniwang pareho sa T.</td><td>3, 3</td></tr>
+  <tr><td>H, D</td><td>Offset numbers sa control. Usually same sa T.</td><td>3, 3</td></tr>
   <tr><td>Pocket</td><td>Saang pocket ng tool changer nakalagay</td><td>3</td></tr>
   <tr><td>Loaded</td><td><b>yes</b> kung nasa machine ngayon; <b>no</b> kung nasa shelf</td><td>yes</td></tr>
-  <tr><td>Fixed</td><td>Iwan na <b>no</b>. "yes" lang kung sinabi ng programmer na gamitin ang RPM/Feed sa sheet nang eksakto.</td><td>no</td></tr>
-  <tr><td>RPM, Feed</td><td>Reference lang. Kinakalkula ng CAM ayon sa material.</td><td>—</td></tr>
+  <tr><td>Fixed</td><td>Iwan na <b>no</b>. "yes" lang kung sinabi ng programmer na gamitin exactly ang RPM/Feed sa sheet.</td><td>no</td></tr>
+  <tr><td>RPM, Feed</td><td>Reference lang. Kino-compute ng CAM per material.</td><td>—</td></tr>
 </table></div>
-<div class="note warn"><b>Bakit mahalaga ang Stickout at HolderDia:</b> dito nalalaman ng CAM kung tatama ang holder sa parte o sa vise kapag malalim ang hiwa. Sa <b>🏭 Machine</b> screen, pindutin ang pocket; may dilaw na kahon na magsasabi kung ano pa ang kulang na sukat. Kapag kumpleto, berde ang kahon.</div>
-<p><b>Paano sukatin:</b> ilagay ang tool sa holder gaya ng gagamitin. Caliper mula sa dulo ng tool hanggang sa patag na ilong ng holder = Stickout. Caliper sa pinakamalapad na bahagi ng ilong ng holder = HolderDia. Isulat sa sheet, pindutin Sync.</p>
+<div class="note warn"><b>Bakit importante ang Stickout at HolderDia:</b> dito malalaman ng CAM kung tatama ang holder sa parte o sa vise pag malalim ang cut. Sa <b>🏭 Machine</b> screen, i-click ang pocket; may yellow box na magsasabi kung ano pa ang kulang na measurement. Pag kumpleto, green na.</div>
+<p><b>Paano i-measure:</b> ilagay ang tool sa holder gaya ng gagamitin. Caliper mula tip ng tool hanggang sa flat na nose ng holder = Stickout. Caliper sa pinakamalapad na part ng nose ng holder = HolderDia. Isulat sa sheet, i-click Sync.</p>
 
-<h2 id="bilis">4. Bilis at Run mode</h2>
-<p>Ang spindle ay naka-limit sa <b>6000 rpm</b> na patakaran ng shop; hindi ito lalampasan ng program kahit anong gawin mo. Ang RPM at feed ng bawat operation ay industry standard para sa tool at material, kinakalkula ng CAM.</p>
+<h2 id="bilis">4. Speed at Run mode</h2>
+<p>Naka-limit ang spindle sa <b>6000 rpm</b>, rule ng shop; hindi ito lalampasan ng program kahit anong gawin mo. Ang RPM at feed ng bawat operation ay industry standard para sa tool at material, computed ng CAM.</p>
 <div class="wrap"><table>
   <tr><th>Run mode</th><th>Kailan</th><th>Ano ang nangyayari</th></tr>
-  <tr><td><b>Prototype 60%</b></td><td>Unang piraso, bagong setup, bagong program</td><td>Mas mabagal na S at F sa program. File: <b>-PROTO.NC</b></td></tr>
-  <tr><td><b>Production 80%</b></td><td>Kapag maayos na ang unang piraso</td><td>Normal na bilis ng shop. File: <b>-PROD.NC</b></td></tr>
-  <tr><td><b>Full 100%</b></td><td>Napatunayang setup, sinabi ng programmer</td><td>Buong industry standard</td></tr>
+  <tr><td><b>Prototype 60%</b></td><td>First piece, bagong setup, bagong program</td><td>Mas mabagal na S at F sa program. File: <b>-PROTO.NC</b></td></tr>
+  <tr><td><b>Production 80%</b></td><td>Pag okay na ang first piece</td><td>Normal speed ng shop. File: <b>-PROD.NC</b></td></tr>
+  <tr><td><b>Full 100%</b></td><td>Proven setup, sabi ng programmer</td><td>Full industry standard</td></tr>
 </table></div>
-<p>Palitan ang Run mode sa toolbar (<b>Run:</b>) o sa Post dialog, saka mag-post ulit. Hindi kailangang baguhin ang operations.</p>
-<div class="note warn"><b>Kung babaan mo ang spindle override sa machine, babaan mo rin ang feed override nang ganoon din.</b> Kapag spindle lang ang binagalan, lumalaki ang kagat ng bawat ngipin at maaaring mabali ang tool, lalo na sa SUS304.</div>
+<p>Palitan ang Run mode sa toolbar (<b>Run:</b>) o sa Post dialog, tapos mag-post ulit. Hindi na kailangan baguhin ang operations.</p>
+<div class="note warn"><b>Pag binabaan mo ang spindle override sa machine, babaan mo rin ang feed override ng same percent.</b> Pag spindle lang ang binagalan, lumalaki ang kagat per tooth at puwedeng mabali ang tool, lalo na sa SUS304.</div>
 
-<h2 id="check">5. Bago paandarin ang machine</h2>
+<h2 id="check">5. Bago mag-run ng machine</h2>
 <ul class="check">
-  <li>Verify tumakbo at walang pulang collision (rapid sa material, holder, shank, vise o clamp).</li>
+  <li>Tumakbo ang Verify at walang red collision (rapid sa material, holder, shank, vise o clamp).</li>
   <li>Walang ⛔ sa checklist ng Post. Lahat ng ⚠ nabasa at naintindihan.</li>
-  <li>G54 nakaset: X/Y sa datum ng parte, <b>Z0 sa IBABAW ng tapos na parte</b>.</li>
-  <li>Tool length offsets (H) nasukat para sa tools na aktuwal na nakakabit.</li>
-  <li>Lahat ng tool ng job ay <b>Loaded = yes</b> at nasa tamang pocket. Tingnan sa 🏭 Machine: dapat berde ang banner na <i>Everything this job needs is in the machine</i>.</li>
-  <li>Stock nakaipit nang mabuti; walang clamp o indicator sa daanan ng rapid.</li>
-  <li>Run mode = Prototype para sa unang piraso.</li>
+  <li>Naka-set ang G54: X/Y sa datum ng parte, <b>Z0 sa TOP ng finished part</b>.</li>
+  <li>Na-measure ang tool length offsets (H) para sa tools na actual na nakakabit.</li>
+  <li>Lahat ng tool ng job ay <b>Loaded = yes</b> at nasa tamang pocket. Check sa 🏭 Machine: dapat green ang banner na <i>Everything this job needs is in the machine</i>.</li>
+  <li>Maayos ang clamp ng stock; walang clamp o indicator sa daanan ng rapid.</li>
+  <li>Run mode = Prototype para sa first piece.</li>
   <li>Setup sheet naka-print o nakabukas sa tabi ng machine.</li>
-  <li>Unang pagtakbo: single block, rapid override 25%, kamay sa feed hold.</li>
+  <li>First run: single block, rapid override 25%, kamay sa feed hold.</li>
 </ul>
-<p><b>Pag-load sa machine:</b> i-save ang .NC sa USB, ipasok sa control, i-load gaya ng dati. Ang program number (O####) ay nasa unang linya. Sa ngayon USB pa; darating ang pagpapadala sa LAN.</p>
+<p><b>Load sa machine:</b> i-save ang .NC sa USB, ipasok sa control, i-load gaya ng dati. Nasa first line ang program number (O####). USB pa muna ngayon; darating ang LAN transfer.</p>
 
 <h2 id="claude">6. Ask Claude: paano magtanong</h2>
-<p>Pindutin <b>✦ Ask Claude</b>. Magtanong gaya ng pagtatanong sa senior programmer, sa English o Taglish. Puwede ring 🎤.</p>
+<p>I-click <b>✦ Ask Claude</b>. Magtanong parang nagtatanong ka sa senior programmer, English o Taglish. Puwede rin 🎤.</p>
 <ul>
   <li><i>"Program this part with the tools in the machine."</i></li>
   <li><i>"Anong RPM at feed ang tama sa Ø6 carbide sa SUS304, at bakit?"</i></li>
-  <li><i>"Paano ko iipitin ang 3 mm na manipis na plate para hindi tumaas?"</i></li>
+  <li><i>"Paano i-clamp ang 3 mm thin plate para hindi tumaas?"</i></li>
   <li><i>"Ano ang ibig sabihin ng G43 H5?"</i></li>
-  <li><i>"Check my program"</i> para hanapin ang pagkakamali bago mag-post.</li>
-  <li><i>"How long for 20 pieces?"</i> para sa oras.</li>
+  <li><i>"Check my program"</i> para hanapin ang mali bago mag-post.</li>
+  <li><i>"How long for 20 pieces?"</i> para sa hours.</li>
 </ul>
-<div class="note ok">Nakikita ni Claude ang job, ang tools sa machine at ang material. Kaya niyang gumawa at magbago ng operations. <b>Hindi siya nagpo-post at hindi niya pinapaandar ang machine.</b> Ikaw pa rin ang huling titingin.</div>
-<div class="note warn">Kapag sinabi ni Claude na <i>"unclear"</i> o <i>"assumed"</i>, kumpirmahin muna sa drawing o sa programmer bago ituloy. Sinusunod niya ang sinabi mo; kung mali ang kapal na sinabi mo, mali rin ang program.</div>
+<div class="note ok">Nakikita ni Claude ang job, ang tools sa machine, at ang material. Kaya niyang gumawa at mag-edit ng operations. <b>Hindi siya nagpo-post at hindi niya pinapaandar ang machine.</b> Ikaw pa rin ang last check.</div>
+<div class="note warn">Pag sinabi ni Claude na <i>"unclear"</i> o <i>"assumed"</i>, i-confirm muna sa drawing o sa programmer bago ituloy. Sinusunod niya ang sinabi mo; kung mali ang thickness na sinabi mo, mali rin ang program.</div>
 
 <h2 id="bawal">7. Mga bawal, at kanino lalapit</h2>
 <div class="note stop">
 <ul>
-  <li>Huwag mag-post kapag may ⛔ sa checklist.</li>
-  <li>Huwag paandarin ang unang piraso sa Production o Full.</li>
-  <li>Huwag i-edit ang RPM at feed sa tool para "bilisan" o "bagalan". Gamitin ang Run mode. Kung sa tingin mo mali ang bilis, sabihin sa programmer.</li>
-  <li>Huwag baguhin ang Pocket o Loaded sa CAM lang. Palaging sa Google Sheet.</li>
+  <li>Huwag mag-post pag may ⛔ sa checklist.</li>
+  <li>Huwag i-run ang first piece sa Production o Full.</li>
+  <li>Huwag i-edit ang RPM at feed sa tool para "bilisan" o "bagalan". Gamitin ang Run mode. Kung sa tingin mo mali ang speed, sabihin sa programmer.</li>
+  <li>Huwag baguhin ang Pocket o Loaded sa CAM lang. Lagi sa Google Sheet.</li>
   <li>Huwag i-skip ang Scale check sa PDF.</li>
-  <li>Huwag paandarin ang program na may tool na hindi nasukat ang Stickout kapag ang hiwa ay mas malalim sa kalahati ng tool.</li>
+  <li>Huwag i-run ang program na may tool na hindi na-measure ang Stickout pag ang cut ay mas malalim sa kalahati ng tool.</li>
 </ul></div>
 <div class="wrap"><table>
   <tr><th>Problema</th><th>Gawin</th></tr>
-  <tr><td>"Tools: sheet not reachable" sa ibaba</td><td>Walang internet o hindi pa naka-publish ang sheet. Gagamitin ng CAM ang huling nabasa. Sabihin kay Sir Noah kung matagal.</td></tr>
-  <tr><td>Hindi nagsasalita si Claude / "not allowed"</td><td>I-reload ang pahina at pindutin Allow. O humingi ng API key.</td></tr>
-  <tr><td>Mali ang laki ng parte</td><td>Ulitin ang Scale check. Tingnan din kung mm ang units sa status bar.</td></tr>
-  <tr><td>Pulang collision sa Verify</td><td>Basahin kung alin: rapid, holder, shank, fixture. Itaas ang clearance, palitan ang tool, o ayusin ang clamp. Itanong kay Claude kung hindi malinaw.</td></tr>
-  <tr><td>Nawala ang job</td><td>Home → <b>Recent jobs</b>. Nasa parehong PC at browser ito.</td></tr>
-  <tr><td>Hindi sigurado</td><td>Itigil. Tanungin ang programmer o si Sir Noah. Mas mura ang tanong kaysa sa sirang tool o parte.</td></tr>
+  <tr><td>"Tools: sheet not reachable" sa baba</td><td>Walang internet o hindi pa naka-publish ang sheet. Gagamitin ng CAM ang huling nabasa. Sabihin kay Sir Noah kung matagal na.</td></tr>
+  <tr><td>Hindi sumasagot si Claude / "not allowed"</td><td>I-reload ang page at i-click Allow. O humingi ng API key.</td></tr>
+  <tr><td>Mali ang size ng parte</td><td>Ulitin ang Scale check. Check din kung mm ang units sa status bar.</td></tr>
+  <tr><td>Red collision sa Verify</td><td>Basahin kung alin: rapid, holder, shank, fixture. Itaas ang clearance, palitan ang tool, o ayusin ang clamp. Itanong kay Claude kung hindi malinaw.</td></tr>
+  <tr><td>Nawala ang job</td><td>Home → <b>Recent jobs</b>. Nasa same PC at browser ito.</td></tr>
+  <tr><td>Hindi sure</td><td>Stop. Tanungin ang programmer o si Sir Noah. Mas mura ang tanong kaysa sa sirang tool o parte.</td></tr>
 </table></div>
 
-<footer>Dynamic Int'l · Gabay ng Operator sa Dynamic CAM · Bersyon 1, Oktubre 2026. Ang mga tool sheet, Run mode at limit na 6000 rpm ay patakaran ng shop at puwedeng baguhin lang ng pamunuan.</footer>
+<footer>Dynamic Int'l · Operator Guide sa Dynamic CAM · Version 1, Oktubre 2026. Ang tool sheet, Run mode at 6000 rpm limit ay rules ng shop; management lang ang puwedeng magbago.</footer>
 </main>
