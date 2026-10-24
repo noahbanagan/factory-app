@@ -3094,6 +3094,8 @@ async function syncToolSheet(){
 /* ============================== Claude assistant ============================== */
 const AI = {key:'', model:'claude-opus-5-5', msgs:[], el:null, busy:false, sample:null};
 try { AI.key = localStorage.getItem('cam5.aikey') || ''; } catch(e){}
+try { const h = localStorage.getItem('cam5.aichat'); if (h) AI.msgs = JSON.parse(h); } catch(e){}
+function aiSave(){ try { const keep = AI.msgs.slice(-60); localStorage.setItem('cam5.aichat', JSON.stringify(keep)); } catch(e){} }
 // Hosted mode: when this page runs inside a Claude viewer (claude.ai test page) and no API key is set, Claude answers on the viewer's own Claude account.
 AI.sampleP = (window.claude && window.claude.use) ? claude.use('sample').then(s => (AI.sample = s)).catch(() => null) : Promise.resolve(null);
 function aiSettings(){
@@ -3128,6 +3130,7 @@ const AI_TOOLS = [
   {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole). replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
     input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
   {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
+  {name:'calc_speeds', description:'Shop speeds-and-feeds calculator for a tool in the current material (uses the shop safety factor). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
   {name:'set_material', description:'Set the job material (key from material_keys in get_job) and optionally the part thickness: stock top stays 0, bottom = -thickness.', strict:true, input_schema:{type:'object', properties:{material:{type:'string'}, thickness:{type:['number','null']}}, required:['material','thickness'], additionalProperties:false}}
 ];
 // CAD helpers for the assistant: turn a shape description into geometry items
@@ -3197,6 +3200,14 @@ async function aiRunToolNow(name, inp){
     return {ok:true, entities_added:added.length, bbox:geomBBox(), stock:S.setup.stock, chains:chainSummary(), next:'Set stock top/bottom with set_stock or set_material(thickness), then create operations with tools that have loaded=true.'};
   }
   if (name === 'clear_geometry'){ if (!inp.confirm) return {error:'Not confirmed'}; pushUndo(); S.geom.items = []; S.geom.mesh = null; S.geom.name = 'Drawn with Claude'; S.ops = []; selOps.clear(); geomChanged(); drawPaths(); drawStock(); setView('top'); return {ok:true}; }
+  if (name === 'calc_speeds'){
+    const t = inp.tool_num != null ? S.tools.find(x => x.num === inp.tool_num) : null;
+    const tool = t ? {...t} : {dia:+inp.dia || 0, type:inp.type || 'flat', flutes:inp.flutes || 2, pitch:inp.pitch || 0};
+    if (!(tool.dia > 0)) return {error:'Need tool_num or dia'};
+    const saveM = S.setup.material; if (inp.material && MATS[inp.material]) S.setup.material = inp.material;
+    const m = MATS[S.setup.material], r = calcSpeeds(tool, true); S.setup.material = saveM;
+    return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, rpm:r.rpm, feed:r.feed, plunge:r.plunge, units:S.setup.units, basis:{vc_textbook_m_min:m.vc, fz_mm_per_tooth:m.fz, safety_pct:S.setup.safety || 60, note:'RPM = Vc×1000/(π×D) at the safety factor; feed = RPM × flutes × fz (drills: fz×D×2.5 at 35% Vc; taps: pitch × RPM).'}};
+  }
   if (name === 'set_material'){
     if (!MATS[inp.material]) return {error:'Unknown material key; use one of ' + Object.keys(MATS).join(', ')};
     pushUndo(); S.setup.material = inp.material; if (inp.thickness != null && inp.thickness > 0){ S.setup.stock.top = 0; S.setup.stock.bottom = -inp.thickness; }
@@ -3205,7 +3216,14 @@ async function aiRunToolNow(name, inp){
   }
   return {error:'unknown tool'};
 }
-const AI_SYS = () => `You are the CAM and estimating assistant inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for a ${MACHINE.name} (${MACHINE.control}) vertical machining centre. The user is a BEGINNER CNC programmer. Be practical, concrete and brief; explain terms the first time you use them. Use the tools to read the job before advising, and to make changes when the user asks you to program something — then tell them what you did and what to check. Safety rules: Z0 is the top of the finished part; depths are negative; never exceed machine limits; this shop runs conservatively — stay well under the machine limits and use the app's safety factor (${S.setup.safety || 60}% of textbook speeds); prefer climb milling, depth cuts of ≤½ tool diameter in steel / ≤1× in aluminium, helix or ramp entry for pockets, spot-drill before drilling, peck (G83) for holes deeper than 3× diameter, G84 rigid tapping with feed = pitch × RPM (the app sets it). After creating operations, always suggest Backplot → Verify → Post and a first run in single block with rapid override. Units are ${S.setup.units}. For quotations use get_estimate and present the customer-facing price separately from the confidential cost build-up; label values Provided/Derived/Assumed and never invent material grade, tolerances or finishes. You are also the CAD: when the user describes a part in words (sizes, holes, slots, pockets) draw it with draw_shapes — put X0 Y0 where the user says, otherwise at the part centre; use replace=true when they describe a new part; outside profile first, then holes and pockets. After drawing, set_material (with the thickness) and set_stock, then propose the machining plan and, if the user asked you to program it, create the operations. Tool selection rule: use only tools with loaded=true (they are in the machine now, see pocket); if a needed size is not loaded, say which tool to load and which pocket, or pick the nearest loaded size and say why — never silently invent a tool. If the user asks for something the app cannot do (lathe, 4/5-axis, DWG import), say so plainly.`;
+const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer, max ${MACHINE.maxRpm} RPM). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
+You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
+Shop rules (always apply): this shop runs conservatively — the app's safety factor is ${S.setup.safety || 60}% of textbook cutting speed, stay well under machine limits; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
+CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
+Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
+Quoting: use get_estimate; present the customer price separately from the confidential cost build-up; label values Provided / Derived / Assumed; never invent material grade, tolerances or finishes. If something is outside this app (lathe programs, 4/5-axis, DWG import) say so plainly and say which shop process handles it. Units are ${S.setup.units}.`;
+// keep the request bounded: drop the oldest turns, never splitting a tool_use from its tool_result
+function aiTrim(msgs){ if (msgs.length <= 40) return msgs; let i = msgs.length - 40; while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++; return msgs.slice(i); }
 async function aiCall(messages){
   const body = {model:AI.model, max_tokens:16000, system:AI_SYS(), tools:AI_TOOLS, tool_choice:{type:'auto'}, messages, output_config:{effort:'medium'}, fallbacks:'default'};
   const r = await fetch('https://api.anthropic.com/v1/messages', {method:'POST', headers:{'content-type':'application/json', 'x-api-key':AI.key, 'anthropic-version':'2023-06-01', 'anthropic-beta':'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access':'true'}, body:JSON.stringify(body)});
@@ -3221,7 +3239,7 @@ async function aiSendHosted(){
     const i = AI.msgs.indexOf(blk); AI.msgs.splice(i < 0 ? AI.msgs.length : i, 0, {role:'assistant', content:[{type:'tool_use', name:t.name, input:inp || {}}]}); aiRender(); aiStatus(`Running ${t.name}…`);
     try { return await aiRunTool(t.name, inp || {}); } catch(e){ return {error:e.message}; } }}));
   const turns = [{role:'user', content:AI_SYS() + '\n\nAlways call get_job first to read the current job before advising or changing anything.'}];
-  for (const m of AI.msgs){
+  for (const m of aiTrim(AI.msgs)){
     if (m === blk) continue;
     if (m.role === 'user' && typeof m.content === 'string') turns.push({role:'user', content:m.content});
     else if (m.role === 'assistant'){ const t = m.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); if (t) turns.push({role:'assistant', content:t}); }
@@ -3243,7 +3261,7 @@ async function aiSend(text){
     if (!AI.key){ aiStatus('Claude is thinking… (using your Claude account)'); await aiSendHosted(); }
     else for (let turn = 0; turn < 12; turn++){
       aiStatus('Claude is thinking…');
-      const res = await aiCall(AI.msgs);
+      const res = await aiCall(aiTrim(AI.msgs));
       AI.msgs.push({role:'assistant', content:res.content});
       if (res.stop_reason === 'refusal'){ AI.msgs.push({role:'user', content:'(The request was declined by safety filters.)'}); aiRender(); break; }
       const uses = res.content.filter(b => b.type === 'tool_use');
@@ -3256,30 +3274,37 @@ async function aiSend(text){
     const last = AI.msgs[AI.msgs.length-1];
     if (AI.speak && AI.speak.checked && window.speechSynthesis && last.role === 'assistant'){ const t = last.content.filter(b => b.type === 'text').map(b => b.text).join(' ').replace(/[*`#]/g, ''); if (t){ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t.slice(0, 1500))); } }
   } catch(e){ AI.msgs.push({role:'assistant', content:[{type:'text', text:'⚠ ' + e.message + (/401|auth/i.test(e.message) ? ' — check the API key in Settings ▸ Claude assistant.' : '')}]}); }
-  finally { AI.busy = false; aiStatus(''); aiRender(); }
+  finally { AI.busy = false; aiStatus(''); aiRender(); aiSave(); }
 }
 function aiStatus(t){ const s = AI.el && AI.el.querySelector('#aiSt'); if (s) s.textContent = t; }
 function aiRender(){
   const box = AI.el && AI.el.querySelector('#aiLog'); if (!box) return;
-  const md = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
+  const md = t => {
+    let h = esc(t).replace(/```[a-z]*\n?([\s\S]*?)```/g, (_, c) => `<pre style="background:#F4F6FA;border:1px solid #D7DCE4;padding:6px;overflow:auto;font:11px Consolas,monospace;white-space:pre">${c}</pre>`);
+    h = h.replace(/^(\|.+\|)\n\|[-:| ]+\|\n((?:\|.+\|\n?)+)/gm, (_, head, body) => { const row = (r, tag) => '<tr>' + r.split('|').slice(1, -1).map(c => `<${tag} style="border:1px solid #D7DCE4;padding:2px 6px">${c.trim()}</${tag}>`).join('') + '</tr>'; return `<table style="border-collapse:collapse;margin:4px 0">${row(head, 'th')}${body.trim().split('\n').map(r => row(r, 'td')).join('')}</table>`; });
+    h = h.replace(/^### (.+)$/gm, '<div style="font-weight:bold;margin-top:4px">$1</div>').replace(/^## (.+)$/gm, '<div style="font-weight:bold;font-size:13px;margin-top:6px">$1</div>').replace(/^# (.+)$/gm, '<div style="font-weight:bold;font-size:14px;margin-top:6px">$1</div>');
+    h = h.replace(/^(?:[-*•] .+(?:\n|$))+/gm, b => '<ul style="margin:3px 0 3px 18px">' + b.trim().split('\n').map(l => `<li>${l.replace(/^[-*•] /, '')}</li>`).join('') + '</ul>');
+    h = h.replace(/^(?:\d+[.)] .+(?:\n|$))+/gm, b => '<ol style="margin:3px 0 3px 18px">' + b.trim().split('\n').map(l => `<li>${l.replace(/^\d+[.)] /, '')}</li>`).join('') + '</ol>');
+    return h.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n(?!<)/g, '<br>').replace(/(<\/(?:ul|ol|table|pre|div)>)<br>/g, '$1');
+  };
   box.innerHTML = AI.msgs.map(m => {
     if (m.role === 'user') return typeof m.content === 'string' ? `<div style="background:#E8F1FB;border-radius:6px;padding:6px 8px;margin:4px 0 4px 30px">${md(m.content)}</div>` : '';
     return m.content.map(b => b.type === 'text' ? `<div style="background:#fff;border:1px solid #D7DCE4;border-radius:6px;padding:6px 8px;margin:4px 30px 4px 0;line-height:1.45">${md(b.text)}</div>` : b.type === 'tool_use' ? `<div class="hint" style="margin-left:4px">⚙ ${esc(b.name)}${b.name === 'create_operation' ? ': ' + esc(b.input.name || b.input.type) : ''}</div>` : '').join('');
-  }).join('') || `<div class="hint">Try: "Draw a 100 × 60 plate, 10 mm aluminium, with four Ø8 holes 10 mm from each corner and a Ø30 hole in the middle, then program it with the tools in the machine" — or "Program this part: cut the outside, pocket the slot 6 deep, M8 tapped holes" — or "Why is operation 3 warning?"</div>`;
+  }).join('') || `<div class="hint">Ask like you would ask a senior programmer: "What RPM and feed for a Ø6 carbide end mill in SUS304?", "How do I hold a 3 mm thin plate without it lifting?", "What does G43 H5 do?", "Is 4140 at 50 HRC a milling job?" — or about this job: "Draw a 100 × 60 plate, 10 mm aluminium, with four Ø8 holes 10 mm from each corner and a Ø30 hole in the middle, then program it with the tools in the machine" — or "Program this part: cut the outside, pocket the slot 6 deep, M8 tapped holes" — or "Why is operation 3 warning?"</div>`;
   box.scrollTop = box.scrollHeight;
 }
 function aiPanel(){
   if (AI.el && document.body.contains(AI.el.closest('.dlg'))){ AI.el.closest('.dlg').style.zIndex = ++zTop; return; }
-  const el = document.createElement('div'); el.style.cssText = 'display:flex;flex-direction:column;height:62vh;min-height:300px';
+  const el = document.createElement('div'); el.style.cssText = 'display:flex;flex-direction:column;height:72vh;min-height:360px';
   el.innerHTML = `<div id="aiLog" style="flex:1;overflow:auto;padding:2px"></div><div id="aiSt" class="hint" style="min-height:14px;margin:4px 0"></div>
-    <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask Claude… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn" id="aiMic" title="Speak (Chrome / Edge)">🎤</button><button class="btn pri" id="aiGo">Send</button></div>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="I will describe a new part for you to draw. First tell me what you need from me: outside size, thickness, material, hole sizes and positions, slots or pockets with depths, and where X0 Y0 should be. Then wait.">Draw a part</button><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why. Use only the tools loaded in the machine.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr">Clear</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
+    <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask anything about machining or this job… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn" id="aiMic" title="Speak (Chrome / Edge)">🎤</button><button class="btn pri" id="aiGo">Send</button></div>
+    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="I will describe a new part for you to draw. First tell me what you need from me: outside size, thickness, material, hole sizes and positions, slots or pockets with depths, and where X0 Y0 should be. Then wait.">Draw a part</button><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why. Use only the tools loaded in the machine.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr" title="Start a new conversation">New chat</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
   AI.el = el;
-  dlg({title:'✦ Claude — CAM assistant', body:el, w:520, modal:false, footer:false, x:innerWidth - 540, y:70});
+  dlg({title:'✦ Claude — CAM assistant', body:el, w:600, modal:false, footer:false, x:innerWidth - 620, y:70});
   const send = () => { const i = el.querySelector('#aiIn'), t = i.value.trim(); if (!t) return; i.value = ''; aiSend(t); };
   el.querySelector('#aiGo').onclick = send;
   el.querySelector('#aiIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
-  el.querySelector('#aiClr').onclick = () => { AI.msgs = []; aiRender(); };
+  el.querySelector('#aiClr').onclick = () => { AI.msgs = []; aiRender(); aiSave(); };
   el.querySelector('#aiKey').onclick = aiSettings;
   el.querySelectorAll('[data-q]').forEach(b => b.onclick = () => aiSend(b.dataset.q));
   // voice input (Web Speech API — Chrome / Edge) and spoken replies
@@ -3309,7 +3334,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
