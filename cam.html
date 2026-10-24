@@ -230,7 +230,24 @@ const MATS = {
   bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:200, fz10:0.050, vcD:40, fr10:0.15, vcT:10, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
-const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rpmCap:6000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20}; // rpmCap = shop policy for the 2019 belt-drive spindle; maxRpm = machine capability
+// The shop's machines. Mills share the QP1620-L profile; each has its own tool magazine (its own tab in the tool sheet) and pocket map.
+const QP = {control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rpmCap:6000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20, kind:'mill'}; // rpmCap = shop policy for the 2019 belt-drive spindles; maxRpm = machine capability
+const MACHINES = {
+  cnc1:Object.assign({id:'cnc1', name:'CNC1 - Chevalier QP1620-L', short:'CNC1', model:'Chevalier QP1620-L', sheetTab:'CNC1'}, QP),
+  cnc2:Object.assign({id:'cnc2', name:'CNC2 - Chevalier QP1620-L', short:'CNC2', model:'Chevalier QP1620-L', sheetTab:'CNC2'}, QP),
+  wedm:{id:'wedm', name:'Wire cut - Mitsubishi BA24', short:'BA24', model:'Mitsubishi BA24', kind:'wedm', control:'Mitsubishi (to confirm)', post:'(wire EDM programming: coming after the control is confirmed)', travel:{x:400, y:300, z:220}, maxRpm:0, rpmCap:0, rapid:0, maxFeed:0, taper:'wire Ø0.2 / Ø0.25', tools:0, sheetTab:''}
+};
+let MACHINE = MACHINES.cnc1;
+function setMachine(id){ if (!MACHINES[id]) return; MACHINE = MACHINES[id]; S.setup.machine = id; try { localStorage.setItem('cam5.machine', id); } catch(e){} }
+function switchMachine(id){
+  if (!MACHINES[id] || id === S.setup.machine) return;
+  if (S.tools && S.tools.length) saveTools();
+  setMachine(id);
+  if (MACHINE.kind === 'mill'){ S.setup.maxRpm = Math.min(S.setup.maxRpm || MACHINE.rpmCap, MACHINE.rpmCap); loadTools(); S.ops.forEach(o => { const t = S.tools.find(x => x.num === (toolOf(o) || {}).num); if (t) o.toolId = t.id; o.dirty = true; }); if (GD.sheet || GD.csv) syncToolSheet(true); }
+  else { S.tools = []; }
+  autosave(); renderMgr(); renderTbar(); updStatus(); updTitle(); renderMenu();
+  prompt_(`Machine: ${MACHINE.name}`);
+}
 const TT = {flat:['Flat endmill','▮'], bull:['Bull endmill','▮'], ball:['Ball endmill','◖'], face:['Face mill','▬'], chamfer:['Chamfer mill','▼'],
   drill:['Drill','⇣'], spot:['Spot drill','▽'], center:['Center drill','▿'], tap:['Tap RH','⌇'], ream:['Reamer','┃'], bore:['Boring bar','┣']};
 const MILLS = ['flat', 'bull', 'ball', 'face', 'chamfer'];
@@ -262,7 +279,7 @@ function defTools(u){
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, aiOnOpen:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', machine:'cnc1', beginner:true, aiOnOpen:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     fix:{type:'vise', top:rnd(-15*k), jaw:rnd(15*k), boxes:[]},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
@@ -1943,7 +1960,7 @@ function propsDlg(tab = 'files'){
           ${fRow(fix, 'top', `Highest point of the fixture, Z (${u}; part top = 0, below = negative)`)}${fix.type === 'vise' ? fRow(fix, 'jaw', `Jaw thickness (${u})`) : ''}
           ${fix.type === 'clamps' ? `<table class="grid"><tr><th>Clamp</th><th>X from</th><th>X to</th><th>Y from</th><th>Y to</th><th>Top Z</th><th></th></tr>${fix.boxes.map((b, i) => `<tr><td>${i + 1}</td>${['x0', 'x1', 'y0', 'y1', 'z1'].map(k => `<td><input type="number" step="any" data-fb="${i}" data-f="${k}" value="${b[k]}" style="width:62px"></td>`).join('')}<td><button class="btn" data-fbdel="${i}">✕</button></td></tr>`).join('')}</table><button class="btn" data-fbadd style="margin-top:4px">+ Add clamp</button>` : ''}
           <div class="hint">The rapids and every move are checked against the vise jaws or the clamps, and the clearance plane must be above them. Measure the real jaw or clamp height at the machine.</div></fieldset>${fRow(box, 'show', 'Display stock', 'c')}`,
-      machine:`<fieldset><legend>${MACHINE.name} limits</legend>${fRow(st, 'maxRpm', 'Spindle speed cap (RPM)', 'i')}<div class="hint">Programs never ask for more than this. Shop policy: ${MACHINE.rpmCap} on the ${MACHINE.taper} belt-drive spindle (machine capability ${MACHINE.maxRpm}). Feeds for small cutters in aluminium scale down with the cap, chip load stays correct.</div>${fRow(st, 'maxFeed', `Max feed rate (${u}/min)`)}${fRow(st, 'rapid', `Rapid rate (${u}/min)`)}${fRow(st.travel, 'x', `X travel (${u})`)}${fRow(st.travel, 'y', `Y travel (${u})`)}${fRow(st.travel, 'z', `Z travel (${u})`)}</fieldset><div class="note">Defaults are dealer figures for a QP1620-L (${MACHINE.taper}, ${MACHINE.tools}-tool). Check them against your machine's plate and parameters.</div>`,
+      machine:`<fieldset><legend>Machine for this job</legend>${fRow(st, 'machine', 'Machine', 's', Object.values(MACHINES).map(m => [m.id, m.name]))}<div class="hint">CNC1 and CNC2 are the same model but each has its own tools and pockets (its own tab in the tool sheet). The wire cut is listed for job routing; its programming comes after the control is confirmed.</div></fieldset><fieldset><legend>${MACHINE.name} limits</legend>${fRow(st, 'maxRpm', 'Spindle speed cap (RPM)', 'i')}<div class="hint">Programs never ask for more than this. Shop policy: ${MACHINE.rpmCap} on the ${MACHINE.taper} belt-drive spindle (machine capability ${MACHINE.maxRpm}). Feeds for small cutters in aluminium scale down with the cap, chip load stays correct.</div>${fRow(st, 'maxFeed', `Max feed rate (${u}/min)`)}${fRow(st, 'rapid', `Rapid rate (${u}/min)`)}${fRow(st.travel, 'x', `X travel (${u})`)}${fRow(st.travel, 'y', `Y travel (${u})`)}${fRow(st.travel, 'z', `Z travel (${u})`)}</fieldset><div class="note">Defaults are dealer figures for a QP1620-L (${MACHINE.taper}, ${MACHINE.tools}-tool). Check them against your machine's plate and parameters.</div>`,
       post:`<fieldset><legend>Post (${MACHINE.control})</legend>${fRow(st.post, 'short', 'Short codes (G0 G1 M3 M6) instead of G00 M03', 'c')}${fRow(st.post, 'tcFmt', 'Tool change', 's', SEL(['T# M6', 'T1 M6'], ['M6 T#', 'M6 T1']))}${fRow(st.post, 'nextTool', 'Pre-stage next tool after M6', 'c')}${fRow(st.post, 'home', 'Z home', 's', SEL('G91 G28 Z0.', 'G28 G91 Z0.', 'G53 Z0.'))}${fRow(st.post, 'endY', 'Bring table forward at end (G28 Y0.)', 'c')}${fRow(st.post, 'm01', 'M1 optional stop between tools', 'c')}${fRow(st.post, 'arcs', 'Output arcs G2/G3 (incl. helical)', 'c')}${fRow(st.post, 'rigid', 'Rigid tapping M29', 'c')}${fRow(st.post, 'toolCmt', 'Tool comment at each tool change', 'c')}</fieldset>`
     })[tab];
     el.querySelectorAll('fieldset').forEach(f => { const h = f.innerHTML; bindFields(f, h.includes('data-k="X"') || h.includes('data-k="ox"') || h.includes('data-k="margin"') ? box : h.includes('data-k="type"') && h.includes('data-k="top"') ? fix : h.includes('lineNums') || h.includes('short') ? st.post : h.includes('data-k="x"') ? st.travel : st, k => { if (k === 'type' && fix.type !== undefined && h.includes('data-k="top"')) render(); }); });
@@ -1960,7 +1977,8 @@ function propsDlg(tab = 'files'){
   dlg({title:'Machine Group Properties', body:el, w:580, ok:close => {
     pushUndo();
     st.stock = {x0:rnd(box.ox - box.X/2), x1:rnd(box.ox + box.X/2), y0:rnd(box.oy - box.Y/2), y1:rnd(box.oy + box.Y/2), top:box.oz, bottom:rnd(box.oz - box.Z), margin:box.margin, show:box.show}; st.fix = fix;
-    const matChanged = st.material !== S.setup.material; Object.assign(S.setup, st); S.ops.forEach(o => o.dirty = true);
+    const matChanged = st.material !== S.setup.material, newMachine = st.machine; delete st.machine; Object.assign(S.setup, st); S.ops.forEach(o => o.dirty = true);
+    if (newMachine && newMachine !== S.setup.machine) switchMachine(newMachine);
     if (matChanged){ const n = applyMaterialSpeeds(); if (n) prompt_(`Material changed: speeds and feeds of ${n} operation(s) recalculated for ${MATS[st.material].n}.`); }
     close(); drawStock(); renderMgr(); updTitle(); renderMenu();
   }});
@@ -2011,7 +2029,9 @@ function toolDlg(tool, onDone){
     saveTools(); close(); renderMgr(); onDone && onDone(tool || W);
   }});
 }
-function saveTools(){ try { localStorage.setItem('cam5.tools.' + S.setup.units, JSON.stringify(S.tools)); } catch(e){} }
+const toolsKey = () => 'cam5.tools.' + S.setup.units + '.' + (S.setup.machine || 'cnc1');
+function saveTools(){ try { localStorage.setItem(toolsKey(), JSON.stringify(S.tools)); } catch(e){} }
+function loadTools(){ try { const t = localStorage.getItem(toolsKey()) || localStorage.getItem('cam5.tools.' + S.setup.units); if (t){ S.tools = JSON.parse(t); return true; } } catch(e){} S.tools = defTools(S.setup.units); return false; }
 
 /* ---------- analyze / xform ---------- */
 function analyzeDlg(it){
@@ -2689,7 +2709,7 @@ function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.fil
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
-  S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {}); S.setup.runPct = Object.assign(base.runPct, d.setup.runPct || {}); S.setup.fix = Object.assign(base.fix, d.setup.fix || {}); if (!Array.isArray(S.setup.fix.boxes)) S.setup.fix.boxes = []; if (!S.setup.run) S.setup.run = 'proto';
+  S.setup = Object.assign(base, d.setup); if (MACHINES[S.setup.machine]) MACHINE = MACHINES[S.setup.machine]; S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {}); S.setup.runPct = Object.assign(base.runPct, d.setup.runPct || {}); S.setup.fix = Object.assign(base.fix, d.setup.fix || {}); if (!Array.isArray(S.setup.fix.boxes)) S.setup.fix.boxes = []; if (!S.setup.run) S.setup.run = 'proto';
   S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {}; S.drive = d.drive || null;
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
@@ -2923,7 +2943,7 @@ const TBAR = [
   ['⤢', 'Fit (Alt+F1)', () => setView(S.gview || 'top')], ['＋', 'Zoom in (PgUp)', () => zoom(0.8)], ['－', 'Un-zoom (PgDn)', () => zoom(1.25)], ['<small>T</small>', 'Top view (Alt+1)', () => setView('top')], ['<small>F</small>', 'Front view (Alt+2)', () => setView('front')], ['<small>R</small>', 'Right view (Alt+5)', () => setView('right')], ['<small>ISO</small>', 'Isometric (Alt+7)', () => setView('iso')], ['◐', 'Toggle shading (Alt+S)', () => { shade = !shade; drawGeom(); }], '|',
   ['·', 'Create point', () => startCreate('point')], ['╱', 'Create line endpoints', () => startCreate('line')], ['◯', 'Create circle center point', () => startCreate('circle')], ['◠', 'Create arc polar', () => startCreate('arc')], ['▭', 'Create rectangle', () => startCreate('rect')], ['⁘', 'Create bolt circle', () => startCreate('bolt')], ['🗑', 'Delete selected entities (Del)', delSel], ['⇥', 'Xform translate', () => xformDlg('translate')], ['⟲', 'Xform rotate', () => xformDlg('rotate')], ['⇋', 'Xform mirror', () => xformDlg('mirror')], ['🔍', 'Analyze entity', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], '|',
   ['⌒', 'Contour toolpath', () => newOp('contour')], ['⊙', 'Drill toolpath', () => newOp('drill')], ['▣', 'Pocket toolpath', () => newOp('pocket')], ['▤', 'Face toolpath', () => newOp('face')], ['◎', 'Circle mill toolpath', () => newOp('cmill')], ['⛰', 'Surface rough parallel', () => newOp('srough')], ['〰', 'Surface finish parallel', () => newOp('sfinish')], ['≋', 'Surface finish contour (waterline)', () => newOp('scont')], '|',
-  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['⏱ Hours', 'Time estimate: realistic hours for this job from the toolpaths, setups and operator', estimateDlg], ['🏭 Machine', 'Machine dashboard: what is in each pocket, speeds for this material, run mode', () => machineDash()]
+  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['⏱ Hours', 'Time estimate: realistic hours for this job from the toolpaths, setups and operator', estimateDlg], ['🏠 Home', 'Start screen: next step, jobs, machines, help', () => homeDlg()], ['🏭 Machine', 'Machine dashboard: what is in each pocket, speeds for this material, run mode', () => machineDash()]
 ];
 function renderTbar(){
   $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('') + `<span class="tsep"></span><label class="tb" title="Run mode: how fast the posted program runs. Prototype for the first part, Production after it is proven." style="display:inline-flex;align-items:center;gap:4px">Run: <select id="tbRun" style="font:inherit">${Object.entries(RUN).map(([k, v]) => `<option value="${k}"${(S.setup.run || 'proto') === k ? ' selected' : ''}>${v} ${Math.round(runK(k)*100)}%</option>`).join('')}</select></label>`;
@@ -2933,11 +2953,11 @@ function renderTbar(){
 function updStatus(){
   const lv = Object.keys(S.geom.levels);
   $('#sbar').innerHTML = `<span class="sb">3D</span><span class="sb" id="sbGv">Gview: ${({top:'TOP', front:'FRONT', right:'RIGHT', iso:'ISO'})[S.gview] || 'TOP'}</span><span class="sb">Planes: TOP</span><span class="sb">Z: 0.</span>
-    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb" title="Run mode (speeds and feeds in the posted program)">▶ ${esc(runLabel())}</span><span class="sb">${selEnt.size} selected</span><span class="sb" title="${esc(GD.sheetErr || (GD.sheetVia ? 'via ' + GD.sheetVia : ''))}">${GD.sheetSynced ? '🛠 Tools: sheet ' + esc(GD.sheetSynced.split(', ').pop() || GD.sheetSynced) : GD.sheetErr ? '🛠 Tools: sheet not reachable' : '🛠 Tools: local library'}</span><span class="sb" id="sbXY"></span>`;
+    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb" title="Machine for this job">🏭 ${esc(MACHINE.short || MACHINE.name)}</span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb" title="Run mode (speeds and feeds in the posted program)">▶ ${esc(runLabel())}</span><span class="sb">${selEnt.size} selected</span><span class="sb" title="${esc(GD.sheetErr || (GD.sheetVia ? 'via ' + GD.sheetVia : ''))}">${GD.sheetSynced ? '🛠 Tools: sheet ' + esc(GD.sheetSynced.split(', ').pop() || GD.sheetSynced) : GD.sheetErr ? '🛠 Tools: sheet not reachable' : '🛠 Tools: local library'}</span><span class="sb" id="sbXY"></span>`;
   $('#sbLv').onchange = e => { S.geom.main = e.target.value; renderMgr(); };
   $('#sbGv').onclick = e => popMenu(e.clientX, e.clientY - 120, [['Top', 'Alt+1', () => setView('top')], ['Front', 'Alt+2', () => setView('front')], ['Right', 'Alt+5', () => setView('right')], ['Isometric', 'Alt+7', () => setView('iso')]]);
 }
-function updTitle(){ $('#ttl').textContent = ` - ${MACHINE.name} - [${S.file}] - O${String(S.setup.progNum).padStart(4, '0')} (${S.setup.progName})`; document.title = `${S.file} - Dynamic Intl CAM`; }
+function updTitle(){ $('#ttl').textContent = ` - ${MACHINE.short || MACHINE.name} - [${S.file}] - O${String(S.setup.progNum).padStart(4, '0')} (${S.setup.progName})`; document.title = `${S.file} - Dynamic Intl CAM`; }
 function helpDlg(){
   msg('Keyboard & mouse', `<table class="grid">${[['Left click','Select entity / chain / pick point'],['Left drag','Window select'],['Middle drag','Rotate'],['Right drag','Pan (also arrow keys)'],['Wheel','Zoom at cursor'],['Alt+F1','Fit'],['PgUp / PgDn','Zoom in / out'],['Alt+1 / 2 / 5 / 7','Top / Front / Right / Iso'],['Alt+T','Toggle toolpath display'],['Alt+S','Toggle shading'],['Alt+O','Toggle Toolpath Manager'],['F9','Toggle axes'],['Del','Delete selected entities'],['Ctrl+Z','Undo'],['Ctrl+S / Ctrl+O','Save / open project'],['Enter','Apply (ribbon bar / dialog)'],['Esc','Cancel the current function']].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('')}</table>`);
 }
@@ -3108,13 +3128,14 @@ function estCsv(E, r){
 
 /* ============================== Google Drive job queue + tool sheet ============================== */
 // RFQ intake files every RFQ into "Dynamic RFQ Drawings" as "<Est no> - <Customer> - <Subject>" with the drawings inside.
-const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', csv:'', autoSync:true, token:'', exp:0, user:''};
+const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', csv:'', csvBy:{}, autoSync:true, token:'', exp:0, user:''};
 try { Object.assign(GD, JSON.parse(localStorage.getItem('cam5.google') || '{}'), {token:'', exp:0}); } catch(e){}
-const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, autoSync:GD.autoSync})); } catch(e){} };
+const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csvBy:GD.csvBy, autoSync:GD.autoSync})); } catch(e){} };
 function gdSettings(){
-  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, autoSync:GD.autoSync !== false}, el = document.createElement('div');
-  el.innerHTML = `<fieldset><legend>Tool inventory sheet — direct link, no sign-in</legend><div class="info">The operator edits tool sizes in the Google Sheet; the CAM reads it on start-up and every 10 minutes (or ⟳ Sync in the Tools tab). One-time, in the sheet: <b>File ▸ Share ▸ Publish to web</b> → choose the <b>Tools</b> tab and <b>Comma-separated values (.csv)</b> → Publish → copy the link here. Google refreshes a published link within about 5 minutes of an edit.</div>
-    <div class="fr"><span>Published CSV link</span><input type="text" data-k="csv" value="${esc(W.csv)}" style="width:320px" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv"></div>
+  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csv2:(GD.csvBy || {}).cnc2 || '', autoSync:GD.autoSync !== false}, el = document.createElement('div');
+  el.innerHTML = `<fieldset><legend>Tool inventory sheet — direct link, no sign-in</legend><div class="info">One tab per machine: <b>CNC1</b> and <b>CNC2</b>. The operator edits tool sizes in the Google Sheet; the CAM reads it on start-up and every 10 minutes (or ⟳ Sync in the Tools tab). One-time, in the sheet: <b>File ▸ Share ▸ Publish to web</b> → choose the <b>CNC1</b> tab and <b>Comma-separated values (.csv)</b> → Publish → copy the link here; repeat for <b>CNC2</b>. Google refreshes a published link within about 5 minutes of an edit.</div>
+    <div class="fr"><span>CNC1 published CSV link</span><input type="text" data-k="csv" value="${esc(W.csv)}" style="width:320px" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv  (tab CNC1)"></div>
+    <div class="fr"><span>CNC2 published CSV link</span><input type="text" data-k="csv2" value="${esc((GD.csvBy || {}).cnc2 || '')}" style="width:320px" placeholder="same sheet, tab CNC2"></div>
     <div class="fr"><span>Auto-sync</span><label><input type="checkbox" data-k="autoSync"${W.autoSync ? ' checked' : ''}> read the sheet on start-up and every 10 minutes</label></div>
     <div class="hint">No published link? If the sheet is shared as "Anyone with the link can view", the CAM reads it directly from the sheet ID below. Otherwise it falls back to Google sign-in.</div></fieldset>
     <fieldset style="margin-top:8px"><legend>Drive job queue & save-to-Drive (needs sign-in)</legend><div class="info">One-time setup (10 min, by Noah): Google Cloud Console → APIs & Services → enable <b>Google Drive API</b> and <b>Google Sheets API</b> → Credentials → <b>OAuth client ID (Web application)</b> → add this page's address (e.g. <code>${esc(location.origin)}</code>) under <i>Authorised JavaScript origins</i>. Paste the client ID below. Each operator then signs in with their own Google account; the CAM only sees the RFQ drawings folder and the tool sheet.${location.protocol === 'file:' ? '<br><b>Note:</b> Google sign-in does not work from a file opened off the disk — open the CAM from the web address of the production app.' : ''}</div>
@@ -3124,7 +3145,7 @@ function gdSettings(){
     <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Fixed (yes = use the sheet's RPM/Feed as-is; otherwise the CAM computes them per material), ShankDia, HolderDia, Stickout (tip to holder nose — measured at the machine, used for collision checks), Notes.</div></div>
     <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div></fieldset>`;
   bindFields(el, W);
-  dlg({title:'Google Drive & Sheets connection', body:el, w:640, ok:close => { Object.assign(GD, W); gdSave(); close(); if (GD.csv || GD.sheet) syncToolSheet(true); }});
+  dlg({title:'Google Drive & Sheets connection', body:el, w:640, ok:close => { const {csv2, ...rest} = W; Object.assign(GD, rest); GD.csvBy = Object.assign({}, GD.csvBy, {cnc1:W.csv, cnc2:csv2}); gdSave(); close(); if (GD.csv || GD.sheet) syncToolSheet(true); }});
 }
 function loadGIS(){ return new Promise((res, rej) => { if (window.google && google.accounts) return res(); const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.onload = res; sc.onerror = () => rej(new Error('Could not load Google sign-in (needs internet).')); document.head.appendChild(sc); }); }
 async function gdToken(){
@@ -3208,17 +3229,18 @@ function parseCSV(text){
 }
 // Tool rows: published CSV link (no sign-in) → public sheet by ID (no sign-in) → Sheets API with sign-in
 async function toolSheetRows(quiet){
-  const tabName = (GD.sheetRange.includes('!') ? GD.sheetRange.split('!')[0] : 'Tools').replace(/^'|'$/g, '');
+  const tabName = MACHINE.sheetTab || (GD.sheetRange.includes('!') ? GD.sheetRange.split('!')[0] : 'CNC1').replace(/^'|'$/g, ''), range = `${tabName}!${GD.sheetRange.includes('!') ? GD.sheetRange.split('!')[1] : GD.sheetRange}`;
   const tryCsv = async url => { const r = await fetch(url, {cache:'no-store'}); if (!r.ok) throw new Error(`HTTP ${r.status}`); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('not CSV'); return parseCSV(t); };
-  if (GD.csv) return {rows:await tryCsv(GD.csv), via:'published link'};
+  const csvLink = (GD.csvBy || {})[MACHINE.id] || (MACHINE.id === 'cnc1' ? GD.csv : ''); if (csvLink) return {rows:await tryCsv(csvLink), via:'published link'};
   if (GD.sheet){
     try { return {rows:await tryCsv(`https://docs.google.com/spreadsheets/d/${GD.sheet}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`), via:'shared sheet'}; } catch(e){ if (quiet && !GD.clientId) throw new Error('Sheet is not public and no sign-in is set up.'); }
-    const r = await gdFetch(`https://sheets.googleapis.com/v4/spreadsheets/${GD.sheet}/values/${encodeURIComponent(GD.sheetRange)}`);
+    const r = await gdFetch(`https://sheets.googleapis.com/v4/spreadsheets/${GD.sheet}/values/${encodeURIComponent(range)}`);
     return {rows:(await r.json()).values || [], via:'Google sign-in'};
   }
   throw new Error('No tool sheet set.');
 }
 async function syncToolSheet(quiet){
+  if (MACHINE.kind !== 'mill'){ if (!quiet) msg('Tool sheet', `${MACHINE.name} has no tool magazine. Switch to CNC1 or CNC2 for the tool list.`); return; }
   if (!GD.sheet && !GD.csv){ if (!quiet) gdSettings(); return; }
   if (!quiet) busy(true, 'Reading tool sheet…');
   try {
@@ -3250,7 +3272,49 @@ async function syncToolSheet(quiet){
   } catch(e){ GD.sheetErr = e.message; updStatus(); if (!quiet) alert(e.message); else console.warn('tool sheet auto-sync:', e.message); } finally { if (!quiet) busy(false); }
 }
 // auto-sync: on start-up and every 10 minutes, without sign-in prompts
-if (GD.autoSync !== false && (GD.csv || GD.sheet)){ setTimeout(() => syncToolSheet(true), 1500); setInterval(() => syncToolSheet(true), 10*60*1000); }
+if (GD.autoSync !== false && (GD.csv || GD.sheet)){ setTimeout(() => { if (MACHINE.kind === 'mill') syncToolSheet(true); }, 1500); setInterval(() => { if (MACHINE.kind === 'mill') syncToolSheet(true); }, 10*60*1000); }
+
+/* ============================== home screen (operators) ============================== */
+// Plain-language start screen: what to do next, which machine, which jobs. The Mastercam-style window stays behind it for the programmer.
+let homeEl = null;
+function homeDlg(){
+  if (homeEl && document.body.contains(homeEl.closest('.dlg'))){ homeEl.closest('.dlg').style.zIndex = ++zTop; renderHome(); return; }
+  const el = document.createElement('div'); el.style.cssText = 'width:min(980px,94vw)'; homeEl = el;
+  dlg({title:'🏠 Dynamic Intl CAM — Home', body:el, w:1000, modal:false, footer:false, x:Math.max(20, (innerWidth - 1000)/2), y:60, onClose:() => { homeEl = null; }});
+  el.addEventListener('click', e => {
+    const a = e.target.closest('[data-h]'); if (!a) return; const act = a.dataset.h, close = () => { const d = el.closest('.dlg'); if (d) d.querySelector('.dx').click(); };
+    if (act === 'open'){ close(); pick('open'); }
+    if (act === 'wizard'){ close(); wizard(); }
+    if (act === 'demo'){ close(); demo(); }
+    if (act === 'queue'){ close(); jobQueue(); }
+    if (act === 'recent'){ close(); recentDlg(); }
+    if (act === 'mach'){ switchMachine(a.dataset.v); close(); machineDash(); }
+    if (act === 'ai'){ close(); aiPanel(); }
+    if (act === 'hours'){ close(); estimateDlg(); }
+    if (act === 'post'){ close(); postDlg(); }
+    if (act === 'verify'){ close(); verifyDlg(); }
+    if (act === 'basics'){ close(); helpDlg('basics'); }
+    if (act === 'adv'){ close(); }
+  });
+  renderHome();
+}
+function renderHome(){
+  const el = homeEl; if (!el) return;
+  const hasJob = S.geom.items.length || S.geom.mesh, nOps = S.ops.length, done = S.ops.filter(o => o.done).length, posted = Object.keys(S.posted || {}).length;
+  const stage = !hasJob ? 0 : !nOps ? 1 : S.ops.some(o => o.dirty || !o.moves) ? 2 : !posted ? 3 : done < nOps ? 4 : 5;
+  const STAGES = ['Drawing', 'Material & holding', 'Plan & program', 'Check & post', 'Run at the machine', 'Done'];
+  const next = [['open', '📂 Open the customer drawing', 'PDF, DXF or STEP. Drag it onto the window, or click here.'], ['wizard', '🧭 Material, stock and what to cut', 'The wizard asks the questions in order and makes the operations.'], ['ai', '✦ Let Claude plan and program it', 'Claude proposes tools from this machine and builds the operations. You confirm.'], ['verify', '◆ Check for collisions, then post', 'Verify the stock and fixture, tick the checklist, post in Prototype mode.'], ['post', '▶ Run the first piece, then switch to Production', 'Tick each operation done at the machine; post again at 80% for the rest.'], ['hours', '✔ Job done — record the hours', 'Compare the estimate with the real time.']][stage];
+  const tile = (h, icon, title, sub, v = '') => `<div class="pk" data-h="${h}" ${v ? `data-v="${v}"` : ''} style="min-height:84px;background:#fff"><div class="pg">${icon}</div><div class="pt" style="font-size:13px;white-space:normal">${title}</div><div class="ps" style="white-space:normal">${sub}</div></div>`;
+  el.innerHTML = `<div class="info" style="display:flex;gap:10px;align-items:center"><div style="flex:1"><b>Current job:</b> ${hasJob ? esc(S.file) : 'none open'} · machine <b>${esc(MACHINE.short || MACHINE.name)}</b> · ${esc(MATS[S.setup.material].n)} · run mode ${esc(runLabel())}</div>
+      <div class="hint" style="width:auto;margin:0">${STAGES.map((st, i) => `<span style="padding:2px 6px;border-radius:10px;margin-left:3px;background:${i === stage ? '#2458B0' : i < stage ? '#5FBF6F' : '#E6E9EF'};color:${i <= stage ? '#fff' : '#5A6472'}">${i + 1}. ${st}</span>`).join('')}</div></div>
+    <div class="pk loaded" data-h="${next[0]}" style="min-height:0;padding:10px 12px;margin-bottom:10px;border-width:2px"><div class="pt" style="font-size:15px;white-space:normal">Next step: ${next[1]}</div><div class="ps" style="white-space:normal;font-size:12px">${next[2]}</div></div>
+    <div style="font-weight:700;margin:6px 0 4px">Jobs</div>
+    <div class="mag" style="grid-template-columns:repeat(4,1fr)">${tile('open', '📂', 'New job from a drawing', 'Open PDF / DXF / STEP from the PC')}${tile('queue', '☁', 'Jobs waiting (Drive)', 'RFQ drawings archived by the intake agent')}${tile('recent', '🕒', 'Recent jobs', 'Continue a job from this PC')}${tile('demo', '🧪', 'Practice plate', 'A sample job to learn with')}</div>
+    <div style="font-weight:700;margin:12px 0 4px">Machines</div>
+    <div class="mag" style="grid-template-columns:repeat(3,1fr)">${Object.values(MACHINES).map(mm => tile('mach', mm.kind === 'mill' ? '🏭' : '⚡', `${esc(mm.name)}${mm.id === MACHINE.id ? ' <span style="color:#1E9E2E">● this job</span>' : ''}`, mm.kind === 'mill' ? `${mm.tools} pockets · ${esc(mm.control)} · tools, speeds, collisions` : 'wire cut · routing only for now', mm.id)).join('')}</div>
+    <div style="font-weight:700;margin:12px 0 4px">Help</div>
+    <div class="mag" style="grid-template-columns:repeat(4,1fr)">${tile('ai', '✦', 'Ask Claude', 'Any machining question, in plain words. Voice works.')}${tile('hours', '⏱', 'Hours for this job', 'Realistic time: setups, cutting, operator')}${tile('basics', '📘', 'Basics', 'What the words mean: Z0, offsets, climb, lead-in')}${tile('adv', '🛠', 'Advanced (Mastercam-style window)', 'For the programmer: full Toolpath Manager')}</div>`;
+}
 
 /* ============================== machine dashboard ============================== */
 // One screen for the operator: what is in each pocket, what the job needs, and the speeds the CAM will use for this material — in plain words.
@@ -3265,7 +3329,7 @@ function plainTool(t){
 function machineDash(){
   if (dashEl && document.body.contains(dashEl.closest('.dlg'))){ dashEl.closest('.dlg').style.zIndex = ++zTop; renderDash(); return; }
   const el = document.createElement('div'); el.style.cssText = 'width:min(1180px,94vw);max-height:80vh;overflow:auto'; dashEl = el;
-  dlg({title:`🏭 ${MACHINE.name} — machine dashboard`, body:el, w:1200, modal:false, footer:false, x:40, y:60, onClose:() => { dashEl = null; }});
+  dlg({title:`🏭 Machines`, body:el, w:1200, modal:false, footer:false, x:40, y:60, onClose:() => { dashEl = null; }});
   el.addEventListener('click', e => {
     const pk = e.target.closest('[data-pk]'); if (pk){ dashSel = pk.dataset.pk; renderDash(); return; }
     const a = e.target.closest('[data-da]'); if (!a) return; const t = S.tools.find(x => x.id === dashSel);
@@ -3277,11 +3341,26 @@ function machineDash(){
     if (a.dataset.da === 'sheet') window.open(`https://docs.google.com/spreadsheets/d/${GD.sheet}/edit`, '_blank');
     if (a.dataset.da === 'new'){ const t2 = mkTool({num:Math.max(0, ...S.tools.map(x => x.num)) + 1}); toolDlg(t2, () => { S.tools.push(t2); saveTools(); renderMgr(); renderDash(); }); }
     if (a.dataset.da === 'run'){ S.setup.run = a.dataset.v; autosave(); renderTbar(); updStatus(); renderMgr(); renderDash(); }
+    if (a.dataset.da === 'mach'){ switchMachine(a.dataset.v); dashSel = null; renderDash(); }
+    if (a.dataset.da === 'home'){ homeDlg(); }
   });
   renderDash();
 }
 function renderDash(){
   const el = dashEl; if (!el) return;
+  const tabs = `<div class="tabs2" style="margin-bottom:8px">${Object.values(MACHINES).map(mm => `<button data-da="mach" data-v="${mm.id}" class="${mm.id === MACHINE.id ? 'on' : ''}" style="font-weight:${mm.id === MACHINE.id ? 700 : 400}">${mm.kind === 'mill' ? '🏭' : '⚡'} ${esc(mm.name)}</button>`).join('')}<span style="flex:1"></span><button class="btn" data-da="home">🏠 Home</button></div>`;
+  if (MACHINE.kind === 'wedm'){
+    el.innerHTML = tabs + `<div class="mcards" style="grid-template-columns:repeat(4,1fr)">
+      <div class="mcard"><small>Machine</small><b>${esc(MACHINE.name)}</b><span>${esc(MACHINE.control)}</span></div>
+      <div class="mcard"><small>Wire</small><b>${esc(MACHINE.taper)}</b><span>brass wire, offsets set at the machine</span></div>
+      <div class="mcard"><small>Travel</small><b>${MACHINE.travel.x} × ${MACHINE.travel.y} × ${MACHINE.travel.z}</b><span>X Y Z (to confirm)</span></div>
+      <div class="mcard"><small>Material of this job</small><b>${esc(MATS[S.setup.material].n)}</b><span>${MATS[S.setup.material].fam === 'hard' ? 'wire cut job' : 'usually a milling job'}</span></div></div>
+      <div class="info">Wire-cut programming is not in the CAM yet. It will be added once the BA24's control and program format are confirmed (send one existing program from the machine). Today the CAM already tells you which jobs belong here: hardened steel, SUS304CSP spring sheet, toothcombs and fine slots.</div>
+      <div class="mdash"><div class="mdet"><h3>What the wire cut will do here</h3><ul style="margin:4px 0 4px 18px;line-height:1.5"><li>Take the same 2D profile from the drawing (DXF or PDF), with start holes drilled on CNC1/CNC2 first.</li><li>Rough and skim passes, wire offset, lead-in from the start hole, tabs or a stop before the drop-out.</li><li>Program in the Mitsubishi format, sent over the LAN like the mills.</li><li>Time estimate from the cut length, thickness and material, so wire jobs get hours too.</li></ul>
+        <div style="margin-top:8px"><button class="btn pri" data-da="askjob">✦ Ask Claude whether this job is a wire-cut job</button></div></div>
+        <div class="mdet"><h3>Needed from the shop</h3><ul style="margin:4px 0 4px 18px;line-height:1.5"><li>The control type (shown on the screen at power-up).</li><li>One existing program file from the BA24.</li><li>Wire diameter you normally run, and the usual number of passes.</li><li>How parts are held on the table (clamps on the frame, magnetic, fixture).</li></ul></div></div>`;
+    return;
+  }
   const m = MATS[S.setup.material], mode = S.setup.run || 'proto', k = runK(mode), u = U(), cap = S.setup.maxRpm;
   const needed = new Set(S.ops.filter(o => o.post !== false).map(o => o.toolId));
   const byPocket = new Map(), shelf = [], dup = new Set();
@@ -3313,13 +3392,13 @@ function renderDash(){
   } else det = `<h3>Pick a pocket</h3><div>Click a pocket on the left to see what the tool is for and the speed and feed the CAM will use for <b>${esc(m.n)}</b>.</div>
       <div class="hint" style="margin-top:8px">Green = tool in the machine. Dashed = empty pocket. ⚠ = two tools claim the same pocket (fix the Pocket column in the sheet).</div>
       <div style="margin-top:10px"><button class="btn pri" data-da="askjob">✦ Ask Claude which tools to use for this job</button></div>`;
-  el.innerHTML = `<div class="mcards">
+  el.innerHTML = tabs + `<div class="mcards">
       <div class="mcard"><small>Machine</small><b>${esc(MACHINE.name)}</b><span>${esc(MACHINE.control)} · ${MACHINE.taper} · ${MACHINE.tools} pockets</span></div>
       <div class="mcard"><small>Spindle</small><b>${cap} rpm cap</b><span>machine max ${MACHINE.maxRpm}</span></div>
       <div class="mcard"><small>Material of this job</small><b>${esc(m.n)}</b><span>${m.vc > 0 ? 'milling OK' : 'not a milling job'}</span></div>
       <div class="mcard"><small>Run mode</small><b>${esc(RUN[mode])} ${Math.round(k*100)}%</b><span>${Object.keys(RUN).map(x => `<a href="#" data-da="run" data-v="${x}" style="margin-right:6px;${x === mode ? 'font-weight:700' : ''}">${x === 'proto' ? 'Prototype' : x === 'prod' ? 'Production' : 'Full'}</a>`).join('')}</span></div>
       <div class="mcard"><small>Fixture</small><b>${S.setup.fix ? ({vise:'Vise', clamps:(S.setup.fix.boxes || []).length + ' clamp(s)', none:'none above part'})[S.setup.fix.type] : 'not set'}</b><span>${S.setup.fix && S.setup.fix.type !== 'none' ? `top Z${fmt(fixtureTop())} · <a href="#" data-da="fix">edit</a>` : '<a href="#" data-da="fix">set up</a>'}</span></div>
-      <div class="mcard"><small>Tool inventory sheet</small><b>${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced.split(', ').pop()) : GD.sheetErr ? 'not reachable' : 'local library'}</b><span><a href="#" data-da="sync">⟳ sync now</a> · <a href="#" data-da="sheet">open sheet</a></span></div></div>
+      <div class="mcard"><small>Tool sheet · tab ${esc(MACHINE.sheetTab)}</small><b>${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced.split(', ').pop()) : GD.sheetErr ? 'not reachable' : 'local library'}</b><span><a href="#" data-da="sync">⟳ sync now</a> · <a href="#" data-da="sheet">open sheet</a></span></div></div>
     ${miss.length ? `<div class="info" style="background:#FFF3CD;border-color:#E0B000;color:#5A4500">⚠ This job uses ${miss.length} tool(s) that are not in the machine: ${miss.map(t => `T${t.num} ${esc(t.name)}`).join(', ')}. Load them, mark them Loaded in the sheet, or ask Claude for a loaded alternative.</div>` : S.ops.length ? '<div class="info">✔ Every tool this job needs is in the machine.</div>' : ''}
     <div class="mdash"><div><div class="mag">${pockets}</div>
       <div class="legend"><span><i style="background:#EAF7EC;border-color:#5FBF6F"></i>in the machine</span><span><i style="background:#F2F3F5;border-style:dashed"></i>empty pocket</span><span>⚠ pocket used twice</span></div>
@@ -3348,7 +3427,7 @@ function camContext(){
   const s = S.setup, st = s.stock, bb = geomBBox();
   const chains = CH.map(c => ({no:c.no, type:c.circle ? `circle dia ${fmt(c.circle.r*2)} at X${fmt(c.circle.cx)} Y${fmt(c.circle.cy)}` : c.point ? `point X${fmt(c.pts[0][0])} Y${fmt(c.pts[0][1])}` : c.closed ? `closed, area ${fmt(Math.abs(area(c.pts)), 1)}, bbox X${fmt(Math.min(...c.pts.map(p => p[0])))}..${fmt(Math.max(...c.pts.map(p => p[0])))} Y${fmt(Math.min(...c.pts.map(p => p[1])))}..${fmt(Math.max(...c.pts.map(p => p[1])))}` : `open, ${c.items.length} entities`, entities:c.items.length}));
   const ops = S.ops.map((o, i) => { const t = toolOf(o); return {index:i + 1, id:o.id, type:o.type, name:o.name, tool:t ? `T${t.num} ${t.name}` : null, chains:(o.sel || []).map(x => CHK.get(x.key)).filter(Boolean).map(c => c.no), params:o.p, warnings:o.warn || [], dirty:o.dirty, cycle_min:o.moves ? +cycleTime(o).toFixed(2) : null}; });
-  return {machine:MACHINE, units:s.units, wcs:s.wcs, material:MATS[s.material].n, program:`O${s.progNum} ${s.progName}`, limits:{maxRpm:s.maxRpm, maxFeed:s.maxFeed, rapid:s.rapid, travel:s.travel},
+  return {machine:MACHINE, machines:Object.values(MACHINES).map(mm => ({id:mm.id, name:mm.name, kind:mm.kind, current:mm.id === MACHINE.id})), units:s.units, wcs:s.wcs, material:MATS[s.material].n, program:`O${s.progNum} ${s.progName}`, limits:{maxRpm:s.maxRpm, maxFeed:s.maxFeed, rapid:s.rapid, travel:s.travel},
     stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, fixed:!!t.fixed, pocket:t.pocket ?? null, flute_len:t.len, stick_out:t.stick || null, holder_dia:t.holder || null, shank_dia:t.shank || null, notes:t.notes || ''})), fixture:S.setup.fix ? Object.assign({top_z:isFinite(fixtureTop()) ? fixtureTop() : null}, S.setup.fix) : null, operations:ops, material_keys:Object.keys(MATS), run_mode:{current:S.setup.run || 'proto', percent_of_standard:Math.round(runK()*100), modes:S.setup.runPct},
     param_keys:{contour:Object.keys(defP('contour')), pocket:Object.keys(defP('pocket')), drill:Object.keys(defP('drill')), face:Object.keys(defP('face')), cmill:Object.keys(defP('cmill')), srough:Object.keys(defP('srough')), sfinish:Object.keys(defP('sfinish')), scont:Object.keys(defP('scont'))}};
 }
@@ -3457,7 +3536,7 @@ async function aiRunToolNow(name, inp){
   return {error:'unknown tool'};
 }
 const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer; spindle capability ${MACHINE.maxRpm} RPM but the SHOP CAP is ${S.setup.maxRpm} RPM — never program above the cap). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
-You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
+The shop has two of these mills, CNC1 and CNC2 (same model, separate tool magazines — see machines in get_job; the job's machine is marked current), and a Mitsubishi BA24 wire cut that is not programmed in this CAM yet (route hardened, spring-steel and fine-slot parts to it). You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
 Shop rules (always apply): the CAM computes speeds and feeds for each operation from the TOOL and the JOB MATERIAL using industry-standard values (carbide end mills, HSS drills and taps, rigid setup) — the operator never has to calculate or assume them, and the RPM/Feed columns of the tool sheet are only a reference unless a tool is marked Fixed. Tool choice: pick sizes from the inventory (loaded=true) that fit the features — a cutter smaller than the smallest inside radius, a drill matching the hole or the tap drill size, the largest face mill that fits — and say why. Run modes: new jobs start in ${runLabel('proto')} (prototype / first article); once the first part is good the operator switches to ${runLabel('prod')} and posts again; ${runLabel('full')} is the industry standard. Operations keep standard values, only the posted S and F change (use set_run_mode when asked). Use calc_speeds for numbers; do not pad them downward; never exceed the shop RPM cap; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
 CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
 Collision rules: check each operation's depth against the tool's flute_len and stick_out; never let the holder reach the stock top; the clearance plane must be above fixture.top_z; when stick_out or holder_dia is null tell the operator to measure it at the machine (tip to holder nose with a caliper). Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
@@ -3575,12 +3654,13 @@ initView(); renderMenu(); renderTbar(); renderMgr(); updStatus(); updTitle();
 let booted = false;
 try { const s = localStorage.getItem('cam5.project'); if (s){ applyProject(JSON.parse(s)); booted = true; } } catch(e){ console.warn(e); }
 if (!booted){
-  try { const t = localStorage.getItem('cam5.tools.mm'); if (t) S.tools = JSON.parse(t); } catch(e){}
-  buildChains(); drawGeom(); drawStock(); setView('top');
-  prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
-  setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
+  try { const m = localStorage.getItem('cam5.machine'); if (m && MACHINES[m]) setMachine(m); } catch(e){}
+  loadTools();
+  buildChains(); drawGeom(); drawStock(); setView('top'); updTitle();
+  prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
+  setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) homeDlg(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
