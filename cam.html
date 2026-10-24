@@ -188,6 +188,10 @@ function busy(on, t){ $('#busy').style.display = on ? 'flex' : 'none'; if (t) $(
 function prompt_(t){ $('#prompt').textContent = t || ''; }
 
 /* ============================== state ============================== */
+// Run modes: operations store industry-standard (100%) speeds and feeds; the POST scales them by the run mode.
+const RUN = {proto:'Prototype / first article', prod:'Production', full:'Full standard'};
+const runK = mode => { const pc = (S.setup.runPct || {})[mode || S.setup.run || 'proto']; return Math.max(0.2, Math.min(1.3, (pc || 100)/100)); };
+const runLabel = mode => { const m = mode || S.setup.run || 'proto'; return `${RUN[m] || m} ${Math.round(runK(m)*100)}%`; };
 // Industry-standard reference values (general-purpose carbide end mills; HSS drills and taps). vc m/min; fz10 = chip load mm/tooth for a Ø10 end mill (scaled by diameter); fr10 = drill feed mm/rev at Ø10.
 const MATS = {
   alu:{n:'ALUMINUM A2017/A5056/6061', vc:350, fz10:0.060, vcD:80, fr10:0.20, vcT:20, fam:'alu', note:'Free cutting. Sharp tools, flood coolant, high RPM. Chip-weld risk if feed too low.'},
@@ -234,7 +238,7 @@ function defTools(u){
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100,
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100, run:'proto', runPct:{proto:60, prod:80, full:100},
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
@@ -678,9 +682,12 @@ function opTitle(op){
   if (op.type === 'pocket') return 'Pocket (Standard)';
   return OPDEF[op.type].label;
 }
+// Speeds for an operation: computed from the tool and the job material. A tool marked Fixed (tool sheet column) keeps its own RPM/Feed.
+function opSpeeds(t){ if (!t) return {}; if (t.fixed) return {rpm:t.rpm, feed:t.feed, plunge:t.plunge, retractF:t.retract}; const r = calcSpeeds(t, true); return r.rpm ? {rpm:r.rpm, feed:r.feed, plunge:r.plunge, retractF:t.retract || rnd(r.feed*2)} : {rpm:t.rpm, feed:t.feed, plunge:t.plunge, retractF:t.retract}; }
+function applyMaterialSpeeds(){ let n = 0; for (const o of S.ops){ const t = toolOf(o); if (!t || o.p.speedsLocked) continue; Object.assign(o.p, opSpeeds(t)); o.dirty = true; n++; } return n; }
 function defP(type, tool){
   const k = K(), st = S.setup.stock;
-  const feeds = tool ? {rpm:tool.rpm, feed:tool.feed, plunge:tool.plunge, retractF:tool.retract, cool:'flood'} : {rpm:3000, feed:rnd(500*k), plunge:rnd(150*k), retractF:rnd(1000*k), cool:'flood'};
+  const feeds = tool ? Object.assign({cool:'flood'}, opSpeeds(tool)) : {rpm:3000, feed:rnd(500*k), plunge:rnd(150*k), retractF:rnd(1000*k), cool:'flood'};
   const link = {clearOn:true, clear:rnd(50*k), clearInc:false, clearOnlyEnds:false, retract:rnd(25*k), retractInc:false, feedPlane:rnd(5*k), feedInc:true, top:0, depth:rnd(-5*k)};
   const dc = {dcOn:false, dcMax:rnd(2*k), dcFinN:0, dcFinStep:rnd(0.5*k), keepDown:false};
   const zmin = rnd(S.geom.mesh ? S.geom.mesh.bb[2] : st.bottom);
@@ -1306,7 +1313,8 @@ const cmt = s => '(' + String(s).replace(/[Øø⌀]/g, 'D').replace(/°/g, 'DEG'
 const coolCode = c => c === 'flood' ? 'M8' : c === 'mist' ? 'M7' : '';
 function post(list, opt = {}){
   const st = S.setup, pp = st.post, out = [], ops = list.filter(o => o.post !== false && o.moves && o.moves.length);
-  const zs = opt.zShift || 0, fk = opt.feedPct ? opt.feedPct/100 : 1, fZ = v => fmt(v + zs), fF = f => fmt(f*fk, isMM() ? 1 : 2);
+  const zs = opt.zShift || 0, rk = runK(opt.run), fk = (opt.feedPct ? opt.feedPct/100 : 1)*rk, fZ = v => fmt(v + zs), fF = f => fmt(f*fk, isMM() ? 1 : 2);
+  const fS = rpm => Math.round(Math.min(rpm*rk, st.maxRpm)), fTap = (rpm, f) => fmt(f*fS(rpm)/rpm, isMM() ? 1 : 2); // tap feed follows the actual S
   const all = S.ops.filter(o => o.post !== false && o.moves && o.moves.length), partial = ops.length && ops.length < all.length;
   const G = c => pp.short ? c.replace(/^([GM])0(\d)$/, '$1$2') : c.replace(/^([GM])(\d)$/, '$10$2');
   let n = pp.nStart - pp.nInc;
@@ -1319,7 +1327,8 @@ function post(list, opt = {}){
   emit(cmt(`CAM FILE - ${S.file}`), false);
   emit(cmt(`MATERIAL - ${MATS[st.material].n} ${st.units === 'mm' ? 'MM' : 'INCH'}`), false);
   emit(cmt(`${st.wcs} Z0 = TOP OF FINISHED PART`), false);
-  if (zs || fk !== 1) emit(cmt(`*** AIR CUT ONLY - Z RAISED ${fmt(zs)} FEEDS ${Math.round(fk*100)}% ***`), false);
+  emit(cmt(`RUN MODE - ${runLabel(opt.run).toUpperCase()} OF STANDARD SPEEDS AND FEEDS`), false);
+  if (zs || opt.feedPct) emit(cmt(`*** AIR CUT ONLY - Z RAISED ${fmt(zs)} FEEDS ${Math.round(fk*100)}% ***`), false);
   if (partial){ const idx = ops.map(o => all.indexOf(o) + 1); emit(cmt(`*** PART PROGRAM: OPS ${idx.join(',')} OF ${all.length} IN O${String(st.progNum).padStart(4, '0')} - SAME ${st.wcs} AND OFFSETS ***`), false); const rest = all.filter(o => !ops.includes(o)); if (rest.length) emit(cmt(`STILL TO RUN: ${rest.map(o => (all.indexOf(o) + 1) + ' ' + o.name).join(' / ')}`), false); }
   const used = [...new Set(ops.map(o => o.toolId))].map(id => S.tools.find(t => t.id === id));
   used.forEach(t => emit(`( T${t.num} | ${cmt(t.name).slice(1, -1)} | H${t.hOff || t.num} )`, false));
@@ -1333,11 +1342,11 @@ function post(list, opt = {}){
       let s = pp.tcFmt.replace('#', t.num).replace('M6', G('M06'));
       if (pp.nextTool){ const nt = ops.slice(oi+1).map(toolOf).find(x => x.id !== t.id); if (nt) s += ` T${nt.num}`; }
       emit(s);
-      first.line = emit(`${G('G00')} G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${Math.round(Math.min(p.rpm, S.setup.maxRpm))} ${G('M03')}`);
+      first.line = emit(`${G('G00')} G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${fS(p.rpm)} ${G('M03')}`);
       emit(`G43 H${t.hOff || t.num} Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     } else {
       emit(cmt(op.name), false);
-      first.line = emit(`${G('G00')} X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== p.rpm ? ` S${Math.round(Math.min(p.rpm, S.setup.maxRpm))} ${G('M03')}` : ''}`);
+      first.line = emit(`${G('G00')} X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== p.rpm ? ` S${fS(p.rpm)} ${G('M03')}` : ''}`);
       emit(`Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     }
     prevRpm = p.rpm;
@@ -1346,7 +1355,7 @@ function post(list, opt = {}){
       const m = mv[k];
       if (m.g === 'cyc'){
         m.lines = [];
-        if (m.code === 'G84' && pp.rigid) emit(`${G('M29')} S${Math.round(Math.min(m.rpm, S.setup.maxRpm))}`);
+        if (m.code === 'G84' && pp.rigid) emit(`${G('M29')} S${fS(m.rpm)}`);
         m.pts.forEach((q, qi) => {
           let s = `X${fmt(q[0])} Y${fmt(q[1])}`;
           if (qi === 0){
@@ -1354,7 +1363,7 @@ function post(list, opt = {}){
             if ((m.code === 'G83' || m.code === 'G73') && m.q > 0) s += ` Q${fmt(m.q)}`;
             if (m.code === 'G76' && m.sh > 0) s += ` Q${fmt(m.sh)}`;
             if ((m.code === 'G82' || m.code === 'G76' || m.code === 'G89') && m.dw > 0) s += ` P${Math.round(m.dw)}`;
-            s += ` F${fF(m.f)}`;
+            s += ` F${m.code === 'G84' ? fTap(m.rpm, m.f) : fF(m.f)}`;
           }
           m.lines.push(emit(s));
         });
@@ -1416,11 +1425,11 @@ function expand(list){
   });
   return pts;
 }
-function cycleTime(op){
-  const st = S.setup; let tm = 0, c = null;
+function cycleTime(op, mode){
+  const st = S.setup, rk = runK(mode); let tm = 0, c = null;
   for (const m of op.moves || []){
-    if (m.g === 'cyc'){ m.pts.forEach(() => { tm += 2*Math.abs(m.r - m.zb)/m.f; }); for (let k = 1; k < m.pts.length; k++) tm += hyp(m.pts[k][0]-m.pts[k-1][0], m.pts[k][1]-m.pts[k-1][1])/st.rapid; c = {x:m.x, y:m.y, z:m.z}; continue; }
-    if (c){ let d = hyp(m.x-c.x, m.y-c.y, m.z-c.z); if (m.g >= 2){ const rr = hyp(m.i, m.j), a0 = Math.atan2(-m.j, -m.i), a1 = Math.atan2(m.y - (c.y + m.j), m.x - (c.x + m.i)); let sw = Math.abs(a1 - a0); if (sw < 1e-9) sw = 2*Math.PI; d = Math.max(d, rr*Math.min(sw, 2*Math.PI - sw)); } tm += d/(m.g === 0 ? st.rapid : (m.f || op.p.feed)); }
+    if (m.g === 'cyc'){ m.pts.forEach(() => { tm += 2*Math.abs(m.r - m.zb)/(m.f*rk); }); for (let k = 1; k < m.pts.length; k++) tm += hyp(m.pts[k][0]-m.pts[k-1][0], m.pts[k][1]-m.pts[k-1][1])/st.rapid; c = {x:m.x, y:m.y, z:m.z}; continue; }
+    if (c){ let d = hyp(m.x-c.x, m.y-c.y, m.z-c.z); if (m.g >= 2){ const rr = hyp(m.i, m.j), a0 = Math.atan2(-m.j, -m.i), a1 = Math.atan2(m.y - (c.y + m.j), m.x - (c.x + m.i)); let sw = Math.abs(a1 - a0); if (sw < 1e-9) sw = 2*Math.PI; d = Math.max(d, rr*Math.min(sw, 2*Math.PI - sw)); } tm += d/(m.g === 0 ? st.rapid : (m.f || op.p.feed)*rk); }
     c = m;
   }
   return tm;
@@ -1769,7 +1778,7 @@ function opDlg(op, isNew, page){
       if (isNew) S.ops.push(op);
       close(); selOps = new Set([op.id]); regen([op]);
     }});
-  const pickTool = id => { W.toolId = id; const t = S.tools.find(x => x.id === id); Object.assign(W.p, {rpm:t.rpm, feed:t.feed, plunge:t.plunge, retractF:t.retract}); if (op.type === 'drill' && t.type === 'tap') W.p.cycle = 'G84'; render(); };
+  const pickTool = id => { W.toolId = id; const t = S.tools.find(x => x.id === id); Object.assign(W.p, opSpeeds(t)); if (op.type === 'drill' && t.type === 'tap') W.p.cycle = 'G84'; render(); };
   el.addEventListener('click', e => {
     const pg = e.target.closest('[data-pg]'); if (pg){ cur = pg.dataset.pg; render(); return; }
     const tr = e.target.closest('[data-tool]'); if (tr){ pickTool(tr.dataset.tool); return; }
@@ -1874,14 +1883,16 @@ async function newOp(type){
 }
 
 /* ---------- machine group properties ---------- */
+const SEL_RUN = st => `<select data-k="run">${Object.entries(RUN).map(([k, v]) => `<option value="${k}"${(st.run || 'proto') === k ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
 function propsDlg(tab = 'files'){
+  if (!S.setup.runPct) S.setup.runPct = {proto:60, prod:80, full:100}; if (!S.setup.run) S.setup.run = 'proto';
   const st = clone(S.setup), s = st.stock, el = document.createElement('div');
   const box = {X:rnd(s.x1 - s.x0), Y:rnd(s.y1 - s.y0), Z:rnd(s.top - s.bottom), ox:rnd((s.x0 + s.x1)/2), oy:rnd((s.y0 + s.y1)/2), oz:s.top, margin:s.margin, show:s.show};
   const render = () => {
     const u = U();
     el.innerHTML = `<div class="tabs2">${[['files','Files'],['tool','Tool Settings'],['stock','Stock Setup'],['machine','Machine'],['post','Post']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>` + ({
       files:`<fieldset><legend>Files</legend><div class="fr"><span>Machine</span><b>${MACHINE.name}</b></div><div class="fr"><span>Control</span><b>${MACHINE.control}</b></div><div class="fr"><span>Post</span><b>${MACHINE.post}</b></div>${fRow(st, 'progName', 'NC name', 't')}${fRow(st, 'progNum', 'Program number (O)', 'i')}<div class="fr"><span>NC file</span><b>O${String(st.progNum).padStart(4, '0')}.NC</b></div></fieldset>`,
-      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}${fRow(st, 'safety', 'Speed & feed level (% of industry standard)', 'i')}<div class="hint">100% = industry-standard values for carbide end mills and HSS drills/taps in a rigid setup. 70% while a new operator is learning; up to 120% for production once the setup is proven.</div></fieldset>
+      tool:`<fieldset><legend>Tool settings</legend>${fRow(st, 'wcs', 'Work offset', 's', SEL('G54', 'G55', 'G56', 'G57', 'G58', 'G59'))}${fRow(st, 'material', 'Material', 's', Object.entries(MATS).map(([k, v]) => [k, v.n]))}${fRow(st, 'beginner', 'Beginner mode (plain-English hints, Basics page, checklists)', 'c')}<div class="fr"><span>Run mode now</span>${SEL_RUN(st)}</div>${fRow(st.runPct, 'proto', 'Prototype / first article (% of standard)', 'i')}${fRow(st.runPct, 'prod', 'Production (% of standard)', 'i')}<div class="hint">Operations always hold the industry-standard speeds and feeds for the job material. The run mode scales S and F in the posted program: start a new job in Prototype, then switch to Production and post again once the first part is good.</div></fieldset>
         <fieldset><legend>Sequence numbers</legend>${fRow(st.post, 'lineNums', 'Output N sequence numbers', 'c')}${fRow(st.post, 'nStart', 'Start', 'i')}${fRow(st.post, 'nInc', 'Increment', 'i')}</fieldset>`,
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
@@ -1900,7 +1911,8 @@ function propsDlg(tab = 'files'){
   dlg({title:'Machine Group Properties', body:el, w:580, ok:close => {
     pushUndo();
     st.stock = {x0:rnd(box.ox - box.X/2), x1:rnd(box.ox + box.X/2), y0:rnd(box.oy - box.Y/2), y1:rnd(box.oy + box.Y/2), top:box.oz, bottom:rnd(box.oz - box.Z), margin:box.margin, show:box.show};
-    Object.assign(S.setup, st); S.ops.forEach(o => o.dirty = true);
+    const matChanged = st.material !== S.setup.material; Object.assign(S.setup, st); S.ops.forEach(o => o.dirty = true);
+    if (matChanged){ const n = applyMaterialSpeeds(); if (n) prompt_(`Material changed: speeds and feeds of ${n} operation(s) recalculated for ${MATS[st.material].n}.`); }
     close(); drawStock(); renderMgr(); updTitle(); renderMenu();
   }});
 }
@@ -1909,8 +1921,8 @@ function propsDlg(tab = 'files'){
 function calcSpeeds(t, ret){
   const m = MATS[S.setup.material], inch = !isMM(), D = inch ? t.dia*25.4 : t.dia;
   if (!(D > 0) || !(m.vc > 0)) return ret ? {rpm:0, feed:0, plunge:0} : t;
-  // Speed/feed level: 100% = industry-standard values for a rigid setup; lower while learning, higher for production.
-  const lvl = Math.max(30, Math.min(130, S.setup.safety || 100))/100, hss = /hss|cobalt/i.test(t.mat || ''), carbideDrill = !hss && ['drill','spot','center','ream'].includes(t.type);
+  // Always the 100% industry-standard value; the run mode (prototype / production) scales S and F when posting.
+  const lvl = 1, hss = /hss|cobalt/i.test(t.mat || ''), carbideDrill = !hss && ['drill','spot','center','ream'].includes(t.type);
   const dk = Math.max(0.25, Math.min(1.6, Math.pow(D/10, 0.75)));          // chip load grows with diameter
   const fzD = m.fz10*dk, frD = m.fr10*Math.max(0.2, Math.min(1.6, Math.pow(D/10, 0.7)));
   let vc, rpm, feed;
@@ -2215,7 +2227,9 @@ $('#mgrBar').addEventListener('click', e => {
     else { Object.entries(S.geom.levels).forEach(([n, lv]) => lv.vis = l.dataset.lv === 'on' || n === S.geom.main); geomChanged(); } }
 });
 $('#mgrBody').addEventListener('click', e => {
-  const dn = e.target.closest('[data-done]'); if (dn){ const op = S.ops.find(o => o.id === dn.dataset.done); op.done = dn.checked; op.doneAt = dn.checked ? new Date().toLocaleString() : ''; autosave(); renderMgr(); return; }
+  const dn = e.target.closest('[data-done]'); if (dn){ const op = S.ops.find(o => o.id === dn.dataset.done); op.done = dn.checked; op.doneAt = dn.checked ? new Date().toLocaleString() : ''; autosave(); renderMgr();
+      if (dn.checked && (S.setup.run || 'proto') === 'proto' && S.ops.filter(o => o.post !== false).every(o => o.done)) setTimeout(() => { if (confirm(`First article finished in Prototype mode (${S.setup.runPct.proto}%).\n\nSwitch to Production (${S.setup.runPct.prod}%) and post the program again for the next parts?`)){ S.setup.run = 'prod'; S.ops.forEach(o => { o.done = false; }); autosave(); renderTbar(); updStatus(); renderMgr(); postDlg(); } }, 100);
+      return; }
   const lv = e.target.closest('[data-lvis]'); if (lv){ S.geom.levels[lv.dataset.lvis].vis = lv.checked; selEnt.clear(); geomChanged(); return; }
   const lr = e.target.closest('[data-lvl]'); if (lr){ S.geom.main = lr.dataset.lvl; renderMgr(); updStatus(); return; }
   if (e.target.id === 'tlSync'){ syncToolSheet(); return; }
@@ -2323,7 +2337,7 @@ async function postDlg(){
   const dirty = list.filter(o => o.dirty || !o.moves);
   if (dirty.length){ if (!confirm(`${dirty.length} operation(s) are dirty (changed since last calculation). Regenerate them before posting?`)) return; await regen(dirty, true); }
   const allOps = S.ops.filter(o => o.post !== false), selected = S.ops.filter(o => selOps.has(o.id) && o.post !== false);
-  const W = {edit:true, save:true, air:false, zShift:rnd(20*K()), feedPct:50, scope:'all', fromOp:1}, el = document.createElement('div'), issues = preflight(list);
+  const W = {edit:true, save:true, air:false, zShift:rnd(20*K()), feedPct:50, scope:'all', fromOp:1, run:S.setup.run || 'proto'}, el = document.createElement('div'), issues = preflight(list);
   const done = list.filter(o => o.done); if (done.length) issues.push(['warn', `${done.length} operation(s) are already ticked "Done at machine": ${done.map(o => o.name).join(', ')}. Post only what still has to run, or untick them.`]);
   const base = `O${String(S.setup.progNum).padStart(4, '0')}`, name = `${base}.NC`;
   el.innerHTML = `<fieldset><legend>Active post</legend><b>${MACHINE.post}</b> → ${MACHINE.name} (${MACHINE.control})</fieldset>
@@ -2334,6 +2348,7 @@ async function postDlg(){
       <label><input type="checkbox" data-ck> Stock is clamped; nothing is in the way of the rapids (clamps, vise jaws, indicator)</label>
       <label><input type="checkbox" data-ck> First run: single block, rapid override 25%, hand on feed hold</label></div></fieldset>` : ''}
     <fieldset><legend>What to post</legend><div class="fr"><span>Scope</span><select data-k="scope"><option value="all">Whole program — all ${allOps.length} operations (recommended)</option><option value="sel"${selected.length ? '' : ' disabled'}>Only the ${selected.length} selected operation(s) — as a part program</option><option value="from">From operation N to the end — as a part program</option></select><div class="hint">A part program is posted from this same job: same ${S.setup.wcs}, same T/H/D numbers. Use it to feed the machine while the rest is still being programmed, then post the whole program once for the record and the next reorder. Never program a tool as a separate job.</div></div>${fRow(W, 'fromOp', 'Start from operation #', 'i', null, false)}</fieldset>
+    <fieldset><legend>Run mode (speeds and feeds in the program)</legend><div class="fr"><span>Run mode</span>${SEL_RUN(W)}</div><div class="hint">Prototype ${S.setup.runPct.proto}%: first part, new setup or new program. Production ${S.setup.runPct.prod}%: once the first part is good. Full 100% = industry standard. Operations keep their standard values; only the posted S and F change.</div></fieldset>
     <fieldset><legend>First run (air cut)</legend>${fRow(W, 'air', 'Make an AIR-CUT version: whole program raised in Z and slowed down', 'c', null, false)}${fRow(W, 'zShift', `Raise Z by (${U()})`, 'n', null, false)}${fRow(W, 'feedPct', 'Feeds at (%)', 'i', null, false)}<div class="hint">Run the air-cut file first with the part clamped: the tool traces the whole program above the stock, so you see every move before it ever touches metal. Then post the real program.</div></fieldset>
     <fieldset><legend>NC file</legend>${fRow(W, 'save', 'Download ' + name, 'c', null, false)}${fRow(W, 'edit', 'Open in NC editor to read / copy', 'c', null, false)}</fieldset>`;
   bindFields(el, W);
@@ -2345,8 +2360,9 @@ async function postDlg(){
     if (W.scope === 'from'){ const n = Math.max(1, Math.min(allOps.length, W.fromOp|0)); scopeList = allOps.slice(n - 1); suffix = n > 1 ? `-FROM${n}` : ''; }
     if (!scopeList.length){ alert('Nothing to post in that scope.'); return; }
     close();
-    const nc = post(scopeList, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {}).join('\r\n') + '\r\n';
-    const fname = `${base}${suffix}${W.air ? '-AIRCUT' : ''}.NC`;
+    S.setup.run = W.run; updStatus(); renderTbar();
+    const nc = post(scopeList, Object.assign({run:W.run}, W.air ? {zShift:W.zShift, feedPct:W.feedPct} : {})).join('\r\n') + '\r\n';
+    const fname = `${base}${suffix}${W.run === 'proto' ? '-PROTO' : W.run === 'prod' ? '-PROD' : ''}${W.air ? '-AIRCUT' : ''}.NC`;
     if (W.save) download(fname, nc);
     if (S.drive && S.drive.folder && confirm('Also save the job and this NC file into the RFQ folder on Google Drive?')) saveToDrive(nc, fname);
     S.posted = S.posted || {}; scopeList.forEach(o => S.posted[o.id] = fname); autosave(); renderMgr();
@@ -2589,7 +2605,7 @@ function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.fil
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
-  S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {});
+  S.setup = Object.assign(base, d.setup); S.setup.post = Object.assign(base.post, d.setup.post); S.setup.stock = Object.assign(base.stock, d.setup.stock); S.setup.travel = Object.assign(base.travel, d.setup.travel || {}); S.setup.runPct = Object.assign(base.runPct, d.setup.runPct || {}); if (!S.setup.run) S.setup.run = 'proto';
   S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {}; S.drive = d.drive || null;
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
@@ -2754,7 +2770,7 @@ function wizard(){
     if (route().some(r => r[0] === 'stop') && !confirm('The router says this is NOT a milling job. Create milling operations anyway?')) return;
     if (!pl.length){ alert('Nothing to create.'); return; }
     pushUndo();
-    const made = pl.map(o => { const op = newOpObj(o.type); op.toolId = o.tool.id; Object.assign(op.p, {rpm:o.tool.rpm, feed:o.tool.feed, plunge:o.tool.plunge, retractF:o.tool.retract}, o.p); op.sel = o.sel; op.name = opTitle(op) + ' - ' + o.label.replace(/ with T\d+.*$/, ''); return op; });
+    const made = pl.map(o => { const op = newOpObj(o.type); op.toolId = o.tool.id; Object.assign(op.p, opSpeeds(o.tool), o.p); op.sel = o.sel; op.name = opTitle(op) + ' - ' + o.label.replace(/ with T\d+.*$/, ''); return op; });
     S.ops.push(...made); close(); selOps = new Set(made.map(o => o.id)); setView('iso');
     regen(made).then(() => msg('Operations created', `${made.length} operation(s) added.<br><br><b>Now:</b> ▶ Backplot to watch the tool, ◆ Verify to see the result, then <b>G1</b> to post the program.`));
   }});
@@ -2826,13 +2842,14 @@ const TBAR = [
   ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['💲 Estimate', 'Cost estimate / quotation from the cycle time', estimateDlg]
 ];
 function renderTbar(){
-  $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('');
+  $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('') + `<span class="tsep"></span><label class="tb" title="Run mode: how fast the posted program runs. Prototype for the first part, Production after it is proven." style="display:inline-flex;align-items:center;gap:4px">Run: <select id="tbRun" style="font:inherit">${Object.entries(RUN).map(([k, v]) => `<option value="${k}"${(S.setup.run || 'proto') === k ? ' selected' : ''}>${v} ${Math.round(runK(k)*100)}%</option>`).join('')}</select></label>`;
   $('#tbar').onclick = e => { const b = e.target.closest('[data-t]'); if (b) TBAR[+b.dataset.t][2](); };
+  $('#tbRun').onchange = e => { S.setup.run = e.target.value; autosave(); updStatus(); renderMgr(); prompt_(`Run mode: ${runLabel()}. Post again to get a program at this speed.`); };
 }
 function updStatus(){
   const lv = Object.keys(S.geom.levels);
   $('#sbar').innerHTML = `<span class="sb">3D</span><span class="sb" id="sbGv">Gview: ${({top:'TOP', front:'FRONT', right:'RIGHT', iso:'ISO'})[S.gview] || 'TOP'}</span><span class="sb">Planes: TOP</span><span class="sb">Z: 0.</span>
-    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb">${selEnt.size} selected</span><span class="sb" title="${esc(GD.sheetErr || (GD.sheetVia ? 'via ' + GD.sheetVia : ''))}">${GD.sheetSynced ? '🛠 Tools: sheet ' + esc(GD.sheetSynced.split(', ').pop() || GD.sheetSynced) : GD.sheetErr ? '🛠 Tools: sheet not reachable' : '🛠 Tools: local library'}</span><span class="sb" id="sbXY"></span>`;
+    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb" title="Run mode (speeds and feeds in the posted program)">▶ ${esc(runLabel())}</span><span class="sb">${selEnt.size} selected</span><span class="sb" title="${esc(GD.sheetErr || (GD.sheetVia ? 'via ' + GD.sheetVia : ''))}">${GD.sheetSynced ? '🛠 Tools: sheet ' + esc(GD.sheetSynced.split(', ').pop() || GD.sheetSynced) : GD.sheetErr ? '🛠 Tools: sheet not reachable' : '🛠 Tools: local library'}</span><span class="sb" id="sbXY"></span>`;
   $('#sbLv').onchange = e => { S.geom.main = e.target.value; renderMgr(); };
   $('#sbGv').onclick = e => popMenu(e.clientX, e.clientY - 120, [['Top', 'Alt+1', () => setView('top')], ['Front', 'Alt+2', () => setView('front')], ['Right', 'Alt+5', () => setView('right')], ['Isometric', 'Alt+7', () => setView('iso')]]);
 }
@@ -2894,7 +2911,7 @@ function demo(){
   S.file = 'DEMO-PLATE'; S.setup.progName = 'DEMO PLATE';
   const byLv = lv => CH.filter(c => c.items.every(id => S.geom.items.find(i => i.id === id).level === lv));
   const T = ty => S.tools.find(t => t.type === ty);
-  const mk = (type, tool, sel, p = {}) => { const op = newOpObj(type); if (tool){ op.toolId = tool.id; Object.assign(op.p, {rpm:tool.rpm, feed:tool.feed, plunge:tool.plunge, retractF:tool.retract}); } op.sel = sel; Object.assign(op.p, p); op.name = opTitle(op); return op; };
+  const mk = (type, tool, sel, p = {}) => { const op = newOpObj(type); if (tool){ op.toolId = tool.id; Object.assign(op.p, opSpeeds(tool)); } op.sel = sel; Object.assign(op.p, p); op.name = opTitle(op); return op; };
   const holes = byLv('3').map(c => ({key:c.key})), outl = byLv('1')[0], pk = byLv('2').map(c => chainSpec(c, true));
   S.ops = [
     mk('face', T('face'), [], {top:S.setup.stock.top, depth:0}),
@@ -2993,7 +3010,7 @@ function gdSettings(){
     <div class="fr"><span>OAuth client ID</span><input type="text" data-k="clientId" value="${esc(W.clientId)}" style="width:320px" placeholder="xxxx.apps.googleusercontent.com"></div>
     <div class="fr"><span>RFQ drawings folder ID</span><input type="text" data-k="root" value="${esc(W.root)}" style="width:320px"><div class="hint">Default = "Dynamic RFQ Drawings" shared drive folder used by the RFQ intake agent.</div></div>
     <div class="fr"><span>Tool inventory sheet ID</span><input type="text" data-k="sheet" value="${esc(W.sheet)}" style="width:320px" placeholder="from the sheet URL: /spreadsheets/d/<ID>/"></div>
-    <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Notes.</div></div>
+    <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Fixed (yes = use the sheet's RPM/Feed as-is; otherwise the CAM computes them per material), Notes.</div></div>
     <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div></fieldset>`;
   bindFields(el, W);
   dlg({title:'Google Drive & Sheets connection', body:el, w:640, ok:close => { Object.assign(GD, W); gdSave(); close(); if (GD.csv || GD.sheet) syncToolSheet(true); }});
@@ -3098,7 +3115,7 @@ async function syncToolSheet(quiet){
     if (rows.length < 2) throw new Error('The sheet range is empty.');
     const H = rows[0].map(h => String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
     const col = (...names) => { for (const n of names){ const i = H.indexOf(n); if (i >= 0) return i; } return -1; };
-    const C = {num:col('t', 'tool', 'toolno', 'tno', 'num'), name:col('name', 'description', 'tooln'), type:col('type'), dia:col('dia', 'diameter', 'd'), cr:col('cornerrad', 'cr', 'cornerradius', 'r'), flutes:col('flutes', 'fl'), len:col('flutelen', 'flutelength', 'loc'), oal:col('oal', 'overall'), rpm:col('rpm', 's'), feed:col('feed', 'f'), plunge:col('plunge'), pitch:col('pitch'), angle:col('angle', 'tipangle'), hOff:col('h', 'hoff', 'lengthoffset'), dOff:col('d2', 'doff', 'diaoffset', 'dnum'), pocket:col('pocket', 'pot', 'station'), loaded:col('loaded', 'inmachine', 'mounted'), notes:col('notes', 'note')};
+    const C = {num:col('t', 'tool', 'toolno', 'tno', 'num'), name:col('name', 'description', 'tooln'), type:col('type'), dia:col('dia', 'diameter', 'd'), cr:col('cornerrad', 'cr', 'cornerradius', 'r'), flutes:col('flutes', 'fl'), len:col('flutelen', 'flutelength', 'loc'), oal:col('oal', 'overall'), rpm:col('rpm', 's'), feed:col('feed', 'f'), plunge:col('plunge'), pitch:col('pitch'), angle:col('angle', 'tipangle'), hOff:col('h', 'hoff', 'lengthoffset'), dOff:col('d2', 'doff', 'diaoffset', 'dnum'), fixed:col('fixed', 'fixedspeeds', 'lock', 'locked'), pocket:col('pocket', 'pot', 'station'), loaded:col('loaded', 'inmachine', 'mounted'), notes:col('notes', 'note')};
     if (C.num < 0 || C.dia < 0 || C.type < 0) throw new Error('Header row must have at least T, Type and Dia columns.');
     const types = Object.keys(TT), alias = {endmill:'flat', flatendmill:'flat', em:'flat', bullnose:'bull', bullendmill:'bull', ballnose:'ball', ballendmill:'ball', facemill:'face', chamfermill:'chamfer', spotdrill:'spot', centerdrill:'center', centredrill:'center', reamer:'ream', boringbar:'bore'};
     const num = (i, d) => { if (i < 0) return d; const v = parseFloat(String(rows[0] && '').length ? '' : ''); return d; };
@@ -3111,7 +3128,7 @@ async function syncToolSheet(quiet){
       const old = S.tools.find(t => t.num === n) || {};
       tools.push(mkTool({id:old.id || uid(), num:n, name:g(C.name) || old.name || `${fmt(f(C.dia, 10))} ${TT[ty][0].toUpperCase()}`, type:ty, dia:f(C.dia, old.dia || 10), cr:f(C.cr, old.cr || 0), flutes:f(C.flutes, old.flutes || 2), len:f(C.len, old.len || 20), oal:f(C.oal, old.oal || 60),
         rpm:f(C.rpm, old.rpm || 2000), feed:f(C.feed, old.feed || 300), plunge:f(C.plunge, old.plunge || 100), retract:old.retract || 1000, pitch:f(C.pitch, old.pitch || 0), angle:f(C.angle, old.angle || (ty === 'chamfer' ? 90 : 118)), hOff:f(C.hOff, n), dOff:f(C.dOff, n),
-        pocket:g(C.pocket), loaded:/^(y|yes|1|true|x|loaded|in)$/i.test(g(C.loaded)) || (!!g(C.pocket) && C.loaded < 0), notes:g(C.notes)}));
+        fixed:/^(y|yes|1|true|x|fixed|lock)$/i.test(g(C.fixed)), pocket:g(C.pocket), loaded:/^(y|yes|1|true|x|loaded|in)$/i.test(g(C.loaded)) || (!!g(C.pocket) && C.loaded < 0), notes:g(C.notes)}));
     }
     if (!tools.length) throw new Error('No tool rows found.');
     pushUndo(); S.tools = tools; saveTools();
@@ -3145,7 +3162,7 @@ function camContext(){
   const chains = CH.map(c => ({no:c.no, type:c.circle ? `circle dia ${fmt(c.circle.r*2)} at X${fmt(c.circle.cx)} Y${fmt(c.circle.cy)}` : c.point ? `point X${fmt(c.pts[0][0])} Y${fmt(c.pts[0][1])}` : c.closed ? `closed, area ${fmt(Math.abs(area(c.pts)), 1)}, bbox X${fmt(Math.min(...c.pts.map(p => p[0])))}..${fmt(Math.max(...c.pts.map(p => p[0])))} Y${fmt(Math.min(...c.pts.map(p => p[1])))}..${fmt(Math.max(...c.pts.map(p => p[1])))}` : `open, ${c.items.length} entities`, entities:c.items.length}));
   const ops = S.ops.map((o, i) => { const t = toolOf(o); return {index:i + 1, id:o.id, type:o.type, name:o.name, tool:t ? `T${t.num} ${t.name}` : null, chains:(o.sel || []).map(x => CHK.get(x.key)).filter(Boolean).map(c => c.no), params:o.p, warnings:o.warn || [], dirty:o.dirty, cycle_min:o.moves ? +cycleTime(o).toFixed(2) : null}; });
   return {machine:MACHINE, units:s.units, wcs:s.wcs, material:MATS[s.material].n, program:`O${s.progNum} ${s.progName}`, limits:{maxRpm:s.maxRpm, maxFeed:s.maxFeed, rapid:s.rapid, travel:s.travel},
-    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, pocket:t.pocket ?? null, notes:t.notes || ''})), operations:ops, material_keys:Object.keys(MATS),
+    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, fixed:!!t.fixed, pocket:t.pocket ?? null, notes:t.notes || ''})), operations:ops, material_keys:Object.keys(MATS), run_mode:{current:S.setup.run || 'proto', percent_of_standard:Math.round(runK()*100), modes:S.setup.runPct},
     param_keys:{contour:Object.keys(defP('contour')), pocket:Object.keys(defP('pocket')), drill:Object.keys(defP('drill')), face:Object.keys(defP('face')), cmill:Object.keys(defP('cmill')), srough:Object.keys(defP('srough')), sfinish:Object.keys(defP('sfinish')), scont:Object.keys(defP('scont'))}};
 }
 const AI_TOOLS = [
@@ -3164,6 +3181,7 @@ const AI_TOOLS = [
     input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
   {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
   {name:'calc_speeds', description:'Industry-standard speeds-and-feeds calculator for a tool in the current material, at the shop\'s speed/feed level (100% = standard). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
+  {name:'set_run_mode', description:'Set the run mode that scales speeds and feeds in the POSTED program: proto (first article, default ~60%), prod (~80%), full (100% industry standard). Operations themselves keep standard values.', strict:true, input_schema:{type:'object', properties:{mode:{type:'string', enum:['proto','prod','full']}}, required:['mode'], additionalProperties:false}},
   {name:'set_material', description:'Set the job material (key from material_keys in get_job) and optionally the part thickness: stock top stays 0, bottom = -thickness.', strict:true, input_schema:{type:'object', properties:{material:{type:'string'}, thickness:{type:['number','null']}}, required:['material','thickness'], additionalProperties:false}}
 ];
 // CAD helpers for the assistant: turn a shape description into geometry items
@@ -3204,7 +3222,7 @@ async function aiRunToolNow(name, inp){
   if (name === 'create_operation'){
     const t = S.tools.find(x => x.num === inp.tool_num); if (!t) return {error:`No tool T${inp.tool_num}`};
     if (OPDEF[inp.type].surf && !S.geom.mesh) return {error:'No 3D model loaded'};
-    const op = newOpObj(inp.type); op.toolId = t.id; Object.assign(op.p, {rpm:t.rpm, feed:t.feed, plunge:t.plunge, retractF:t.retract}, inp.params || {});
+    const op = newOpObj(inp.type); op.toolId = t.id; Object.assign(op.p, opSpeeds(t), inp.params || {});
     op.sel = (inp.chains || []).map(n => CH.find(c => c.no === n)).filter(Boolean).map(c => c.closed && !c.circle ? chainSpec(c, !!inp.inside) : {key:c.key});
     op.name = inp.name || opTitle(op);
     pushUndo(); S.ops.push(op); selOps = new Set([op.id]); await regen([op], true); setView(S.gview || 'iso');
@@ -3213,7 +3231,7 @@ async function aiRunToolNow(name, inp){
   if (name === 'update_operation'){
     const op = byIdx(inp.index); if (!op) return {error:'No such operation'};
     pushUndo();
-    if (inp.tool_num != null){ const t = S.tools.find(x => x.num === inp.tool_num); if (!t) return {error:`No tool T${inp.tool_num}`}; op.toolId = t.id; }
+    if (inp.tool_num != null){ const t = S.tools.find(x => x.num === inp.tool_num); if (!t) return {error:`No tool T${inp.tool_num}`}; op.toolId = t.id; Object.assign(op.p, opSpeeds(t)); }
     Object.assign(op.p, inp.params || {}); if (inp.name) op.name = inp.name; op.dirty = true;
     await regen([op], true); return {ok:true, warnings:op.warn, cycle_min:+cycleTime(op).toFixed(2)};
   }
@@ -3242,17 +3260,18 @@ async function aiRunToolNow(name, inp){
     if (!(m.vc > 0)) return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, error:'Not a milling material on this machine: ' + (m.note || '')};
     return {tool:t ? `T${t.num} ${t.name}` : `${tool.dia} ${tool.type}`, material:m.n, rpm:r.rpm, feed:r.feed, plunge:r.plunge, units:S.setup.units, basis:Object.assign(r.basis, {note:'Industry-standard reference: RPM = Vc×1000/(π×D); end-mill feed = RPM × flutes × fz (fz scaled by diameter); drill feed = RPM × mm/rev; tap feed = RPM × pitch. Level 100% = standard; the RPM cap of the machine lowers the feed with it.'})};
   }
+  if (name === 'set_run_mode'){ S.setup.run = inp.mode; autosave(); renderTbar(); updStatus(); renderMgr(); return {ok:true, run_mode:runLabel()}; }
   if (name === 'set_material'){
     if (!MATS[inp.material]) return {error:'Unknown material key; use one of ' + Object.keys(MATS).join(', ')};
     pushUndo(); S.setup.material = inp.material; if (inp.thickness != null && inp.thickness > 0){ S.setup.stock.top = 0; S.setup.stock.bottom = -inp.thickness; }
-    S.ops.forEach(o => o.dirty = true); drawStock(); renderMgr(); updStatus(); autosave();
-    return {ok:true, material:MATS[inp.material].n, note:MATS[inp.material].note || '', stock:S.setup.stock, process_hint:MATS[inp.material].fam === 'hard' ? 'Not a milling job on this machine (wire EDM / grinding).' : 'Milling OK'};
+    const nSp = applyMaterialSpeeds(); drawStock(); renderMgr(); updStatus(); autosave();
+    return {ok:true, material:MATS[inp.material].n, note:MATS[inp.material].note || '', stock:S.setup.stock, speeds_recomputed_for_ops:nSp, process_hint:MATS[inp.material].fam === 'hard' ? 'Not a milling job on this machine (wire EDM / grinding).' : 'Milling OK'};
   }
   return {error:'unknown tool'};
 }
 const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer; spindle capability ${MACHINE.maxRpm} RPM but the SHOP CAP is ${S.setup.maxRpm} RPM — never program above the cap). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
 You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
-Shop rules (always apply): speeds and feeds follow INDUSTRY-STANDARD values (carbide end mills, HSS drills and taps, rigid setup) at the shop's speed/feed level of ${S.setup.safety || 100}% (100 = standard) — use calc_speeds for numbers and do not pad them downward; the standard way is the goal, not slow cutting; never exceed machine limits; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
+Shop rules (always apply): the CAM computes speeds and feeds for each operation from the TOOL and the JOB MATERIAL using industry-standard values (carbide end mills, HSS drills and taps, rigid setup) — the operator never has to calculate or assume them, and the RPM/Feed columns of the tool sheet are only a reference unless a tool is marked Fixed. Tool choice: pick sizes from the inventory (loaded=true) that fit the features — a cutter smaller than the smallest inside radius, a drill matching the hole or the tap drill size, the largest face mill that fits — and say why. Run modes: new jobs start in ${runLabel('proto')} (prototype / first article); once the first part is good the operator switches to ${runLabel('prod')} and posts again; ${runLabel('full')} is the industry standard. Operations keep standard values, only the posted S and F change (use set_run_mode when asked). Use calc_speeds for numbers; do not pad them downward; never exceed the shop RPM cap; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
 CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
 Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
 Quoting: use get_estimate; present the customer price separately from the confidential cost build-up; label values Provided / Derived / Assumed; never invent material grade, tolerances or finishes. If something is outside this app (lathe programs, 4/5-axis, DWG import) say so plainly and say which shop process handles it. Units are ${S.setup.units}.`;
@@ -3368,7 +3387,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
