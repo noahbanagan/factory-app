@@ -2113,7 +2113,8 @@ function undo(){
 }
 let running = false;
 async function regen(list, quiet){
-  if (running) return; running = true;
+  while (running) await new Promise(r => setTimeout(r, 40)); // queue behind a running generation (assistant tool calls can arrive in parallel)
+  running = true;
   try {
     for (const op of list){
       busy(true, `Regenerating ${op.name}…`); await tick();
@@ -3109,7 +3110,7 @@ function camContext(){
   const chains = CH.map(c => ({no:c.no, type:c.circle ? `circle dia ${fmt(c.circle.r*2)} at X${fmt(c.circle.cx)} Y${fmt(c.circle.cy)}` : c.point ? `point X${fmt(c.pts[0][0])} Y${fmt(c.pts[0][1])}` : c.closed ? `closed, area ${fmt(Math.abs(area(c.pts)), 1)}, bbox X${fmt(Math.min(...c.pts.map(p => p[0])))}..${fmt(Math.max(...c.pts.map(p => p[0])))} Y${fmt(Math.min(...c.pts.map(p => p[1])))}..${fmt(Math.max(...c.pts.map(p => p[1])))}` : `open, ${c.items.length} entities`, entities:c.items.length}));
   const ops = S.ops.map((o, i) => { const t = toolOf(o); return {index:i + 1, id:o.id, type:o.type, name:o.name, tool:t ? `T${t.num} ${t.name}` : null, chains:(o.sel || []).map(x => CHK.get(x.key)).filter(Boolean).map(c => c.no), params:o.p, warnings:o.warn || [], dirty:o.dirty, cycle_min:o.moves ? +cycleTime(o).toFixed(2) : null}; });
   return {machine:MACHINE, units:s.units, wcs:s.wcs, material:MATS[s.material].n, program:`O${s.progNum} ${s.progName}`, limits:{maxRpm:s.maxRpm, maxFeed:s.maxFeed, rapid:s.rapid, travel:s.travel},
-    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle})), operations:ops,
+    stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, pocket:t.pocket ?? null, notes:t.notes || ''})), operations:ops, material_keys:Object.keys(MATS),
     param_keys:{contour:Object.keys(defP('contour')), pocket:Object.keys(defP('pocket')), drill:Object.keys(defP('drill')), face:Object.keys(defP('face')), cmill:Object.keys(defP('cmill')), srough:Object.keys(defP('srough')), sfinish:Object.keys(defP('sfinish')), scont:Object.keys(defP('scont'))}};
 }
 const AI_TOOLS = [
@@ -3123,9 +3124,45 @@ const AI_TOOLS = [
   {name:'set_stock', description:'Set stock box and top/bottom Z.', strict:true, input_schema:{type:'object', properties:{x0:{type:'number'}, y0:{type:'number'}, x1:{type:'number'}, y1:{type:'number'}, top:{type:'number'}, bottom:{type:'number'}}, required:['x0','y0','x1','y1','top','bottom'], additionalProperties:false}},
   {name:'get_gcode', description:'Post all operations and return the G-code (first max_lines lines).', strict:true, input_schema:{type:'object', properties:{max_lines:{type:'integer'}}, required:['max_lines'], additionalProperties:false}},
   {name:'get_estimate', description:'Cost estimate / quotation for the current job using Dynamic Intl rules (all-in PHP 1800/hr CNC rate, setup + programming time, scrap, 35% margin, +50% admin on sourced material). Pass qty and known costs; unknown values use defaults.', strict:true, input_schema:{type:'object', properties:{qty:{type:'integer'}, matCostPerPart:{type:'number'}, setupMin:{type:'number'}, progMin:{type:'number'}, nSetups:{type:'integer'}}, required:['qty','matCostPerPart','setupMin','progMin','nSetups'], additionalProperties:false}},
-  {name:'verify', description:'Run stock verification on all operations and return collisions (rapid moves into material).', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}}
+  {name:'verify', description:'Run stock verification on all operations and return collisions (rapid moves into material).', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}},
+  {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole). replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
+    input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
+  {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
+  {name:'set_material', description:'Set the job material (key from material_keys in get_job) and optionally the part thickness: stock top stays 0, bottom = -thickness.', strict:true, input_schema:{type:'object', properties:{material:{type:'string'}, thickness:{type:['number','null']}}, required:['material','thickness'], additionalProperties:false}}
 ];
-async function aiRunTool(name, inp){
+// CAD helpers for the assistant: turn a shape description into geometry items
+function shapeItems(sh){
+  const n = v => +v || 0, out = [], DEG = Math.PI/180;
+  const rectItems = (x0, y0, x1, y1, cr) => {
+    if (!(cr > 0)) return [{kind:'poly', closed:true, pts:[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]}];
+    cr = Math.min(cr, (x1-x0)/2, (y1-y0)/2);
+    return [{kind:'line', x1:x0+cr, y1:y0, x2:x1-cr, y2:y0}, {kind:'arc', cx:x1-cr, cy:y0+cr, r:cr, a0:-90*DEG, a1:0},
+            {kind:'line', x1:x1, y1:y0+cr, x2:x1, y2:y1-cr}, {kind:'arc', cx:x1-cr, cy:y1-cr, r:cr, a0:0, a1:90*DEG},
+            {kind:'line', x1:x1-cr, y1:y1, x2:x0+cr, y2:y1}, {kind:'arc', cx:x0+cr, cy:y1-cr, r:cr, a0:90*DEG, a1:180*DEG},
+            {kind:'line', x1:x0, y1:y1-cr, x2:x0, y2:y0+cr}, {kind:'arc', cx:x0+cr, cy:y0+cr, r:cr, a0:180*DEG, a1:270*DEG}];
+  };
+  switch (sh.kind){
+    case 'rectangle': { const w = n(sh.w), h = n(sh.h); let x0 = n(sh.x), y0 = n(sh.y); if (sh.centered){ x0 -= w/2; y0 -= h/2; } out.push(...rectItems(x0, y0, x0 + w, y0 + h, n(sh.corner_r))); break; }
+    case 'circle': out.push({kind:'circle', cx:n(sh.cx), cy:n(sh.cy), r:n(sh.d)/2 || n(sh.r)}); break;
+    case 'line': out.push({kind:'line', x1:n(sh.x1), y1:n(sh.y1), x2:n(sh.x2), y2:n(sh.y2)}); break;
+    case 'arc': { let a0 = n(sh.a0)*DEG, a1 = n(sh.a1)*DEG; if (a1 <= a0) a1 += 2*Math.PI; out.push({kind:'arc', cx:n(sh.cx), cy:n(sh.cy), r:n(sh.d)/2 || n(sh.r), a0, a1}); break; }
+    case 'polygon': { const pts = (sh.pts || []).map(p => [n(p[0]), n(p[1])]); if (pts.length >= 3) out.push({kind:'poly', closed:true, pts}); break; }
+    case 'slot': { const L = n(sh.length), W = n(sh.width), r = W/2, a = n(sh.angle)*DEG, cx = n(sh.cx), cy = n(sh.cy), hl = Math.max(0, L/2 - r);
+      const c1 = [cx - hl*Math.cos(a), cy - hl*Math.sin(a)], c2 = [cx + hl*Math.cos(a), cy + hl*Math.sin(a)], nx = -Math.sin(a)*r, ny = Math.cos(a)*r;
+      if (hl === 0){ out.push({kind:'circle', cx, cy, r}); break; }
+      out.push({kind:'line', x1:c1[0]+nx, y1:c1[1]+ny, x2:c2[0]+nx, y2:c2[1]+ny}, {kind:'arc', cx:c2[0], cy:c2[1], r, a0:a - Math.PI/2, a1:a + Math.PI/2}, {kind:'line', x1:c2[0]-nx, y1:c2[1]-ny, x2:c1[0]-nx, y2:c1[1]-ny}, {kind:'arc', cx:c1[0], cy:c1[1], r, a0:a + Math.PI/2, a1:a + 3*Math.PI/2});
+      break; }
+    case 'bolt_circle': { const N = Math.max(1, n(sh.n) | 0), R = n(sh.pcd)/2, s0 = n(sh.start_angle)*DEG; for (let i = 0; i < N; i++){ const t = s0 + i*2*Math.PI/N; out.push({kind:'circle', cx:n(sh.cx) + R*Math.cos(t), cy:n(sh.cy) + R*Math.sin(t), r:n(sh.d)/2}); } break; }
+    case 'grid': { const C = Math.max(1, n(sh.cols) | 0), R = Math.max(1, n(sh.rows) | 0); for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) out.push({kind:'circle', cx:n(sh.x) + i*n(sh.pitch_x), cy:n(sh.y) + j*n(sh.pitch_y), r:n(sh.d)/2}); break; }
+    default: throw new Error('Unknown shape kind ' + sh.kind);
+  }
+  return out.map(o => { for (const k of ['x1','y1','x2','y2','cx','cy','r']) if (k in o) o[k] = rnd(o[k]); if (o.pts) o.pts = o.pts.map(p => [rnd(p[0]), rnd(p[1])]); return o; });
+}
+function chainSummary(){ return CH.map(c => ({no:c.no, what:c.circle ? `circle dia ${fmt(c.circle.r*2)} at X${fmt(c.circle.cx)} Y${fmt(c.circle.cy)}` : c.point ? 'point' : c.closed ? `closed shape, ${c.items.length} entities` : `open, ${c.items.length} entities`})); }
+// Tool calls from the assistant may arrive in parallel; run them one at a time so operations are created in order.
+let aiQueue = Promise.resolve();
+function aiRunTool(name, inp){ const run = aiQueue.then(() => aiRunToolNow(name, inp)); aiQueue = run.catch(() => {}); return run; }
+async function aiRunToolNow(name, inp){
   const byIdx = i => S.ops[i - 1];
   if (name === 'get_job') return camContext();
   if (name === 'create_operation'){
@@ -3135,7 +3172,7 @@ async function aiRunTool(name, inp){
     op.sel = (inp.chains || []).map(n => CH.find(c => c.no === n)).filter(Boolean).map(c => c.closed && !c.circle ? chainSpec(c, !!inp.inside) : {key:c.key});
     op.name = inp.name || opTitle(op);
     pushUndo(); S.ops.push(op); selOps = new Set([op.id]); await regen([op], true); setView(S.gview || 'iso');
-    return {ok:true, index:S.ops.length, warnings:op.warn, cycle_min:+cycleTime(op).toFixed(2), moves:op.moves.length};
+    return {ok:true, index:S.ops.length, warnings:op.warn, cycle_min:+cycleTime(op).toFixed(2), moves:(op.moves || []).length};
   }
   if (name === 'update_operation'){
     const op = byIdx(inp.index); if (!op) return {error:'No such operation'};
@@ -3150,9 +3187,25 @@ async function aiRunTool(name, inp){
   if (name === 'get_gcode'){ const d = S.ops.filter(o => o.dirty || !o.moves); if (d.length) await regen(d, true); const g = post(S.ops); return {lines:g.length, gcode:g.slice(0, Math.max(10, inp.max_lines || 200)).join('\n')}; }
   if (name === 'get_estimate'){ const E = Object.assign({}, EST_DEF, S.est || {}, {qty:inp.qty, matCost:inp.matCostPerPart, setupMin:inp.setupMin, progMin:inp.progMin, nSetups:inp.nSetups}); S.est = E; const r = estimate(E); return {summary:estText(E, r), lot_price_php:+r.price.toFixed(2), unit_price_php:+r.unit.toFixed(2), cost_php:+r.cost.toFixed(2), cycle_min:+r.cycleMin.toFixed(2)}; }
   if (name === 'verify'){ const l = S.ops.filter(o => o.moves && o.moves.length); const hits = await runVerify(l, 'normal'); return {collisions:hits ? hits.length : 0, first:(hits || []).slice(0, 10)}; }
+  if (name === 'draw_shapes'){
+    const shapes = Array.isArray(inp.shapes) ? inp.shapes : []; if (!shapes.length) return {error:'No shapes given'};
+    pushUndo();
+    if (inp.replace){ S.geom.items = []; S.geom.mesh = null; S.ops = []; selOps.clear(); if (!S.geom.name || /\.(dxf|stp|step|igs|iges|stl|pdf)$/i.test(S.geom.name)) S.geom.name = 'Drawn with Claude'; }
+    const lv = (inp.level || 'PART').toUpperCase(); if (!S.geom.levels[lv]) ensureLevel(lv); S.geom.main = lv;
+    const added = []; for (const sh of shapes) for (const it of shapeItems(sh)) added.push(addItem(it, lv).id);
+    geomChanged(); stockFromGeom(); drawStock(); setView('top');
+    return {ok:true, entities_added:added.length, bbox:geomBBox(), stock:S.setup.stock, chains:chainSummary(), next:'Set stock top/bottom with set_stock or set_material(thickness), then create operations with tools that have loaded=true.'};
+  }
+  if (name === 'clear_geometry'){ if (!inp.confirm) return {error:'Not confirmed'}; pushUndo(); S.geom.items = []; S.geom.mesh = null; S.geom.name = 'Drawn with Claude'; S.ops = []; selOps.clear(); geomChanged(); drawPaths(); drawStock(); setView('top'); return {ok:true}; }
+  if (name === 'set_material'){
+    if (!MATS[inp.material]) return {error:'Unknown material key; use one of ' + Object.keys(MATS).join(', ')};
+    pushUndo(); S.setup.material = inp.material; if (inp.thickness != null && inp.thickness > 0){ S.setup.stock.top = 0; S.setup.stock.bottom = -inp.thickness; }
+    S.ops.forEach(o => o.dirty = true); drawStock(); renderMgr(); updStatus(); autosave();
+    return {ok:true, material:MATS[inp.material].n, note:MATS[inp.material].note || '', stock:S.setup.stock, process_hint:MATS[inp.material].fam === 'hard' ? 'Not a milling job on this machine (wire EDM / grinding).' : 'Milling OK'};
+  }
   return {error:'unknown tool'};
 }
-const AI_SYS = () => `You are the CAM and estimating assistant inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for a ${MACHINE.name} (${MACHINE.control}) vertical machining centre. The user is a BEGINNER CNC programmer. Be practical, concrete and brief; explain terms the first time you use them. Use the tools to read the job before advising, and to make changes when the user asks you to program something — then tell them what you did and what to check. Safety rules: Z0 is the top of the finished part; depths are negative; never exceed machine limits; this shop runs conservatively — stay well under the machine limits and use the app's safety factor (${S.setup.safety || 60}% of textbook speeds); prefer climb milling, depth cuts of ≤½ tool diameter in steel / ≤1× in aluminium, helix or ramp entry for pockets, spot-drill before drilling, peck (G83) for holes deeper than 3× diameter, G84 rigid tapping with feed = pitch × RPM (the app sets it). After creating operations, always suggest Backplot → Verify → Post and a first run in single block with rapid override. Units are ${S.setup.units}. For quotations use get_estimate and present the customer-facing price separately from the confidential cost build-up; label values Provided/Derived/Assumed and never invent material grade, tolerances or finishes. If the user asks for something the app cannot do (lathe, 4/5-axis, DWG/PDF import), say so plainly.`;
+const AI_SYS = () => `You are the CAM and estimating assistant inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for a ${MACHINE.name} (${MACHINE.control}) vertical machining centre. The user is a BEGINNER CNC programmer. Be practical, concrete and brief; explain terms the first time you use them. Use the tools to read the job before advising, and to make changes when the user asks you to program something — then tell them what you did and what to check. Safety rules: Z0 is the top of the finished part; depths are negative; never exceed machine limits; this shop runs conservatively — stay well under the machine limits and use the app's safety factor (${S.setup.safety || 60}% of textbook speeds); prefer climb milling, depth cuts of ≤½ tool diameter in steel / ≤1× in aluminium, helix or ramp entry for pockets, spot-drill before drilling, peck (G83) for holes deeper than 3× diameter, G84 rigid tapping with feed = pitch × RPM (the app sets it). After creating operations, always suggest Backplot → Verify → Post and a first run in single block with rapid override. Units are ${S.setup.units}. For quotations use get_estimate and present the customer-facing price separately from the confidential cost build-up; label values Provided/Derived/Assumed and never invent material grade, tolerances or finishes. You are also the CAD: when the user describes a part in words (sizes, holes, slots, pockets) draw it with draw_shapes — put X0 Y0 where the user says, otherwise at the part centre; use replace=true when they describe a new part; outside profile first, then holes and pockets. After drawing, set_material (with the thickness) and set_stock, then propose the machining plan and, if the user asked you to program it, create the operations. Tool selection rule: use only tools with loaded=true (they are in the machine now, see pocket); if a needed size is not loaded, say which tool to load and which pocket, or pick the nearest loaded size and say why — never silently invent a tool. If the user asks for something the app cannot do (lathe, 4/5-axis, DWG import), say so plainly.`;
 async function aiCall(messages){
   const body = {model:AI.model, max_tokens:16000, system:AI_SYS(), tools:AI_TOOLS, tool_choice:{type:'auto'}, messages, output_config:{effort:'medium'}, fallbacks:'default'};
   const r = await fetch('https://api.anthropic.com/v1/messages', {method:'POST', headers:{'content-type':'application/json', 'x-api-key':AI.key, 'anthropic-version':'2023-06-01', 'anthropic-beta':'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access':'true'}, body:JSON.stringify(body)});
@@ -3212,7 +3265,7 @@ function aiRender(){
   box.innerHTML = AI.msgs.map(m => {
     if (m.role === 'user') return typeof m.content === 'string' ? `<div style="background:#E8F1FB;border-radius:6px;padding:6px 8px;margin:4px 0 4px 30px">${md(m.content)}</div>` : '';
     return m.content.map(b => b.type === 'text' ? `<div style="background:#fff;border:1px solid #D7DCE4;border-radius:6px;padding:6px 8px;margin:4px 30px 4px 0;line-height:1.45">${md(b.text)}</div>` : b.type === 'tool_use' ? `<div class="hint" style="margin-left:4px">⚙ ${esc(b.name)}${b.name === 'create_operation' ? ': ' + esc(b.input.name || b.input.type) : ''}</div>` : '').join('');
-  }).join('') || `<div class="hint">Try: "Program this part: it's 12 mm aluminium, cut the outside, pocket the slot 6 deep, M8 tapped holes" — or "Why is operation 3 warning?" — or "Explain the G-code for the tap".</div>`;
+  }).join('') || `<div class="hint">Try: "Draw a 100 × 60 plate, 10 mm aluminium, with four Ø8 holes 10 mm from each corner and a Ø30 hole in the middle, then program it with the tools in the machine" — or "Program this part: cut the outside, pocket the slot 6 deep, M8 tapped holes" — or "Why is operation 3 warning?"</div>`;
   box.scrollTop = box.scrollHeight;
 }
 function aiPanel(){
@@ -3220,7 +3273,7 @@ function aiPanel(){
   const el = document.createElement('div'); el.style.cssText = 'display:flex;flex-direction:column;height:62vh;min-height:300px';
   el.innerHTML = `<div id="aiLog" style="flex:1;overflow:auto;padding:2px"></div><div id="aiSt" class="hint" style="min-height:14px;margin:4px 0"></div>
     <div style="display:flex;gap:6px"><textarea id="aiIn" rows="2" style="flex:1;border:1px solid #8E9AAD;padding:4px;font:inherit;resize:none" placeholder="Ask Claude… (Enter to send, Shift+Enter for a new line)"></textarea><button class="btn" id="aiMic" title="Speak (Chrome / Edge)">🎤</button><button class="btn pri" id="aiGo">Send</button></div>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr">Clear</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
+    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><button class="btn" data-q="I will describe a new part for you to draw. First tell me what you need from me: outside size, thickness, material, hole sizes and positions, slots or pockets with depths, and where X0 Y0 should be. Then wait.">Draw a part</button><button class="btn" data-q="Look at this job and tell me, step by step, what operations you would use to machine it and why. Use only the tools loaded in the machine.">Suggest a plan</button><button class="btn" data-q="Check every operation for mistakes a beginner would make (depths, feeds, order, clearances) and fix anything wrong.">Check my program</button><button class="btn" data-q="Explain the posted G-code to me line by line, briefly, like I am new to Fanuc.">Explain the G-code</button><button class="btn" id="aiClr">Clear</button><button class="btn" id="aiKey">API key…</button><label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="aiSpk"> Read replies aloud</label></div>`;
   AI.el = el;
   dlg({title:'✦ Claude — CAM assistant', body:el, w:520, modal:false, footer:false, x:innerWidth - 540, y:70});
   const send = () => { const i = el.querySelector('#aiIn'), t = i.value.trim(); if (!t) return; i.value = ''; aiSend(t); };
@@ -3256,7 +3309,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
