@@ -211,14 +211,14 @@ function defTools(u){
   const T = (num, name, type, dia, o = {}) => mkTool(Object.assign({num, name, type, dia, hOff:num, dOff:num}, o));
   if (u === 'mm') return [
     T(1, '50. FACE MILL', 'face', 50, {flutes:5, len:10, rpm:2500, feed:2000, plunge:600, retract:3000}),
-    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:10000, feed:1800, plunge:540, retract:3000}),
-    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:10000, feed:1200, plunge:360, retract:3000}),
-    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:10000, feed:650, plunge:200, retract:3000}),
+    T(2, '10. FLAT ENDMILL', 'flat', 10, {rpm:6000, feed:1080, plunge:320, retract:3000}),
+    T(3, '6. FLAT ENDMILL', 'flat', 6, {len:20, rpm:6000, feed:740, plunge:220, retract:3000}),
+    T(4, '6. BALL-NOSE ENDMILL', 'ball', 6, {flutes:2, len:20, rpm:6000, feed:400, plunge:120, retract:3000}),
     T(5, '8. SPOT DRILL', 'spot', 8, {flutes:2, angle:90, mat:'HSS', rpm:3200, feed:270, plunge:270}),
     T(6, '6.8 DRILL', 'drill', 6.8, {flutes:2, len:45, mat:'HSS', rpm:3700, feed:570, plunge:570}),
     T(7, 'M8 X 1.25 TAP RH', 'tap', 8, {len:25, mat:'HSS', rpm:800, feed:1000, plunge:1000, pitch:1.25}),
-    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:10000, feed:1700, plunge:500, retract:3000}),
-    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:9300, feed:2500, plunge:750, retract:3000})
+    T(8, '10. CHAMFER MILL 90DEG', 'chamfer', 10, {flutes:4, angle:90, tipDia:1, len:5, rpm:6000, feed:1000, plunge:300, retract:3000}),
+    T(9, '12. BULL ENDMILL R1.', 'bull', 12, {cr:1, flutes:4, len:30, rpm:6000, feed:1600, plunge:480, retract:3000})
   ];
   return [
     T(1, '2. FACE MILL', 'face', 2, {flutes:5, len:0.4, rpm:1000, feed:20, plunge:12, retract:80}),
@@ -2832,7 +2832,7 @@ function renderTbar(){
 function updStatus(){
   const lv = Object.keys(S.geom.levels);
   $('#sbar').innerHTML = `<span class="sb">3D</span><span class="sb" id="sbGv">Gview: ${({top:'TOP', front:'FRONT', right:'RIGHT', iso:'ISO'})[S.gview] || 'TOP'}</span><span class="sb">Planes: TOP</span><span class="sb">Z: 0.</span>
-    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb">${selEnt.size} selected</span><span class="sb" id="sbXY"></span>`;
+    <span class="sb">Level <select id="sbLv">${lv.map(n => `<option${n === S.geom.main ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span><span class="sb">${S.setup.wcs}</span><span class="sb">${isMM() ? 'Metric (mm)' : 'English (inch)'}</span><span class="sb">${selEnt.size} selected</span><span class="sb" title="${esc(GD.sheetErr || (GD.sheetVia ? 'via ' + GD.sheetVia : ''))}">${GD.sheetSynced ? '🛠 Tools: sheet ' + esc(GD.sheetSynced.split(', ').pop() || GD.sheetSynced) : GD.sheetErr ? '🛠 Tools: sheet not reachable' : '🛠 Tools: local library'}</span><span class="sb" id="sbXY"></span>`;
   $('#sbLv').onchange = e => { S.geom.main = e.target.value; renderMgr(); };
   $('#sbGv').onclick = e => popMenu(e.clientX, e.clientY - 120, [['Top', 'Alt+1', () => setView('top')], ['Front', 'Alt+2', () => setView('front')], ['Right', 'Alt+5', () => setView('right')], ['Isometric', 'Alt+7', () => setView('iso')]]);
 }
@@ -2980,19 +2980,23 @@ function estCsv(E, r){
 
 /* ============================== Google Drive job queue + tool sheet ============================== */
 // RFQ intake files every RFQ into "Dynamic RFQ Drawings" as "<Est no> - <Customer> - <Subject>" with the drawings inside.
-const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', token:'', exp:0, user:''};
+const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', csv:'', autoSync:true, token:'', exp:0, user:''};
 try { Object.assign(GD, JSON.parse(localStorage.getItem('cam5.google') || '{}'), {token:'', exp:0}); } catch(e){}
-const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange})); } catch(e){} };
+const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, autoSync:GD.autoSync})); } catch(e){} };
 function gdSettings(){
-  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange}, el = document.createElement('div');
-  el.innerHTML = `<div class="info">One-time setup (10 min, by Noah): Google Cloud Console → APIs & Services → enable <b>Google Drive API</b> and <b>Google Sheets API</b> → Credentials → <b>OAuth client ID (Web application)</b> → add this page's address (e.g. <code>${esc(location.origin)}</code>) under <i>Authorised JavaScript origins</i>. Paste the client ID below. Each operator then signs in with their own Google account; the CAM only sees the RFQ drawings folder and the tool sheet.${location.protocol === 'file:' ? '<br><b>Note:</b> Google sign-in does not work from a file opened off the disk — open the CAM from the web address of the production app.' : ''}</div>
+  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, autoSync:GD.autoSync !== false}, el = document.createElement('div');
+  el.innerHTML = `<fieldset><legend>Tool inventory sheet — direct link, no sign-in</legend><div class="info">The operator edits tool sizes in the Google Sheet; the CAM reads it on start-up and every 10 minutes (or ⟳ Sync in the Tools tab). One-time, in the sheet: <b>File ▸ Share ▸ Publish to web</b> → choose the <b>Tools</b> tab and <b>Comma-separated values (.csv)</b> → Publish → copy the link here. Google refreshes a published link within about 5 minutes of an edit.</div>
+    <div class="fr"><span>Published CSV link</span><input type="text" data-k="csv" value="${esc(W.csv)}" style="width:320px" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv"></div>
+    <div class="fr"><span>Auto-sync</span><label><input type="checkbox" data-k="autoSync"${W.autoSync ? ' checked' : ''}> read the sheet on start-up and every 10 minutes</label></div>
+    <div class="hint">No published link? If the sheet is shared as "Anyone with the link can view", the CAM reads it directly from the sheet ID below. Otherwise it falls back to Google sign-in.</div></fieldset>
+    <fieldset style="margin-top:8px"><legend>Drive job queue & save-to-Drive (needs sign-in)</legend><div class="info">One-time setup (10 min, by Noah): Google Cloud Console → APIs & Services → enable <b>Google Drive API</b> and <b>Google Sheets API</b> → Credentials → <b>OAuth client ID (Web application)</b> → add this page's address (e.g. <code>${esc(location.origin)}</code>) under <i>Authorised JavaScript origins</i>. Paste the client ID below. Each operator then signs in with their own Google account; the CAM only sees the RFQ drawings folder and the tool sheet.${location.protocol === 'file:' ? '<br><b>Note:</b> Google sign-in does not work from a file opened off the disk — open the CAM from the web address of the production app.' : ''}</div>
     <div class="fr"><span>OAuth client ID</span><input type="text" data-k="clientId" value="${esc(W.clientId)}" style="width:320px" placeholder="xxxx.apps.googleusercontent.com"></div>
     <div class="fr"><span>RFQ drawings folder ID</span><input type="text" data-k="root" value="${esc(W.root)}" style="width:320px"><div class="hint">Default = "Dynamic RFQ Drawings" shared drive folder used by the RFQ intake agent.</div></div>
     <div class="fr"><span>Tool inventory sheet ID</span><input type="text" data-k="sheet" value="${esc(W.sheet)}" style="width:320px" placeholder="from the sheet URL: /spreadsheets/d/<ID>/"></div>
     <div class="fr"><span>Sheet range</span><input type="text" data-k="sheetRange" value="${esc(W.sheetRange)}" style="width:320px"><div class="hint">Header row then one tool per row: T, Name, Type (flat/bull/ball/face/chamfer/drill/spot/center/tap/ream/bore), Dia, CornerRad, Flutes, FluteLen, OAL, RPM, Feed, Plunge, Pitch, Angle, H, D, Pocket, Loaded (yes/no), Notes.</div></div>
-    <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div>`;
+    <div class="fr"><span>Signed in as</span><b>${esc(GD.user || 'not signed in')}</b></div></fieldset>`;
   bindFields(el, W);
-  dlg({title:'Google Drive & Sheets connection', body:el, w:600, ok:close => { Object.assign(GD, W); gdSave(); close(); }});
+  dlg({title:'Google Drive & Sheets connection', body:el, w:640, ok:close => { Object.assign(GD, W); gdSave(); close(); if (GD.csv || GD.sheet) syncToolSheet(true); }});
 }
 function loadGIS(){ return new Promise((res, rej) => { if (window.google && google.accounts) return res(); const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.onload = res; sc.onerror = () => rej(new Error('Could not load Google sign-in (needs internet).')); document.head.appendChild(sc); }); }
 async function gdToken(){
@@ -3068,12 +3072,29 @@ async function saveToDrive(ncText, ncName){
   } catch(e){ alert(e.message); } finally { busy(false); }
 }
 // ---- tool inventory from the Google Sheet ----
-async function syncToolSheet(){
-  if (!GD.sheet){ gdSettings(); return; }
-  busy(true, 'Reading tool sheet…');
-  try {
+function parseCSV(text){
+  const rows = [], re = /("([^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g; let row = [], m;
+  text = text.replace(/^\uFEFF/, '');
+  while ((m = re.exec(text)) && m[0] !== ''){ let v = m[1]; if (v.startsWith('"')) v = v.slice(1, -1).replace(/""/g, '"'); row.push(v); if (m[3] !== ','){ rows.push(row); row = []; } if (m.index + m[0].length >= text.length) break; }
+  return rows.filter(r => r.some(c => String(c).trim() !== ''));
+}
+// Tool rows: published CSV link (no sign-in) → public sheet by ID (no sign-in) → Sheets API with sign-in
+async function toolSheetRows(quiet){
+  const tabName = (GD.sheetRange.includes('!') ? GD.sheetRange.split('!')[0] : 'Tools').replace(/^'|'$/g, '');
+  const tryCsv = async url => { const r = await fetch(url, {cache:'no-store'}); if (!r.ok) throw new Error(`HTTP ${r.status}`); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('not CSV'); return parseCSV(t); };
+  if (GD.csv) return {rows:await tryCsv(GD.csv), via:'published link'};
+  if (GD.sheet){
+    try { return {rows:await tryCsv(`https://docs.google.com/spreadsheets/d/${GD.sheet}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`), via:'shared sheet'}; } catch(e){ if (quiet && !GD.clientId) throw new Error('Sheet is not public and no sign-in is set up.'); }
     const r = await gdFetch(`https://sheets.googleapis.com/v4/spreadsheets/${GD.sheet}/values/${encodeURIComponent(GD.sheetRange)}`);
-    const rows = (await r.json()).values || [];
+    return {rows:(await r.json()).values || [], via:'Google sign-in'};
+  }
+  throw new Error('No tool sheet set.');
+}
+async function syncToolSheet(quiet){
+  if (!GD.sheet && !GD.csv){ if (!quiet) gdSettings(); return; }
+  if (!quiet) busy(true, 'Reading tool sheet…');
+  try {
+    const {rows, via} = await toolSheetRows(quiet); GD.sheetVia = via;
     if (rows.length < 2) throw new Error('The sheet range is empty.');
     const H = rows[0].map(h => String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
     const col = (...names) => { for (const n of names){ const i = H.indexOf(n); if (i >= 0) return i; } return -1; };
@@ -3095,10 +3116,13 @@ async function syncToolSheet(){
     if (!tools.length) throw new Error('No tool rows found.');
     pushUndo(); S.tools = tools; saveTools();
     S.ops.forEach(o => { if (!S.tools.find(t => t.id === o.toolId)){ const same = S.tools.find(t => t.num === (toolOf(o) || {}).num); o.toolId = same ? same.id : defaultTool(o.type).id; o.dirty = true; } });
-    GD.sheetSynced = new Date().toLocaleString(); renderMgr();
-    msg('Tool sheet synced', `${tools.length} tools loaded from the sheet, ${tools.filter(t => t.loaded).length} marked as loaded in the machine.<br><br>The wizard prefers loaded tools; the setup sheet shows the pocket numbers.`);
-  } catch(e){ alert(e.message); } finally { busy(false); }
+    GD.sheetSynced = new Date().toLocaleString(); GD.sheetErr = ''; renderMgr(); updStatus();
+    if (!quiet) msg('Tool sheet synced', `${tools.length} tools loaded from the sheet (${esc(via)}), ${tools.filter(t => t.loaded).length} marked as loaded in the machine.<br><br>The wizard and Ask Claude prefer loaded tools; the setup sheet shows the pocket numbers.`);
+    else prompt_(`Tools updated from the Google Sheet (${tools.length} tools, ${tools.filter(t => t.loaded).length} loaded).`);
+  } catch(e){ GD.sheetErr = e.message; updStatus(); if (!quiet) alert(e.message); else console.warn('tool sheet auto-sync:', e.message); } finally { if (!quiet) busy(false); }
 }
+// auto-sync: on start-up and every 10 minutes, without sign-in prompts
+if (GD.autoSync !== false && (GD.csv || GD.sheet)){ setTimeout(() => syncToolSheet(true), 1500); setInterval(() => syncToolSheet(true), 10*60*1000); }
 
 /* ============================== Claude assistant ============================== */
 const AI = {key:'', model:'claude-opus-5-5', msgs:[], el:null, busy:false, sample:null};
