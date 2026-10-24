@@ -202,7 +202,7 @@ const MATS = {
   bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:200, fz10:0.050, vcD:40, fr10:0.15, vcT:10, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
-const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20};
+const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rpmCap:8000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20}; // rpmCap = shop policy for the 2019 belt-drive spindle; maxRpm = machine capability
 const TT = {flat:['Flat endmill','▮'], bull:['Bull endmill','▮'], ball:['Ball endmill','◖'], face:['Face mill','▬'], chamfer:['Chamfer mill','▼'],
   drill:['Drill','⇣'], spot:['Spot drill','▽'], center:['Center drill','▿'], tap:['Tap RH','⌇'], ream:['Reamer','┃'], bore:['Boring bar','┣']};
 const MILLS = ['flat', 'bull', 'ball', 'face', 'chamfer'];
@@ -234,7 +234,7 @@ function defTools(u){
 }
 function defSetup(u){
   const k = u === 'mm' ? 1 : 1/25.4;
-  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.maxRpm, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100,
+  return {units:u, progNum:1001, progName:'PART', wcs:'G54', material:'alu', maxRpm:MACHINE.rpmCap, maxFeed:rnd(MACHINE.maxFeed*k), rapid:rnd(MACHINE.rapid*k), travel:{x:rnd(MACHINE.travel.x*k), y:rnd(MACHINE.travel.y*k), z:rnd(MACHINE.travel.z*k)}, mtype:'mill', beginner:true, safety:100,
     stock:{x0:0, y0:0, x1:rnd(100*k), y1:rnd(100*k), top:0, bottom:rnd(-20*k), margin:rnd(2*k), show:true},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
@@ -797,7 +797,7 @@ async function genOp(op){
     if (ctx.feedZ < st.stock.top - 1e-9) w.push('Feed plane is below the top of stock — rapids may hit material.');
   } else if (L.retract <= L.top) w.push('Retract (R plane) is not above the top of stock.');
   if (L.clearOn && L.clear < L.retract) w.push('Clearance is below the retract height.');
-  if (p.rpm > st.maxRpm) w.push(`Spindle ${p.rpm} RPM exceeds the machine max ${st.maxRpm}.`);
+  if (p.rpm > st.maxRpm) w.push(`Spindle ${p.rpm} RPM exceeds the shop cap of ${st.maxRpm} RPM.`);
   if (p.feed > st.maxFeed) w.push('Feed rate exceeds the machine maximum.');
   if (L.depth != null && L.depth < st.stock.bottom - 1e-6 && !OPDEF[op.type].surf && p.ctype !== 'chamfer') w.push(`Depth ${fmt(L.depth)} is below the stock bottom — check vise/fixture clearance.`);
   if (tool.len && L.depth != null && L.top - L.depth > tool.len + 1e-9 && !OPDEF[op.type].surf && p.ctype !== 'chamfer') w.push(`Cut depth ${fmt(L.top - L.depth)} is deeper than the flute length ${fmt(tool.len)} of T${tool.num}.`);
@@ -1333,11 +1333,11 @@ function post(list, opt = {}){
       let s = pp.tcFmt.replace('#', t.num).replace('M6', G('M06'));
       if (pp.nextTool){ const nt = ops.slice(oi+1).map(toolOf).find(x => x.id !== t.id); if (nt) s += ` T${nt.num}`; }
       emit(s);
-      first.line = emit(`${G('G00')} G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${Math.round(p.rpm)} ${G('M03')}`);
+      first.line = emit(`${G('G00')} G90 ${st.wcs} X${fmt(first.x)} Y${fmt(first.y)} S${Math.round(Math.min(p.rpm, S.setup.maxRpm))} ${G('M03')}`);
       emit(`G43 H${t.hOff || t.num} Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     } else {
       emit(cmt(op.name), false);
-      first.line = emit(`${G('G00')} X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== p.rpm ? ` S${Math.round(p.rpm)} ${G('M03')}` : ''}`);
+      first.line = emit(`${G('G00')} X${fmt(first.x)} Y${fmt(first.y)}${prevRpm !== p.rpm ? ` S${Math.round(Math.min(p.rpm, S.setup.maxRpm))} ${G('M03')}` : ''}`);
       emit(`Z${fZ(first.z)}${cool ? ' ' + cool : ''}`);
     }
     prevRpm = p.rpm;
@@ -1346,7 +1346,7 @@ function post(list, opt = {}){
       const m = mv[k];
       if (m.g === 'cyc'){
         m.lines = [];
-        if (m.code === 'G84' && pp.rigid) emit(`${G('M29')} S${Math.round(m.rpm)}`);
+        if (m.code === 'G84' && pp.rigid) emit(`${G('M29')} S${Math.round(Math.min(m.rpm, S.setup.maxRpm))}`);
         m.pts.forEach((q, qi) => {
           let s = `X${fmt(q[0])} Y${fmt(q[1])}`;
           if (qi === 0){
@@ -1886,7 +1886,7 @@ function propsDlg(tab = 'files'){
       stock:`<fieldset><legend>Stock setup - Rectangular</legend>${fRow(box, 'X', `X (${u})`)}${fRow(box, 'Y', `Y (${u})`)}${fRow(box, 'Z', `Z (${u})`)}</fieldset>
         <fieldset><legend>Stock origin (center of top face)</legend>${fRow(box, 'ox', 'X')}${fRow(box, 'oy', 'Y')}${fRow(box, 'oz', 'Z (top of stock)')}</fieldset>
         <fieldset><legend>From geometry</legend>${fRow(box, 'margin', 'Margin around part')}<div style="display:flex;gap:6px"><button class="btn" data-act="bbox">Bounding box</button></div></fieldset>${fRow(box, 'show', 'Display stock', 'c')}`,
-      machine:`<fieldset><legend>${MACHINE.name} limits</legend>${fRow(st, 'maxRpm', 'Max spindle speed (RPM)', 'i')}${fRow(st, 'maxFeed', `Max feed rate (${u}/min)`)}${fRow(st, 'rapid', `Rapid rate (${u}/min)`)}${fRow(st.travel, 'x', `X travel (${u})`)}${fRow(st.travel, 'y', `Y travel (${u})`)}${fRow(st.travel, 'z', `Z travel (${u})`)}</fieldset><div class="note">Defaults are dealer figures for a QP1620-L (${MACHINE.taper}, ${MACHINE.tools}-tool). Check them against your machine's plate and parameters.</div>`,
+      machine:`<fieldset><legend>${MACHINE.name} limits</legend>${fRow(st, 'maxRpm', 'Spindle speed cap (RPM)', 'i')}<div class="hint">Programs never ask for more than this. Shop policy: ${MACHINE.rpmCap} on the ${MACHINE.taper} belt-drive spindle (machine capability ${MACHINE.maxRpm}). Feeds for small cutters in aluminium scale down with the cap, chip load stays correct.</div>${fRow(st, 'maxFeed', `Max feed rate (${u}/min)`)}${fRow(st, 'rapid', `Rapid rate (${u}/min)`)}${fRow(st.travel, 'x', `X travel (${u})`)}${fRow(st.travel, 'y', `Y travel (${u})`)}${fRow(st.travel, 'z', `Z travel (${u})`)}</fieldset><div class="note">Defaults are dealer figures for a QP1620-L (${MACHINE.taper}, ${MACHINE.tools}-tool). Check them against your machine's plate and parameters.</div>`,
       post:`<fieldset><legend>Post (${MACHINE.control})</legend>${fRow(st.post, 'short', 'Short codes (G0 G1 M3 M6) instead of G00 M03', 'c')}${fRow(st.post, 'tcFmt', 'Tool change', 's', SEL(['T# M6', 'T1 M6'], ['M6 T#', 'M6 T1']))}${fRow(st.post, 'nextTool', 'Pre-stage next tool after M6', 'c')}${fRow(st.post, 'home', 'Z home', 's', SEL('G91 G28 Z0.', 'G28 G91 Z0.', 'G53 Z0.'))}${fRow(st.post, 'endY', 'Bring table forward at end (G28 Y0.)', 'c')}${fRow(st.post, 'm01', 'M1 optional stop between tools', 'c')}${fRow(st.post, 'arcs', 'Output arcs G2/G3 (incl. helical)', 'c')}${fRow(st.post, 'rigid', 'Rigid tapping M29', 'c')}${fRow(st.post, 'toolCmt', 'Tool comment at each tool change', 'c')}</fieldset>`
     })[tab];
     el.querySelectorAll('fieldset').forEach(f => { const h = f.innerHTML; bindFields(f, h.includes('data-k="X"') || h.includes('data-k="ox"') || h.includes('data-k="margin"') ? box : h.includes('lineNums') || h.includes('short') ? st.post : h.includes('data-k="x"') ? st.travel : st); });
@@ -3226,7 +3226,7 @@ async function aiRunToolNow(name, inp){
   }
   return {error:'unknown tool'};
 }
-const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer, max ${MACHINE.maxRpm} RPM). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
+const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer; spindle capability ${MACHINE.maxRpm} RPM but the SHOP CAP is ${S.setup.maxRpm} RPM — never program above the cap). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
 You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
 Shop rules (always apply): speeds and feeds follow INDUSTRY-STANDARD values (carbide end mills, HSS drills and taps, rigid setup) at the shop's speed/feed level of ${S.setup.safety || 100}% (100 = standard) — use calc_speeds for numbers and do not pad them downward; the standard way is the goal, not slow cutting; never exceed machine limits; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
 CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
