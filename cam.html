@@ -55,6 +55,9 @@ input,textarea{user-select:text;-webkit-user-select:text}
 .ok-ic{color:#1E9E2E}
 .okmsg{background:#EAF7EC;border:1px solid #5FBF6F;padding:6px 8px;border-radius:4px;color:#145A1E}.bad-ic{color:#D0312D}
 #gfx{flex:1;position:relative;min-width:0;min-height:0;background:linear-gradient(#97ADCF,#FFFFFF 88%);overflow:hidden}
+body.x5 #gfx{background:#141416}
+body.x5 #prompt{color:#fff;text-shadow:0 0 3px #000}
+body.x5 #vlabel{color:#E6E6E6}
 #gfx canvas{display:block;outline:none}
 #prompt{position:absolute;top:6px;left:8px;font-weight:600;color:#000;pointer-events:none;text-shadow:0 0 3px #fff;max-width:70%}
 #vlabel{position:absolute;left:8px;bottom:6px;font-size:11px;color:#000;pointer-events:none}
@@ -1481,7 +1484,12 @@ const hms = m => { const s = Math.round(m*60); return `${Math.floor(s/3600)}h ${
 
 /* ============================== graphics ============================== */
 let R3, scene, cam, ctl, G = {}, axesOn = true;
-const COL = {ent:0x0A1E8C, sel:0xE0A800, chain:0xD84315, point:0x101010, feed:0x1F5FE0, feedLo:0x7FA6EE, rapid:0xD4A000};
+const COL_LIGHT = {ent:0x0A1E8C, sel:0xE0A800, chain:0xD84315, point:0x101010, feed:0x1F5FE0, feedLo:0x7FA6EE, rapid:0xD4A000, stock:0x1B8E3A, fixture:0xE08A00, sim:0x8FBF6F};
+// Classic Mastercam X5 look: black screen, green geometry, yellow rapids, blue feeds, orange axis cross
+const COL_X5 = {ent:0x00E000, sel:0xFFD000, chain:0xFF6A00, point:0xE0E0E0, feed:0x3C8CFF, feedLo:0x6AA8FF, rapid:0xFFE600, stock:0x40C070, fixture:0xFF9A20, sim:0x8FBF6F};
+let x5Look = true; try { x5Look = localStorage.getItem('cam5.x5look') !== '0'; } catch(e){}
+const COL = Object.assign({}, x5Look ? COL_X5 : COL_LIGHT);
+function setX5Look(on){ x5Look = !!on; try { localStorage.setItem('cam5.x5look', on ? '1' : '0'); } catch(e){} Object.assign(COL, on ? COL_X5 : COL_LIGHT); document.body.classList.toggle('x5', on); drawAxes(); drawGeom(); drawStock(); drawPaths(); renderMenu(); };
 function initView(){
   const el = $('#gfx');
   R3 = new THREE.WebGLRenderer({antialias:true, alpha:true, preserveDrawingBuffer:true});
@@ -1507,6 +1515,7 @@ function drawAxes(){
   clearG(G.axes); if (!axesOn) return;
   const L = pxWorld()*60, mk = (v, c) => { const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), v]); return new THREE.Line(g, new THREE.LineBasicMaterial({color:c})); };
   G.axes.add(mk(new THREE.Vector3(L, 0, 0), 0xD00000), mk(new THREE.Vector3(0, L, 0), 0x00A000), mk(new THREE.Vector3(0, 0, L), 0x0000D0));
+  if (x5Look){ const W = pxWorld()*20000, cross = (a, b) => { const g = new THREE.BufferGeometry().setFromPoints([a, b]); return new THREE.Line(g, new THREE.LineBasicMaterial({color:0xE07A00, transparent:true, opacity:0.75})); }; G.axes.add(cross(new THREE.Vector3(-W, 0, 0), new THREE.Vector3(W, 0, 0)), cross(new THREE.Vector3(0, -W, 0), new THREE.Vector3(0, W, 0))); }
 }
 function hiItems(){
   const s = new Set();
@@ -1562,8 +1571,8 @@ function fixtureTop(){ const bx = fixtureBoxes(); return bx.length ? Math.max(..
 function drawStock(){
   clearG(G.stock); const s = S.setup.stock;
   if (!s.show) return;
-  G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(s.x0, s.y0, s.bottom), new THREE.Vector3(s.x1, s.y1, s.top)), 0x1B8E3A));
-  for (const b of fixtureBoxes()) G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(b.x0, b.y0, Math.max(b.z0, s.bottom - 5*K())), new THREE.Vector3(b.x1, b.y1, b.z1)), 0xE08A00));
+  G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(s.x0, s.y0, s.bottom), new THREE.Vector3(s.x1, s.y1, s.top)), COL.stock));
+  for (const b of fixtureBoxes()) G.stock.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(b.x0, b.y0, Math.max(b.z0, s.bottom - 5*K())), new THREE.Vector3(b.x1, b.y1, b.z1)), COL.fixture));
 }
 let simPts = [];
 function drawPaths(){
@@ -2912,7 +2921,7 @@ const MENU = () => [
   ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['⏱ Time estimate (hours)…', '', estimateDlg]]],
-  ['Screen', [['Toggle toolpath display', 'Alt+T', togglePaths], ['Toggle shading', 'Alt+S', () => { shade = !shade; drawGeom(); }], ['Toggle WCS axes', 'F9', () => { axesOn = !axesOn; drawAxes(); }], ['Clear verify stock', '', () => clearG(G.sim)], ['Clear selection', '', () => { selEnt.clear(); drawGeom(); updStatus(); }]]],
+  ['Screen', [[`${x5Look ? '✓ ' : ''}Classic X5 look (black screen, green lines)`, '', () => setX5Look(!x5Look)], ['Toggle toolpath display', 'Alt+T', togglePaths], ['Toggle shading', 'Alt+S', () => { shade = !shade; drawGeom(); }], ['Toggle WCS axes', 'F9', () => { axesOn = !axesOn; drawAxes(); }], ['Clear verify stock', '', () => clearG(G.sim)], ['Clear selection', '', () => { selEnt.clear(); drawGeom(); updStatus(); }]]],
   ['Settings', [[(isMM() ? '✔ ' : '') + 'Configuration ▸ Metric (mm)', '', () => setUnits('mm')], [(!isMM() ? '✔ ' : '') + 'Configuration ▸ English (inch)', '', () => setUnits('in')], '-', [(S.setup.beginner ? '✔ ' : '') + 'Beginner mode (hints & checklists)', '', () => { S.setup.beginner = !S.setup.beginner; renderMenu(); autosave(); }], '-', ['Machine definition…', '', () => propsDlg('machine')], ['Post options…', '', () => propsDlg('post')], ['Claude assistant settings…', '', () => aiSettings()], ['Google Drive & tool sheet connection…', '', gdSettings], ['Sync tool library from Google Sheet', '', syncToolSheet]]],
   ['Help', [['Load demo part', '', () => { if (S.ops.length && !confirm('Replace the current file with the demo part?')) return; demo(); }], ['Keyboard & mouse', 'F1', helpDlg], ['Beginner guide', '', guideDlg], ['About', '', () => msg('About', `<b>Dynamic Intl CAM</b><br>2D/3D milling CAM posting to ${MACHINE.name} (${MACHINE.control}).<br><br>Always backplot and verify. Prove out new programs with single block, reduced rapids and the feed override.`)]]]
 ];
@@ -3686,7 +3695,7 @@ function aiPanel(){
 }
 
 /* ============================== boot ============================== */
-initView(); renderMenu(); renderTbar(); renderMgr(); updStatus(); updTitle();
+initView(); document.body.classList.toggle('x5', x5Look); renderMenu(); renderTbar(); renderMgr(); updStatus(); updTitle();
 let booted = false;
 try { const s = localStorage.getItem('cam5.project'); if (s){ applyProject(JSON.parse(s)); booted = true; } } catch(e){ console.warn(e); }
 if (!booted){
