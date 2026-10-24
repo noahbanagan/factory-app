@@ -202,7 +202,7 @@ const MATS = {
   bakelite:{n:'BAKELITE / PHENOLIC / G10-G11', vc:200, fz10:0.050, vcD:40, fr10:0.15, vcT:10, fam:'plastic', note:'Abrasive dust: coolant OFF, vacuum extraction, carbide only, mask. Chips at the exit edge — chamfer or back with scrap.'}
 };
 // Chevalier QP1620-L / Fanuc 0i-MD. Dealer figures — confirm against the machine's own plate and parameters.
-const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rpmCap:8000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20}; // rpmCap = shop policy for the 2019 belt-drive spindle; maxRpm = machine capability
+const MACHINE = {name:'Chevalier QP1620-L', control:'FANUC 0i-MD', post:'Generic FANUC 3X Mill', travel:{x:520, y:400, z:380}, maxRpm:10000, rpmCap:6000, rapid:48000, maxFeed:10000, taper:'BT40', tools:20}; // rpmCap = shop policy for the 2019 belt-drive spindle; maxRpm = machine capability
 const TT = {flat:['Flat endmill','▮'], bull:['Bull endmill','▮'], ball:['Ball endmill','◖'], face:['Face mill','▬'], chamfer:['Chamfer mill','▼'],
   drill:['Drill','⇣'], spot:['Spot drill','▽'], center:['Center drill','▿'], tap:['Tap RH','⌇'], ream:['Reamer','┃'], bore:['Boring bar','┣']};
 const MILLS = ['flat', 'bull', 'ball', 'face', 'chamfer'];
