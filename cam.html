@@ -3348,7 +3348,7 @@ async function aiRunToolNow(name, inp){
   if (name === 'draw_shapes'){
     const shapes = Array.isArray(inp.shapes) ? inp.shapes : []; if (!shapes.length) return {error:'No shapes given'};
     pushUndo();
-    if (inp.replace){ S.geom.items = []; S.geom.mesh = null; S.ops = []; selOps.clear(); if (!S.geom.name || /\.(dxf|stp|step|igs|iges|stl|pdf)$/i.test(S.geom.name)) S.geom.name = 'Drawn with Claude'; }
+    if (inp.replace){ S.geom.items = []; S.geom.mesh = null; S.ops = []; selOps.clear(); S.geom.name = AI.drawingName ? 'Drawn by Claude from ' + AI.drawingName : 'Drawn with Claude'; S.file = S.geom.name.replace(/\.pdf$/i, ''); if (typeof updTitle === 'function') updTitle(); }
     const lv = (inp.level || 'PART').toUpperCase(); if (!S.geom.levels[lv]) ensureLevel(lv); S.geom.main = lv;
     const added = []; for (const sh of shapes) for (const it of shapeItems(sh)) added.push(addItem(it, lv).id);
     geomChanged(); stockFromGeom(); drawStock(); setView('top');
@@ -3497,7 +3497,7 @@ if (!booted){
   prompt_('Start with 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) wizard(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, loadPDFJS, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
