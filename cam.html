@@ -2649,7 +2649,7 @@ $('#fFile').addEventListener('change', async e => {
   const ok = await openCAD(f, pickMode === 'merge'); if (pickCb) pickCb(); else if (ok && pickMode !== 'merge') offerClaudeLook(f.name);
 });
 document.addEventListener('dragover', e => e.preventDefault());
-document.addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return; if (/\.(json|cam)$/i.test(f.name)){ try { applyProject(JSON.parse(await f.text())); S.file = f.name.replace(/\.cam\.json$|\.json$/i, ''); updTitle(); } catch(err){ alert('Not a valid project file.'); } return; } const ok = await openCAD(f, false); if (ok) offerClaudeLook(f.name); });
+document.addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f){ const t = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text'); if (driveIdFrom(t)) openDriveLink(t, false); return; } if (/\.(json|cam)$/i.test(f.name)){ try { applyProject(JSON.parse(await f.text())); S.file = f.name.replace(/\.cam\.json$|\.json$/i, ''); updTitle(); } catch(err){ alert('Not a valid project file.'); } return; } const ok = await openCAD(f, false); if (ok) offerClaudeLook(f.name); });
 // After a drawing opens: offer Claude's first look (beginner mode), otherwise continue to the Job Wizard.
 function offerClaudeLook(name){
   if (S.setup.aiOnOpen === false || !S.setup.beginner) return;
@@ -2903,7 +2903,7 @@ function wizard(){
 function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ? '' : 'Toolpath display off (Alt+T)'); }
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
-  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
+  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Open from Google Drive link…', '', driveLinkDlg], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
   ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
@@ -3128,16 +3128,18 @@ function estCsv(E, r){
 
 /* ============================== Google Drive job queue + tool sheet ============================== */
 // RFQ intake files every RFQ into "Dynamic RFQ Drawings" as "<Est no> - <Customer> - <Subject>" with the drawings inside.
-const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', csv:'', csvBy:{}, autoSync:true, token:'', exp:0, user:''};
+const GD = {clientId:'', root:'1XcuAUJ4r2rOpHgzbUcwiaK-VL5I9RFjU', sheet:'1MCA_BUzyC4sduvKsDczhDo4deazzFBuT0liqB9kxH9U', sheetRange:'A1:Z200', csv:'', csvBy:{}, apiKey:'', autoSync:true, token:'', exp:0, user:''};
 try { Object.assign(GD, JSON.parse(localStorage.getItem('cam5.google') || '{}'), {token:'', exp:0}); } catch(e){}
-const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csvBy:GD.csvBy, autoSync:GD.autoSync})); } catch(e){} };
+const gdSave = () => { try { localStorage.setItem('cam5.google', JSON.stringify({clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csvBy:GD.csvBy, apiKey:GD.apiKey, autoSync:GD.autoSync})); } catch(e){} };
 function gdSettings(){
-  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csv2:(GD.csvBy || {}).cnc2 || '', autoSync:GD.autoSync !== false}, el = document.createElement('div');
+  const W = {clientId:GD.clientId, root:GD.root, sheet:GD.sheet, sheetRange:GD.sheetRange, csv:GD.csv, csv2:(GD.csvBy || {}).cnc2 || '', apiKey:GD.apiKey || '', autoSync:GD.autoSync !== false}, el = document.createElement('div');
   el.innerHTML = `<fieldset><legend>Tool inventory sheet — direct link, no sign-in</legend><div class="info">One tab per machine: <b>CNC1</b> and <b>CNC2</b>. The operator edits tool sizes in the Google Sheet; the CAM reads it on start-up and every 10 minutes (or ⟳ Sync in the Tools tab). One-time, in the sheet: <b>File ▸ Share ▸ Publish to web</b> → choose the <b>CNC1</b> tab and <b>Comma-separated values (.csv)</b> → Publish → copy the link here; repeat for <b>CNC2</b>. Google refreshes a published link within about 5 minutes of an edit.</div>
     <div class="fr"><span>CNC1 published CSV link</span><input type="text" data-k="csv" value="${esc(W.csv)}" style="width:320px" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv  (tab CNC1)"></div>
     <div class="fr"><span>CNC2 published CSV link</span><input type="text" data-k="csv2" value="${esc((GD.csvBy || {}).cnc2 || '')}" style="width:320px" placeholder="same sheet, tab CNC2"></div>
     <div class="fr"><span>Auto-sync</span><label><input type="checkbox" data-k="autoSync"${W.autoSync ? ' checked' : ''}> read the sheet on start-up and every 10 minutes</label></div>
     <div class="hint">No published link? If the sheet is shared as "Anyone with the link can view", the CAM reads it directly from the sheet ID below. Otherwise it falls back to Google sign-in.</div></fieldset>
+    <fieldset style="margin-top:8px"><legend>Open a drawing from a Google Drive link</legend><div class="info">File ▸ <b>Open from Google Drive link…</b> takes a shared link to a PDF, DXF, STEP or STL. If you are signed in (below) any file you can see opens. Without sign-in, files shared as "Anyone with the link" open when a Google <b>API key</b> is set here (Google Cloud Console → Credentials → API key, restricted to the Drive API — 5 minutes, once).</div>
+    <div class="fr"><span>Google API key (optional)</span><input type="password" data-k="apiKey" value="${esc(W.apiKey)}" style="width:320px" placeholder="AIza…"></div></fieldset>
     <fieldset style="margin-top:8px"><legend>Drive job queue & save-to-Drive (needs sign-in)</legend><div class="info">One-time setup (10 min, by Noah): Google Cloud Console → APIs & Services → enable <b>Google Drive API</b> and <b>Google Sheets API</b> → Credentials → <b>OAuth client ID (Web application)</b> → add this page's address (e.g. <code>${esc(location.origin)}</code>) under <i>Authorised JavaScript origins</i>. Paste the client ID below. Each operator then signs in with their own Google account; the CAM only sees the RFQ drawings folder and the tool sheet.${location.protocol === 'file:' ? '<br><b>Note:</b> Google sign-in does not work from a file opened off the disk — open the CAM from the web address of the production app.' : ''}</div>
     <div class="fr"><span>OAuth client ID</span><input type="text" data-k="clientId" value="${esc(W.clientId)}" style="width:320px" placeholder="xxxx.apps.googleusercontent.com"></div>
     <div class="fr"><span>RFQ drawings folder ID</span><input type="text" data-k="root" value="${esc(W.root)}" style="width:320px"><div class="hint">Default = "Dynamic RFQ Drawings" shared drive folder used by the RFQ intake agent.</div></div>
@@ -3171,6 +3173,36 @@ async function gdList(parent, extra = ''){
   return (await r.json()).files || [];
 }
 async function gdDownload(id, name){ const r = await gdFetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`); return new File([await r.blob()], name); }
+// A shared Drive link → file id
+function driveIdFrom(text){ const t = String(text || '').trim(); let m = /\/d\/([A-Za-z0-9_-]{10,})/.exec(t) || /[?&]id=([A-Za-z0-9_-]{10,})/.exec(t) || /^([A-Za-z0-9_-]{20,})$/.exec(t); return m ? m[1] : ''; }
+async function openDriveLink(link, merge){
+  const id = driveIdFrom(link); if (!id){ alert('That does not look like a Google Drive link. Copy the link from Drive ▸ Share ▸ Copy link.'); return false; }
+  busy(true, 'Fetching from Google Drive…');
+  try {
+    let meta, blob;
+    const viaKey = async () => { const k = encodeURIComponent(GD.apiKey); const m = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=name,mimeType,size&supportsAllDrives=true&key=${k}`); if (!m.ok) throw new Error(m.status === 404 || m.status === 403 ? 'The file is not shared as "Anyone with the link" (or the API key is wrong). Share it that way, or sign in to Google in Settings.' : `Google: ${m.status}`); meta = await m.json(); const d = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true&key=${k}`); if (!d.ok) throw new Error(`Google: ${d.status}`); blob = await d.blob(); };
+    const viaToken = async () => { const m = await gdFetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=name,mimeType,size&supportsAllDrives=true`); meta = await m.json(); blob = await (await gdFetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`)).blob(); };
+    if (GD.token && Date.now() < GD.exp - 60000) await viaToken();
+    else if (GD.apiKey) { try { await viaKey(); } catch(e){ if (GD.clientId) await viaToken(); else throw e; } }
+    else if (GD.clientId) await viaToken();
+    else throw new Error('To open Drive links, set a Google API key (for files shared with "Anyone with the link") or the sign-in client ID — Settings ▸ Google Drive connection.');
+    if (/google-apps/.test(meta.mimeType || '')) throw new Error('This is a Google Docs/Sheets file, not a drawing. Export it as PDF first.');
+    busy(false);
+    const file = new File([blob], meta.name || 'drive-file');
+    const ok = await openCAD(file, !!merge);
+    if (ok && !merge){ S.drive = Object.assign({}, S.drive || {}, {fileId:id, fileName:meta.name}); offerClaudeLook(meta.name); }
+    return ok;
+  } catch(e){ busy(false); alert(e.message); return false; }
+  finally { busy(false); }
+}
+function driveLinkDlg(){
+  const W = {link:''}, el = document.createElement('div');
+  el.innerHTML = `<div class="info">Paste a Google Drive share link to a <b>PDF, DXF, STEP, IGES or STL</b>. In Drive: right-click the file ▸ Share ▸ Copy link.</div><div class="fr"><span>Drive link</span><input type="text" data-k="link" style="width:380px" placeholder="https://drive.google.com/file/d/…/view?usp=sharing"></div>
+    <div class="hint">${GD.user ? `Signed in as ${esc(GD.user)}: any file you can see opens.` : GD.apiKey ? 'Not signed in: files shared as "Anyone with the link" open; others need sign-in (Settings ▸ Google connection).' : 'Not set up yet: add a Google API key or sign in under Settings ▸ Google Drive connection.'}</div>`;
+  bindFields(el, W);
+  dlg({title:'Open from Google Drive link', body:el, w:560, okLabel:'Open', ok:close => { close(); openDriveLink(W.link, false); }});
+  setTimeout(() => { const i = el.querySelector('[data-k=link]'); i && i.focus(); navigator.clipboard && navigator.clipboard.readText && navigator.clipboard.readText().then(t => { if (driveIdFrom(t) && !i.value){ i.value = t.trim(); W.link = i.value; } }).catch(() => {}); }, 50);
+}
 async function gdUpload(folder, name, text, mime, existingId){
   const meta = {name, mimeType:mime}, bnd = 'camboundary' + uid();
   if (!existingId) meta.parents = [folder];
@@ -3287,6 +3319,7 @@ function homeDlg(){
     if (act === 'wizard'){ close(); wizard(); }
     if (act === 'demo'){ close(); demo(); }
     if (act === 'queue'){ close(); jobQueue(); }
+    if (act === 'dlink'){ close(); driveLinkDlg(); }
     if (act === 'recent'){ close(); recentDlg(); }
     if (act === 'mach'){ switchMachine(a.dataset.v); close(); machineDash(); }
     if (act === 'ai'){ close(); aiPanel(); }
@@ -3309,7 +3342,7 @@ function renderHome(){
       <div class="hint" style="width:auto;margin:0">${STAGES.map((st, i) => `<span style="padding:2px 6px;border-radius:10px;margin-left:3px;background:${i === stage ? '#2458B0' : i < stage ? '#5FBF6F' : '#E6E9EF'};color:${i <= stage ? '#fff' : '#5A6472'}">${i + 1}. ${st}</span>`).join('')}</div></div>
     <div class="pk loaded" data-h="${next[0]}" style="min-height:0;padding:10px 12px;margin-bottom:10px;border-width:2px"><div class="pt" style="font-size:15px;white-space:normal">Next step: ${next[1]}</div><div class="ps" style="white-space:normal;font-size:12px">${next[2]}</div></div>
     <div style="font-weight:700;margin:6px 0 4px">Jobs</div>
-    <div class="mag" style="grid-template-columns:repeat(4,1fr)">${tile('open', '📂', 'New job from a drawing', 'Open PDF / DXF / STEP from the PC')}${tile('queue', '☁', 'Jobs waiting (Drive)', 'RFQ drawings archived by the intake agent')}${tile('recent', '🕒', 'Recent jobs', 'Continue a job from this PC')}${tile('demo', '🧪', 'Practice plate', 'A sample job to learn with')}</div>
+    <div class="mag" style="grid-template-columns:repeat(5,1fr)">${tile('open', '📂', 'New job from a drawing', 'Open PDF / DXF / STEP from the PC')}${tile('queue', '☁', 'Jobs waiting (Drive)', 'RFQ drawings archived by the intake agent')}${tile('dlink', '🔗', 'Open a Drive link', 'Paste a shared Google Drive link to a PDF or STEP')}${tile('recent', '🕒', 'Recent jobs', 'Continue a job from this PC')}${tile('demo', '🧪', 'Practice plate', 'A sample job to learn with')}</div>
     <div style="font-weight:700;margin:12px 0 4px">Machines</div>
     <div class="mag" style="grid-template-columns:repeat(3,1fr)">${Object.values(MACHINES).map(mm => tile('mach', mm.kind === 'mill' ? '🏭' : '⚡', `${esc(mm.name)}${mm.id === MACHINE.id ? ' <span style="color:#1E9E2E">● this job</span>' : ''}`, mm.kind === 'mill' ? `${mm.tools} pockets · ${esc(mm.control)} · tools, speeds, collisions` : 'wire cut · routing only for now', mm.id)).join('')}</div>
     <div style="font-weight:700;margin:12px 0 4px">Help</div>
@@ -3660,7 +3693,7 @@ if (!booted){
   prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) homeDlg(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
