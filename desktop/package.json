@@ -1,0 +1,44 @@
+{
+  "name": "dynamic-intl-cam",
+  "productName": "Dynamic Intl CAM",
+  "version": "0.9.0",
+  "description": "CAM for the Dynamic Int'l shop: Chevalier QP1620-L (CNC1, CNC2) and Mitsubishi BA24",
+  "main": "main.js",
+  "author": "Dynamic Int'l",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "prepare-app": "node build.js",
+    "start": "node build.js && electron .",
+    "dist:win": "node build.js && electron-builder --win --x64",
+    "dist:dir": "node build.js && electron-builder --win --x64 --dir"
+  },
+  "devDependencies": {
+    "electron": "33.2.0",
+    "electron-builder": "25.1.8",
+    "clipper-lib": "6.4.2",
+    "three": "0.160.0",
+    "pdfjs-dist": "4.10.38",
+    "occt-import-js": "0.0.22"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "build": {
+    "appId": "com.dynamicprecisiontech.cam",
+    "productName": "Dynamic Intl CAM",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "app/**/*", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Dynamic Intl CAM"
+    },
+    "publish": [{ "provider": "github", "owner": "noahbanagan", "repo": "factory-app" }]
+  }
+}
