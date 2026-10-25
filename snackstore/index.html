@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
 <link rel="stylesheet" href="assets/styles.css">
 <script src="assets/products.js" defer></script>
+<script src="assets/art.js" defer></script>
 <script src="assets/app.js" defer></script>
 </head>
 <body>
@@ -36,10 +37,7 @@
     <div class="row"><a class="btn btn-primary" href="shop.html">Shop all snacks</a><a class="btn btn-ghost" href="shop.html#cat=bundles">Start with an Omiyage Box</a></div>
     <p class="small muted">Metro Manila 1–2 business days · Provincial 2–7 business days · Free shipping over ₱2,500</p>
   </div>
-  <div class="hero-art" aria-hidden="true">
-    <div class="tile" style="background:#d9534f"></div><div class="tile" style="background:#f2a51a"></div><div class="tile" style="background:#2c3a7a"></div>
-    <div class="tile" style="background:#2e7d9a"></div><div class="tile" style="background:#e0557a"></div><div class="tile" style="background:#6d4c41"></div>
-  </div>
+  <div class="hero-art" id="hero-art" aria-hidden="true"></div>
 </div></section>
 
 <section class="section"><div class="wrap">
@@ -93,9 +91,9 @@
 <section class="section"><div class="wrap">
   <div class="section-head"><div><div class="eyebrow">Journal</div><h2>Latest from the shop</h2></div><a href="blog.html">All posts →</a></div>
   <div class="grid grid-3">
-    <article class="post"><div class="art" aria-hidden="true"></div><div class="body"><time datetime="2026-10-12">12 October 2026</time><h3><a href="blog.html#october-arrivals">October arrivals: autumn KitKats and the return of Pocky Matcha</a></h3><p class="small muted">What landed in the warehouse this month and what sold out in a week.</p></div></article>
-    <article class="post"><div class="art" aria-hidden="true" style="background:linear-gradient(135deg,#6d4c41,#a1887f)"></div><div class="body"><time datetime="2026-09-28">28 September 2026</time><h3><a href="blog.html#kinoko-vs-takenoko">Kinoko vs Takenoko: Japan’s 45-year snack war, explained</a></h3><p class="small muted">Why a mushroom and a bamboo shoot divide a nation, and which one Filipinos pick.</p></div></article>
-    <article class="post"><div class="art" aria-hidden="true" style="background:linear-gradient(135deg,#2e7d9a,#4fb3bf)"></div><div class="body"><time datetime="2026-09-10">10 September 2026</time><h3><a href="blog.html#reading-labels">How to read a Japanese snack label</a></h3><p class="small muted">Best-before dates, the 8 mandatory allergens, and the kanji that means “contains alcohol”.</p></div></article>
+    <article class="post"><div class="art" data-art="october" aria-hidden="true"></div><div class="body"><time datetime="2026-10-12">12 October 2026</time><h3><a href="blog.html#october-arrivals">October arrivals: autumn KitKats and the return of Pocky Matcha</a></h3><p class="small muted">What landed in the warehouse this month and what sold out in a week.</p></div></article>
+    <article class="post"><div class="art" data-art="kinoko" aria-hidden="true"></div><div class="body"><time datetime="2026-09-28">28 September 2026</time><h3><a href="blog.html#kinoko-vs-takenoko">Kinoko vs Takenoko: Japan’s 45-year snack war, explained</a></h3><p class="small muted">Why a mushroom and a bamboo shoot divide a nation, and which one Filipinos pick.</p></div></article>
+    <article class="post"><div class="art" data-art="labels" aria-hidden="true"></div><div class="body"><time datetime="2026-09-10">10 September 2026</time><h3><a href="blog.html#reading-labels">How to read a Japanese snack label</a></h3><p class="small muted">Best-before dates, the 8 mandatory allergens, and the kanji that means “contains alcohol”.</p></div></article>
   </div>
 </div></section>
 

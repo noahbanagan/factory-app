@@ -120,10 +120,8 @@ button{font:inherit;color:inherit}
 .hero-copy{display:grid;gap:20px;max-width:56ch}
 .hero-copy .lead{font-size:1.2rem;color:var(--ink-2)}
 .hero-kana{font-family:var(--font-display);font-size:.95rem;color:var(--indigo);letter-spacing:.3em;font-weight:600}
-.hero-art{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.hero-art .tile{aspect-ratio:1;border-radius:10px}
-.hero-art .tile:nth-child(2){transform:translateY(18px)}
-.hero-art .tile:nth-child(5){transform:translateY(-18px)}
+.hero-art{display:block;max-width:100%}
+.hero-art svg{width:100%;height:auto;display:block;filter:drop-shadow(0 12px 24px rgba(23,28,43,.12))}
 @media (max-width:860px){.hero .wrap{grid-template-columns:1fr;padding-block:40px}.hero-art{max-width:420px}}
 
 /* trust strip */
@@ -143,7 +141,9 @@ button{font:inherit;color:inherit}
 /* product card */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;min-width:0;overflow:hidden;transition:box-shadow .15s}
 .card:hover{box-shadow:var(--shadow)}
-.card .art{position:relative;aspect-ratio:1;display:grid;place-items:center;color:#fff;font-family:var(--font-display);font-weight:700;font-size:clamp(1.6rem,4vw,2.3rem);letter-spacing:.05em;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.card .art{position:relative;aspect-ratio:1;background:var(--surface-2);overflow:hidden}
+.card .art svg{width:100%;height:100%;display:block;transition:transform .25s}
+.card:hover .art svg{transform:scale(1.04)}
 .card .art a{position:absolute;inset:0}
 .badge{position:absolute;top:10px;left:10px;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:4px;background:var(--surface);color:var(--ink)}
 .badge.sale{background:var(--sale);color:#fff}
@@ -186,7 +186,8 @@ button{font:inherit;color:inherit}
 
 /* blog */
 .post{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);overflow:hidden;display:flex;flex-direction:column}
-.post .art{aspect-ratio:16/9;background:linear-gradient(135deg,var(--indigo),#6b7bd6)}
+.post .art{aspect-ratio:16/9;background:var(--surface-2);overflow:hidden}
+.post .art svg{width:100%;height:100%;display:block}
 .post .body{padding:16px;display:grid;gap:8px}
 .post time{font-size:.85rem;color:var(--muted)}
 .post h3 a{color:var(--ink)}
@@ -221,7 +222,8 @@ label{font-weight:600;font-size:.95rem}
 .crumbs{font-size:.9rem;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;padding-block:16px}
 .pdp{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
 .pdp .gallery{position:sticky;top:calc(80px + env(safe-area-inset-top,0px))}
-.pdp .main-art{aspect-ratio:1;border-radius:12px;display:grid;place-items:center;color:#fff;font-family:var(--font-display);font-weight:700;font-size:clamp(2.5rem,6vw,4.5rem);letter-spacing:.06em;text-shadow:0 2px 4px rgba(0,0,0,.25)}
+.pdp .main-art{aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line)}
+.pdp .main-art svg{width:100%;height:100%;display:block}
 .pdp .info{display:grid;gap:20px}
 .pdp h1{font-size:clamp(1.6rem,3vw,2.3rem)}
 .pdp .jp{font-size:1.1rem;color:var(--muted);font-family:var(--font-display)}
@@ -251,7 +253,8 @@ label{font-weight:600;font-size:.95rem}
 .cart{display:grid;grid-template-columns:1fr 360px;gap:32px;align-items:start}
 .cart-lines{display:grid;gap:12px}
 .line{display:grid;grid-template-columns:80px 1fr auto;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
-.line .art{width:80px;height:80px;border-radius:8px;display:grid;place-items:center;color:#fff;font-family:var(--font-display);font-weight:700}
+.line .art{width:80px;height:80px;border-radius:8px;overflow:hidden;background:var(--surface-2)}
+.line .art svg{width:100%;height:100%;display:block}
 .line .meta{min-width:0;display:grid;gap:4px}
 .line .meta strong{font-weight:600}
 .line .remove{border:0;background:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0;text-align:left}

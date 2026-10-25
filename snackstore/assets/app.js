@@ -50,7 +50,7 @@
   function card(p){
     const badge = p.compareAt ? `<span class="badge sale">Save ${peso(p.compareAt-p.price)}</span>` : p.new ? `<span class="badge new">New</span>` : p.best ? `<span class="badge">Best seller</span>` : "";
     return `<article class="card">
-      <div class="art" style="background:linear-gradient(135deg,${catById[p.cat].color},${shade(catById[p.cat].color,-25)})">${catById[p.cat].kana}${badge}<a href="product.html#${p.id}" aria-label="${esc(p.name)}"></a></div>
+      <div class="art">${ART.product(p)}${badge}<a href="product.html#${p.id}" aria-label="${esc(p.name)}"></a></div>
       <div class="body">
         <div class="brand-line">${esc(p.brand)} · ${esc(p.weight)}</div>
         <h3><a href="product.html#${p.id}">${esc(p.name)}</a></h3>
@@ -70,6 +70,7 @@
 
   function initHome(){
     renderGrid($("#best-sellers"), PRODUCTS.filter(p=>p.best).slice(0,8));
+    const hero=$("#hero-art"); if(hero) hero.innerHTML=ART.hero(["glico-pocky-chocolate","nestle-kitkat-matcha","hata-ramune","calbee-jagarico-salad","yaokin-umaibo-cheese","meiji-kinoko"].map(id=>byId[id]));
     const cats=$("#category-grid");
     if(cats) cats.innerHTML = CATEGORIES.map(c=>`<a class="cat" href="shop.html#cat=${c.id}"><span class="swatch" style="background:${c.color}">${c.kana.slice(0,2)}</span><div><strong>${esc(c.name)}</strong><span>${esc(c.blurb)}</span></div></a>`).join("");
   }
@@ -133,8 +134,8 @@
       $("#crumb-name").textContent=p.name;
       const containsAlcohol = !p.tags.includes("no-alcohol");
       root.innerHTML=`
-        <div class="gallery"><div class="main-art" style="background:linear-gradient(135deg,${c.color},${shade(c.color,-25)})" aria-hidden="true">${c.kana}</div>
-          <p class="small muted" style="margin-top:10px">Product photo to follow. Colour tile shows the category.</p></div>
+        <div class="gallery"><div class="main-art">${ART.product(p)}</div>
+          <p class="small muted" style="margin-top:10px">Preview illustration. Product photography replaces it before launch.</p></div>
         <div class="info">
           <div><div class="eyebrow">${esc(p.brand)} · ${esc(c.name)}</div><h1>${esc(p.name)}</h1><div class="jp" lang="ja">${esc(p.jp)}</div></div>
           <p>${esc(p.desc)}</p>
@@ -181,7 +182,7 @@
       if(!cart.length){ root.innerHTML=`<div class="empty">Your cart is empty. <a href="shop.html">Start with the best sellers</a>.</div>`; $("#summary").hidden=true; return; }
       $("#summary").hidden=false;
       root.innerHTML=cart.map((l,i)=>{ const p=byId[l.id]; const c=catById[p.cat]; return `<div class="line">
-        <div class="art" style="background:linear-gradient(135deg,${c.color},${shade(c.color,-25)})" aria-hidden="true">${c.kana.slice(0,2)}</div>
+        <div class="art">${ART.product(p)}</div>
         <div class="meta"><strong><a href="product.html#${p.id}">${esc(p.name)}</a></strong><span class="small muted">${esc(p.brand)} · ${l.unit==="case"?`case of ${p.caseQty}`:esc(p.weight)} · ${peso(linePrice(l))} each</span><button class="remove" data-rm="${i}">Remove</button></div>
         <div class="right stack" style="justify-items:end"><div class="qty"><button type="button" data-i="${i}" data-d="-1" aria-label="Decrease">−</button><input type="number" value="${l.qty}" min="1" max="99" data-i="${i}" aria-label="Quantity"><button type="button" data-i="${i}" data-d="1" aria-label="Increase">+</button></div><strong class="num">${peso(linePrice(l)*l.qty)}</strong></div>
       </div>`;}).join("");
@@ -214,6 +215,7 @@
   });
   document.addEventListener("DOMContentLoaded",()=>{
     updateCount();
+    $$("[data-art]").forEach(el=>{ el.innerHTML=ART.scene(el.dataset.art); });
     const mb=$(".menu-btn"), nav=$(".nav");
     if(mb&&nav) mb.addEventListener("click",()=>{ const open=nav.classList.toggle("open"); mb.setAttribute("aria-expanded",open); });
     const hs=$("#header-search");

@@ -53,3 +53,38 @@ window.SHIPPING = {
     {id:"min",   name:"Mindanao",                 fee:220, days:"4–7 business days", cod:false}
   ]
 };
+
+/* Packaging illustration metadata for the preview artwork (assets/art.js). */
+(function(){
+  const PACK={
+    "glico-pocky-chocolate":{pack:"box",c1:"#c62828",c2:"#ffffff",motif:"sticks",short:"Pocky"},
+    "glico-pocky-matcha":{pack:"box",c1:"#4b8a3a",c2:"#ffffff",motif:"sticks",short:"Pocky Matcha"},
+    "nestle-kitkat-matcha":{pack:"bag",c1:"#2e7d32",c2:"#ffffff",motif:"wafer",short:"KitKat Matcha"},
+    "nestle-kitkat-strawberry":{pack:"bag",c1:"#e05a7a",c2:"#ffffff",motif:"wafer",short:"KitKat Strawberry"},
+    "nestle-kitkat-sake":{pack:"bag",c1:"#607d8b",c2:"#ffffff",motif:"wafer",short:"KitKat Nihonshu"},
+    "yaokin-umaibo-cheese":{pack:"stick",c1:"#f2a51a",c2:"#3b2200",motif:"puff",short:"CHEESE"},
+    "yaokin-umaibo-mentai":{pack:"stick",c1:"#d9534f",c2:"#ffffff",motif:"puff",short:"MENTAI"},
+    "calbee-kappa-ebisen":{pack:"bag",c1:"#c62828",c2:"#ffffff",motif:"shrimp",short:"Kappa Ebisen"},
+    "calbee-jagarico-salad":{pack:"tube",c1:"#43a047",c2:"#ffffff",motif:"fries",short:"SALAD"},
+    "kameda-hapitan":{pack:"bag",c1:"#ef8f1c",c2:"#ffffff",motif:"cracker",short:"Happy Turn"},
+    "tohato-caramel-corn":{pack:"bag",c1:"#d32f2f",c2:"#ffffff",motif:"puff",short:"Caramel Corn"},
+    "meiji-kinoko":{pack:"tray",c1:"#5d4037",c2:"#ffffff",motif:"mushroom",short:"Kinoko no Yama"},
+    "meiji-takenoko":{pack:"tray",c1:"#6d4c41",c2:"#ffffff",motif:"bamboo",short:"Takenoko no Sato"},
+    "bourbon-alfort":{pack:"tray",c1:"#1e3a8a",c2:"#ffffff",motif:"cookie",short:"Alfort"},
+    "yuraku-black-thunder":{pack:"pouch",c1:"#1a1a1a",c2:"#ffd54f",motif:"bar",short:"Black Thunder"},
+    "morinaga-hichew-grape":{pack:"pouch",c1:"#7b1fa2",c2:"#ffffff",motif:"chew",short:"Hi-Chew"},
+    "kanro-pure-gummy-grape":{pack:"sachet",c1:"#6a1b9a",c2:"#ffffff",motif:"heart",short:"Pure Gummy"},
+    "uha-puccho-soda":{pack:"pouch",c1:"#0288d1",c2:"#ffffff",motif:"candy",short:"Puccho"},
+    "fujiya-milky":{pack:"bag",c1:"#d32f2f",c2:"#ffffff",motif:"milk",short:"Milky"},
+    "sanyo-sapporo-ichiban-miso":{pack:"multipack",c1:"#c62828",c2:"#ffffff",motif:"noodle",short:"Miso Ramen"},
+    "nissin-cup-noodle-seafood":{pack:"cup",c1:"#1565c0",c2:"#ffffff",motif:"noodle",short:"Seafood"},
+    "itoen-oi-ocha":{pack:"bottle",c1:"#2e7d32",c2:"#ffffff",motif:"leaf",short:"Oi Ocha"},
+    "hata-ramune":{pack:"ramune",c1:"#4fc3f7",c2:"#ffffff",motif:"marble",short:"Ramune"},
+    "calpis-water":{pack:"bottle",c1:"#1976d2",c2:"#ffffff",motif:"wave",short:"Calpis"},
+    "kracie-popin-sushi":{pack:"sachet",c1:"#ff7043",c2:"#ffffff",motif:"sushi",short:"Popin' Cookin'"},
+    "kracie-nerunerunerune":{pack:"sachet",c1:"#8e24aa",c2:"#ffffff",motif:"foam",short:"Nerunerunerune"},
+    "omiyage-box-starter":{pack:"giftbox",c1:"#c62828",c2:"#ffffff",motif:"gift",short:"First Timer Box"},
+    "omiyage-box-pasalubong":{pack:"giftbox",c1:"#2c3a7a",c2:"#ffffff",motif:"ribbon",short:"Pasalubong Pack"}
+  };
+  window.PRODUCTS.forEach(p=>Object.assign(p,PACK[p.id]||{pack:"bag",c1:"#2c3a7a",c2:"#ffffff",motif:"candy"}));
+})();
