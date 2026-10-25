@@ -3081,7 +3081,7 @@ const MENU = () => [
   ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg], '-', ['Trim / Extend 2 entities', '', () => startEdit('trim2')], ['Trim / Extend 1 entity', '', () => startEdit('trim1')], ['Divide (remove between crossings)', '', () => startEdit('divide')], ['Break at point', '', () => startEdit('brk')], ['Extend by length…', '', () => startEdit('extend')], ['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Explode polyline into lines', '', explodePolys]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
-  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Rectangle', '', () => startCreate('rect')], ['Bolt circle', '', () => startCreate('bolt')]]],
+  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Rectangle', '', () => startCreate('rect')], ['Bolt circle', '', () => startCreate('bolt')], '-', ['Solid from features…', '', () => solidDlg()]]],
   ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], ['Offset entity…', '', () => startEdit('offset')], ['Offset contour (chain)…', '', () => startEdit('offsetChain')], ['Rectangular array…', '', () => xformDlg('arrayRect')], ['Rotary array…', '', () => xformDlg('arrayRot')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['⏱ Time estimate (hours)…', '', estimateDlg]]],
@@ -3640,6 +3640,309 @@ function camContext(){
     stock:{x:[st.x0, st.x1], y:[st.y0, st.y1], z:[st.bottom, st.top]}, drawing:S.geom.name, bbox:bb, has3DModel:!!S.geom.mesh, chains, tools:S.tools.map(t => ({id:t.id, num:t.num, name:t.name, type:t.type, dia:t.dia, cr:t.cr, flutes:t.flutes, len:t.len, rpm:t.rpm, feed:t.feed, plunge:t.plunge, pitch:t.pitch, angle:t.angle, loaded:t.loaded !== false, fixed:!!t.fixed, pocket:t.pocket ?? null, flute_len:t.len, stick_out:t.stick || null, holder_dia:t.holder || null, shank_dia:t.shank || null, notes:t.notes || ''})), fixture:S.setup.fix ? Object.assign({top_z:isFinite(fixtureTop()) ? fixtureTop() : null}, S.setup.fix) : null, operations:ops, material_keys:Object.keys(MATS), run_mode:{current:S.setup.run || 'proto', percent_of_standard:Math.round(runK()*100), modes:S.setup.runPct},
     param_keys:{contour:Object.keys(defP('contour')), pocket:Object.keys(defP('pocket')), drill:Object.keys(defP('drill')), face:Object.keys(defP('face')), cmill:Object.keys(defP('cmill')), srough:Object.keys(defP('srough')), sfinish:Object.keys(defP('sfinish')), scont:Object.keys(defP('scont'))}};
 }
+/* ============================== feature-based solid (describe the part, get the 3D model) ============================== */
+// A part = a block + features cut from the top in order (pocket, hole, boss, slot, slope, dish), each with optional
+// draft, top chamfer / fillet and floor radius. Builds the triangle mesh (surface toolpaths, shading, Verify) and the
+// matching 2D outlines on named levels (contour / pocket / drill chains) — a quick 3-axis solid modeller.
+const SOLID_KINDS = {
+  pocket:'closed cut from the current surface: shape + depth (+ corner_r, draft, top_chamfer, top_fillet, floor_r)',
+  hole:'round hole: cx, cy, d, depth or through:true (+ cbore_d, cbore_depth, csk_d, csk_angle); or bolt_circle / grid shape',
+  slot:'rounded slot: cx, cy, length, width, angle, depth (+ floor_r)',
+  boss:'island left standing: shape + height; everything around it inside "within" (default: whole block) is cut down',
+  step:'open pocket / ledge: a rectangle that may run past the block edge, depth',
+  slope:'tilt the surface inside the shape (default whole top): angle (deg) going DOWN towards direction (+x, -x, +y, -y or degrees)',
+  dish:'spherical dish: cx, cy, d (rim diameter), depth'
+};
+function polyArea(p){ let a = 0; for (let i = 0, n = p.length; i < n; i++){ const q = p[i], r = p[(i+1)%n]; a += q[0]*r[1] - r[0]*q[1]; } return a/2; }
+function polyCentroid(p){ let x = 0, y = 0; for (const q of p){ x += q[0]; y += q[1]; } return [x/p.length, y/p.length]; }
+// rectangles given by centre (cx, cy) instead of corner (x, y)
+function normShape(o){ if (o.kind === 'rectangle' && o.cx != null && o.x == null){ o.x = o.cx; o.y = o.cy; o.centered = true; } return o; }
+// closed outlines (sampled, CCW) from a draw_shapes-style spec; bolt_circle / grid give several
+function featOutlines(sh){
+  const its = shapeItems(sh), outs = [];
+  let cur = [];
+  const flush = () => { if (cur.length > 2) outs.push(cur); cur = []; };
+  for (const it of its){
+    if (it.kind === 'circle' || it.kind === 'poly'){ flush(); outs.push(itemPts(it).slice()); continue; }
+    const pts = itemPts(it);
+    const start = cur.length && hyp(cur[cur.length-1][0] - pts[0][0], cur[cur.length-1][1] - pts[0][1]) < 1e-6 ? 1 : 0;
+    for (let i = start; i < pts.length; i++) cur.push(pts[i]);
+  }
+  flush();
+  return outs.map(p => { if (hyp(p[0][0]-p[p.length-1][0], p[0][1]-p[p.length-1][1]) < 1e-6) p.pop(); return polyArea(p) < 0 ? p.reverse() : p; }).filter(p => p.length > 2);
+}
+// offset a closed polygon by d (d > 0 grows its area) keeping the vertex count — mitred corners, capped
+function miterOffset(poly, d){
+  if (!d) return poly.map(p => p.slice());
+  const s = polyArea(poly) < 0 ? -1 : 1, n = poly.length, out = [];
+  for (let i = 0; i < n; i++){
+    const a = poly[(i+n-1)%n], b = poly[i], c = poly[(i+1)%n];
+    let d0 = [b[0]-a[0], b[1]-a[1]], d1 = [c[0]-b[0], c[1]-b[1]];
+    const l0 = hyp(d0[0], d0[1]) || 1, l1 = hyp(d1[0], d1[1]) || 1; d0 = [d0[0]/l0, d0[1]/l0]; d1 = [d1[0]/l1, d1[1]/l1];
+    const n0 = [d0[1]*s, -d0[0]*s], n1 = [d1[1]*s, -d1[0]*s];
+    let m = [n0[0]+n1[0], n0[1]+n1[1]]; const lm = hyp(m[0], m[1]);
+    if (lm < 1e-9){ out.push([b[0] + n0[0]*d, b[1] + n0[1]*d]); continue; }
+    m = [m[0]/lm, m[1]/lm];
+    const k = d/Math.max(0.33, m[0]*n0[0] + m[1]*n0[1]);
+    out.push([b[0] + m[0]*k, b[1] + m[1]*k]);
+  }
+  return out;
+}
+// where a point sits on a closed outline: segment index + fraction (for mapping clipped pieces onto offset outlines)
+function outlineParam(poly, q){
+  let best = Infinity, bi = 0, bu = 0; const n = poly.length;
+  for (let i = 0; i < n; i++){
+    const a = poly[i], b = poly[(i+1)%n], dx = b[0]-a[0], dy = b[1]-a[1], L2 = dx*dx + dy*dy || 1e-18;
+    let u = ((q[0]-a[0])*dx + (q[1]-a[1])*dy)/L2; u = Math.max(0, Math.min(1, u));
+    const px = a[0] + dx*u - q[0], py = a[1] + dy*u - q[1], d = px*px + py*py;
+    if (d < best){ best = d; bi = i; bu = u; }
+  }
+  return [bi, bu];
+}
+const onOutline = (poly, i, u) => { const a = poly[i], b = poly[(i+1)%poly.length]; return [a[0] + (b[0]-a[0])*u, a[1] + (b[1]-a[1])*u]; };
+function clExec(type, subj, clip, closed = true){
+  const c = new CL.Clipper();
+  if (closed) c.AddPaths(toCL(subj), CL.PolyType.ptSubject, true); else toCL(subj).forEach(p => c.AddPath(p, CL.PolyType.ptSubject, false));
+  c.AddPaths(toCL(clip), CL.PolyType.ptClip, true);
+  if (closed){ const sol = new CL.Paths(); c.Execute(type, sol, CL.PolyFillType.pftEvenOdd, CL.PolyFillType.pftEvenOdd); return fromCL(sol); }
+  const pt = new CL.PolyTree(); c.Execute(type, pt, CL.PolyFillType.pftEvenOdd, CL.PolyFillType.pftEvenOdd); return fromCL(CL.Clipper.OpenPathsFromPolyTree(pt));
+}
+const clInter = (a, b) => clExec(CL.ClipType.ctIntersection, a, b), clDiff = (a, b) => clExec(CL.ClipType.ctDifference, a, b);
+const pathsArea = ps => ps.reduce((s, p) => s + Math.abs(polyArea(p)), 0);
+// group clipper paths into {outer, holes} using a polytree
+function polyGroups(paths){
+  const c = new CL.Clipper(), pt = new CL.PolyTree(); c.AddPaths(toCL(paths), CL.PolyType.ptSubject, true);
+  c.Execute(CL.ClipType.ctUnion, pt, CL.PolyFillType.pftEvenOdd, CL.PolyFillType.pftEvenOdd);
+  const out = [], walk = node => { for (const ch of node.Childs()){ if (!ch.IsHole()){ out.push({outer:fromCL([ch.Contour()])[0], holes:ch.Childs().filter(h => h.IsHole()).map(h => fromCL([h.Contour()])[0])}); ch.Childs().forEach(walk); } } };
+  walk(pt); return out;
+}
+// wall profile, top to bottom: [[offset (grows the cut), dz (<= 0)]]
+function wallProfile(f, depth){
+  const n = v => +v || 0, st = [], c = n(f.top_chamfer), tr = n(f.top_fillet), fr = Math.min(n(f.floor_r), depth/2), dr = Math.tan(n(f.draft)*DEG);
+  if (c > 0){ st.push([c, 0], [0, -c]); }
+  else if (tr > 0){ for (let k = 0; k <= 6; k++){ const t = k/6*Math.PI/2; st.push([tr - tr*Math.sin(t), -tr + tr*Math.cos(t)]); } }
+  else st.push([0, 0]);
+  if (fr > 0){ for (let k = 0; k <= 6; k++){ const t = k/6*Math.PI/2; st.push([-fr + fr*Math.cos(t), -depth + fr - fr*Math.sin(t)]); } }
+  else st.push([0, -depth]);
+  if (dr > 0) for (const s of st) s[0] += (depth + s[1])*dr;
+  const out = []; for (const s of st) if (!out.length || Math.abs(s[0]-out[out.length-1][0]) > 1e-9 || Math.abs(s[1]-out[out.length-1][1]) > 1e-9) out.push(s);
+  return out;
+}
+function buildSolid(spec){
+  const n = v => +v || 0, units = isMM() ? 1 : 1/25.4, step = n(spec.mesh_step) || 1.5*units, eps = 1e-6;
+  const blk = Object.assign({kind:'rectangle', x:0, y:0, centered:true}, spec.block || {});
+  if (blk.w != null && blk.kind === 'rectangle' && blk.h == null) blk.h = blk.w;
+  const T = n(blk.t || blk.thickness); if (!(T > 0)) throw new Error('block.t (thickness) must be > 0');
+  const blockOuts = featOutlines(blk); if (!blockOuts.length) throw new Error('block shape is empty');
+  const tri = [];                                          // flat xyz triples
+  const push = (a, b, c) => { tri.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); };
+  const quad = (a, b, c, d) => { push(a, b, c); push(a, c, d); };
+  const regions = [], walls = [];                          // regions: {paths, z:number|fn}; walls: {pts, zt:fn, zb:fn}
+  const zEval = (z, x, y) => typeof z === 'function' ? z(x, y) : z;
+  const cnst = v => () => v;
+  const zOf = (R, x, y) => zEval(R.z, x, y);
+  let bottom = blockOuts.slice();
+  // block: top region (inset by an outer chamfer/fillet), outer walls, bottom
+  const bp = wallProfile({top_chamfer:blk.top_chamfer, top_fillet:blk.top_fillet}, T);
+  const blockTopInset = bp[0][0];                          // outer edge treatment = material removed outside the inset outline
+  const levels = [{name:'PART', items:shapeItems(blk)}], feats = [];
+  for (const O of blockOuts){
+    const offs = bp.map(s => miterOffset(O, -s[0]));      // outer edge: offsets shrink the block
+    regions.push({paths:[offs[0]], z:0});
+    for (let k = 0; k + 1 < bp.length; k++){
+      const vertical = Math.abs(bp[k][0] - bp[k+1][0]) < 1e-9;
+      if (vertical){ walls.push({pts:offs[k].concat([offs[k][0]]), zt:cnst(bp[k][1]), zb:cnst(bp[k+1][1])}); continue; }
+      for (let i = 0; i < O.length; i++){ const j = (i+1)%O.length; quad([offs[k][i][0], offs[k][i][1], bp[k][1]], [offs[k][j][0], offs[k][j][1], bp[k][1]], [offs[k+1][j][0], offs[k+1][j][1], bp[k+1][1]], [offs[k+1][i][0], offs[k+1][i][1], bp[k+1][1]]); }
+    }
+  }
+  // one cut: paths (outer(s) + holes, "expand the cut" offsets), profile, floor
+  const cut = (groups, prof, floorZ, isThrough) => {
+    const topPaths = [], botPaths = [], perPath = [];
+    for (const g of groups){
+      const add = (O, hole) => { const offs = prof.map(s => miterOffset(O, hole ? -s[0] : s[0])); perPath.push({O, offs}); topPaths.push(offs[0]); botPaths.push(offs[offs.length-1]); };
+      add(g.outer, false); g.holes.forEach(h => add(h, true));
+    }
+    // top surface the cut starts from: the region sharing the most area with the cut
+    let zt = 0, bestA = -1, cen = polyCentroid(topPaths[0]);
+    for (const R of regions){ const I = clInter(R.paths, topPaths), A = pathsArea(I); if (A > bestA){ bestA = A; const c = I.length ? polyCentroid(I[0]) : cen; zt = zOf(R, c[0], c[1]); } }
+    if (bestA <= eps) return null;
+    let zf = typeof floorZ === 'function' ? floorZ(zt) : zt + floorZ;      // number or fn(x,y)
+    if (typeof zf === 'number' && (isThrough || zf <= -T + eps)){ zf = -T; isThrough = true; }
+    const nWalls = walls.length;
+    const zfAt = (x, y) => zEval(zf, x, y);
+    const absProf = prof.map(s => [s[0], typeof zf === 'number' ? Math.max(zt + s[1], zf) : zt + s[1]]);
+    const newRegions = [];
+    for (const R of regions.slice()){
+      const I = clInter(R.paths, topPaths); if (!I.length || pathsArea(I) <= eps) continue;
+      const c = polyCentroid(I[0]), zR = zOf(R, c[0], c[1]);
+      if (zR <= zfAt(c[0], c[1]) + eps && typeof zf !== 'function') continue;    // already deeper there
+      const keep = R.paths; R.paths = clDiff(R.paths, topPaths);
+      const F = clInter(I, botPaths);
+      if (F.length && !(isThrough && typeof zf !== 'function')){
+        const zR0 = R.z, zNew = typeof zf === 'function' ? ((x, y) => Math.min(zEval(zR0, x, y), zf(x, y))) : (typeof zR0 === 'function' ? ((x, y) => Math.min(zR0(x, y), zf)) : zf);
+        newRegions.push({paths:F, z:zNew});
+      }
+      // walls / strips along each cut path, only where it crosses this region
+      for (const {O, offs} of perPath){
+        const pieces = clExec(CL.ClipType.ctIntersection, [offs[0].concat([offs[0][0]])], keep, false);
+        for (const pc of pieces){
+          if (pc.length < 2) continue;
+          const prm = pc.map(q => outlineParam(offs[0], q));
+          const zTop = typeof R.z === 'function' ? R.z : cnst(R.z);
+          for (let k = 0; k + 1 < absProf.length; k++){
+            const z0 = absProf[k][1], z1 = absProf[k+1][1];
+            const vertical = Math.abs(absProf[k][0] - absProf[k+1][0]) < 1e-9;
+            if (vertical){
+              const zb = (k + 2 === absProf.length && typeof zf === 'function') ? zf : cnst(z1);
+              walls.push({pts:pc.map((q, i) => onOutline(offs[k], prm[i][0], prm[i][1])), zt:(x, y) => Math.min(zTop(x, y), z0), zb});
+              continue;
+            }
+            for (let i = 0; i + 1 < pc.length; i++){
+              const a0 = onOutline(offs[k], prm[i][0], prm[i][1]), b0 = onOutline(offs[k], prm[i+1][0], prm[i+1][1]);
+              const a1 = onOutline(offs[k+1], prm[i][0], prm[i][1]), b1 = onOutline(offs[k+1], prm[i+1][0], prm[i+1][1]);
+              const zc = Math.min(zTop(a0[0], a0[1]), zTop(b0[0], b0[1]));
+              if (z1 >= zc) continue;
+              const t0 = Math.min(z0, zc), t1 = Math.min(z1, zc);
+              quad([a0[0], a0[1], t0], [b0[0], b0[1], t0], [b1[0], b1[1], t1], [a1[0], a1[1], t1]);
+            }
+          }
+        }
+      }
+    }
+    regions.push(...newRegions);
+    // trim earlier vertical walls that now hang in the air
+    for (const w of walls.slice(0, nWalls)){
+      const inside = clExec(CL.ClipType.ctIntersection, [w.pts], topPaths, false); if (!inside.length) continue;
+      const outside = clExec(CL.ClipType.ctDifference, [w.pts], topPaths, false);
+      walls.splice(walls.indexOf(w), 1);
+      for (const p of outside) if (p.length > 1) walls.push({pts:p, zt:w.zt, zb:w.zb});
+      for (const p of inside) if (p.length > 1) walls.push({pts:p, zt:(x, y) => Math.min(w.zt(x, y), zfAt(x, y)), zb:w.zb});
+    }
+    if (isThrough) bottom = clDiff(bottom, botPaths);
+    return {zt, zf:typeof zf === 'function' ? null : zf};
+  };
+  (spec.features || []).forEach((f, idx) => {
+    const kind = f.kind || 'pocket', no = idx + 1, name = `F${no} ${kind.toUpperCase()}`;
+    const shapeOf = (d, extra) => normShape(Object.assign({}, f, {kind:f.shape || d}, extra || {}));
+    let info = null, items = [], groups, depth;
+    if (kind === 'pocket' || kind === 'slot' || kind === 'step'){
+      const sh = shapeOf(kind === 'slot' ? 'slot' : 'rectangle', kind === 'pocket' && !f.shape && f.d ? {kind:'circle'} : null);
+      depth = n(f.depth) || (f.through ? T : 0); if (!(depth > 0)) throw new Error(`${name}: depth must be > 0`);
+      const outs = featOutlines(sh); items = shapeItems(sh); groups = outs.map(o => ({outer:o, holes:[]}));
+      info = cut(groups, wallProfile(f, depth), -depth, depth >= T - eps || !!f.through);
+    } else if (kind === 'hole'){
+      const sh = shapeOf('circle'); depth = f.through ? T : n(f.depth); if (!(depth > 0)) throw new Error(`${name}: depth or through:true`);
+      const outs = featOutlines(sh); items = shapeItems(sh);
+      const cb = n(f.cbore_d), cbd = n(f.cbore_depth), ck = n(f.csk_d);
+      let zTop = null;
+      for (const o of outs){
+        const c = polyCentroid(o), r = hyp(o[0][0]-c[0], o[0][1]-c[1]);
+        if (cb > 2*r && cbd > 0){ const cbo = featOutlines({kind:'circle', cx:c[0], cy:c[1], d:cb}); items.push(...shapeItems({kind:'circle', cx:c[0], cy:c[1], d:cb})); const r1 = cut(cbo.map(x => ({outer:x, holes:[]})), wallProfile({}, cbd), -cbd, false); if (r1 && zTop == null) zTop = r1.zt; }
+        const prof = ck > 2*r ? [[ (ck - 2*r)/2, 0], [0, -((ck - 2*r)/2)/Math.tan((n(f.csk_angle) || 90)*DEG/2)], [0, -depth]] : wallProfile({}, depth);
+        const r2 = cut([{outer:o, holes:[]}], prof, -depth, !!f.through || depth >= T - eps); if (r2 && zTop == null) zTop = r2.zt;
+      }
+      info = zTop == null ? null : {zt:zTop, zf:zTop - depth};
+    } else if (kind === 'boss'){
+      const sh = shapeOf('circle'); depth = n(f.height); if (!(depth > 0)) throw new Error(`${name}: height must be > 0`);
+      const bossOuts = featOutlines(sh); items = shapeItems(sh);
+      const wsh = f.within ? normShape(Object.assign({kind:'rectangle'}, f.within)) : null;
+      const within = wsh ? featOutlines(wsh) : blockOuts.map(o => miterOffset(o, 1*units));
+      if (wsh) items.push(...shapeItems(wsh));
+      groups = polyGroups(clDiff(within, bossOuts));
+      info = cut(groups, wallProfile(f, depth), -depth, false);
+    } else if (kind === 'slope'){
+      const sh = f.shape || f.w || f.d || f.pts ? shapeOf('rectangle') : null;
+      const outs = sh ? featOutlines(sh) : blockOuts.map(o => miterOffset(o, -blockTopInset)); if (sh) items = shapeItems(sh);
+      const ang = n(f.angle)*DEG; if (!(ang > 0)) throw new Error(`${name}: angle (deg) must be > 0`);
+      const dir = typeof f.direction === 'number' ? f.direction*DEG : ({'+x':0, '-x':180, '+y':90, '-y':270})[f.direction || '+x']*DEG;
+      const dx = Math.cos(dir), dy = Math.sin(dir); let pmin = Infinity, pmax = -Infinity;
+      outs.forEach(o => o.forEach(q => { const p = q[0]*dx + q[1]*dy; pmin = Math.min(pmin, p); pmax = Math.max(pmax, p); }));
+      depth = (pmax - pmin)*Math.tan(ang);
+      info = cut(outs.map(o => ({outer:o, holes:[]})), [[0, 0], [0, -depth]], zt => ((x, y) => zt - Math.tan(ang)*((x*dx + y*dy) - pmin)), false);
+    } else if (kind === 'dish'){
+      const d = n(f.d), dep = n(f.depth); if (!(d > 0 && dep > 0)) throw new Error(`${name}: d and depth must be > 0`);
+      const sh = {kind:'circle', cx:n(f.cx), cy:n(f.cy), d}; items = shapeItems(sh); depth = dep;
+      const Rs = (d*d/4 + dep*dep)/(2*dep);
+      info = cut(featOutlines(sh).map(o => ({outer:o, holes:[]})), [[0, 0], [0, -dep]], zt => ((x, y) => { const r2 = Math.min((x-sh.cx)**2 + (y-sh.cy)**2, d*d/4); return zt - dep + Rs - Math.sqrt(Math.max(0, Rs*Rs - r2)); }), false);
+    } else throw new Error(`${name}: unknown feature kind "${kind}" (${Object.keys(SOLID_KINDS).join(', ')})`);
+    if (!info) throw new Error(`${name}: lies outside the part`);
+    const lvl = `${name} Z${fmt(info.zf != null ? info.zf : info.zt - depth)}`;
+    levels.push({name:lvl, items});
+    feats.push({no, kind, level:lvl, z_top:rnd(info.zt), z_floor:rnd(info.zf != null ? info.zf : info.zt - depth), depth:rnd(depth), suggested_op:({pocket:'pocket', slot:'pocket', step:'pocket', hole:'drill', boss:'contour (outside, or pocket the area around it)', slope:'surface finish parallel', dish:'surface finish parallel (ball end mill)'})[kind]});
+  });
+  // mesh the floors (subdivided when the height is a function), the walls and the bottom
+  const triRegion = (paths, zfn, sub) => {
+    for (const g of polyGroups(paths)){
+      const V = g.outer.concat(...g.holes), idx = THREE.ShapeUtils.triangulateShape(g.outer.map(p => new THREE.Vector2(p[0], p[1])), g.holes.map(h => h.map(p => new THREE.Vector2(p[0], p[1]))));
+      for (const [a, b, c] of idx){
+        const t = [V[a], V[b], V[c]].map(p => [p[0], p[1], 0]);
+        const emit = tr => { for (const p of tr) p[2] = zfn(p[0], p[1]); push(tr[0], tr[1], tr[2]); };
+        if (!sub) emit(t); else { const st = [t]; while (st.length){ const q = st.pop(); const L = Math.max(hyp(q[0][0]-q[1][0], q[0][1]-q[1][1]), hyp(q[1][0]-q[2][0], q[1][1]-q[2][1]), hyp(q[2][0]-q[0][0], q[2][1]-q[0][1])); if (L <= step || st.length > 20000){ emit(q); continue; } const m = (a, b) => [(a[0]+b[0])/2, (a[1]+b[1])/2, 0], m01 = m(q[0], q[1]), m12 = m(q[1], q[2]), m20 = m(q[2], q[0]); st.push([q[0], m01, m20], [m01, q[1], m12], [m20, m12, q[2]], [m01, m12, m20]); } }
+      }
+    }
+  };
+  for (const R of regions) if (R.paths.length) triRegion(R.paths, typeof R.z === 'function' ? R.z : cnst(R.z), typeof R.z === 'function');
+  triRegion(bottom, cnst(-T), false);
+  for (const w of walls){
+    for (let i = 0; i + 1 < w.pts.length; i++){
+      const a = w.pts[i], b = w.pts[i+1], L = hyp(b[0]-a[0], b[1]-a[1]); if (L < 1e-9) continue;
+      const m = Math.max(1, Math.ceil(L/step));
+      for (let k = 0; k < m; k++){
+        const p = [a[0] + (b[0]-a[0])*k/m, a[1] + (b[1]-a[1])*k/m], q = [a[0] + (b[0]-a[0])*(k+1)/m, a[1] + (b[1]-a[1])*(k+1)/m];
+        const pt = w.zt(p[0], p[1]), pb = Math.min(w.zb(p[0], p[1]), pt), qt = w.zt(q[0], q[1]), qb = Math.min(w.zb(q[0], q[1]), qt);
+        if (pt - pb < 1e-7 && qt - qb < 1e-7) continue;
+        quad([p[0], p[1], pt], [q[0], q[1], qt], [q[0], q[1], qb], [p[0], p[1], pb]);
+      }
+    }
+  }
+  return {pos:new Float32Array(tri), levels, feats, thickness:T, block:blk, dbg:{regions:regions.map(r => ({n:r.paths.length, z:typeof r.z === 'function' ? 'fn' : r.z, area:rnd(pathsArea(r.paths))})), walls:walls.length}};
+}
+// put a built solid into the job: mesh + 2D levels + stock, and report the chains per feature
+function applySolid(spec, opts = {}){
+  const r = buildSolid(spec);
+  pushUndo();
+  if (opts.replace !== false){ S.geom.items = []; S.geom.levels = {'1':{vis:true, num:1}}; S.geom.mesh = null; S.ops = []; selOps.clear(); S.geom.name = opts.name || 'Solid from features'; S.file = S.geom.name; }
+  for (const L of r.levels){ const nm = L.name.toUpperCase(); ensureLevel(nm); for (const it of L.items) addItem(it, nm); }
+  S.geom.main = 'PART';
+  setMesh(r.pos);
+  geomChanged();
+  const lvlOf = new Map(S.geom.items.map(it => [it.id, it.level]));
+  for (const f of r.feats){ f.chains = CH.filter(c => c.items.every(id => lvlOf.get(id) === f.level.toUpperCase())).map(c => c.no); }
+  { const bb = S.geom.mesh.bb, st = S.setup.stock, m = st.margin; Object.assign(st, {x0:rnd(bb[0] - m), y0:rnd(bb[1] - m), x1:rnd(bb[3] + m), y1:rnd(bb[4] + m), top:0, bottom:-r.thickness}); } S.ops.forEach(o => o.dirty = true);
+  drawStock(); renderMgr(); updTitle(); setView('iso');
+  return {ok:true, facets:(r.pos.length/9) | 0, thickness:r.thickness, bbox:geomBBox(), stock:S.setup.stock, features:r.feats, chains:chainSummary(), next:'Create the operations: pocket/drill/contour on the chains listed per feature (depth = z_floor), surface finish for slope/dish; set_material first if not set.'};
+}
+function solidDlg(){
+  const W = {w:rnd(100*K()), h:rnd(80*K()), t:rnd(20*K()), shape:'rectangle', ch:0, step:1.5*K()};
+  const rows = [];
+  const KINDS = Object.keys(SOLID_KINDS);
+  const EX = {pocket:'x=0 y=0 w=60 h=40 centered=1 corner_r=5 depth=8 floor_r=0 draft=0', hole:'cx=30 cy=20 d=8.5 through=1 cbore_d=14 cbore_depth=8', slot:'cx=0 cy=-25 length=40 width=10 angle=0 depth=5', boss:'cx=0 cy=0 d=40 height=6 top_fillet=0', step:'x=-60 y=-50 w=30 h=100 depth=10', slope:'angle=10 direction=+x', dish:'cx=0 cy=0 d=40 depth=6'};
+  const el = document.createElement('div');
+  const render = () => {
+    el.innerHTML = `<div class="info">Describe the part: a block, then the features cut from its top in order. Values are ${S.setup.units}; X0 Y0 is the block centre, Z0 its top. Or just ask Claude: "make a 100×80×20 block with a 60×40 pocket 8 deep and four M8 holes".</div>
+      ${fRow(W, 'shape', 'Block shape', 's', SEL(['rectangle', 'Rectangle'], ['circle', 'Round']), false)}${fRow(W, 'w', 'Width X (or diameter)', 'n', null, false)}${fRow(W, 'h', 'Height Y', 'n', null, false)}${fRow(W, 't', 'Thickness (Z0 = top)', 'n', null, false)}${fRow(W, 'ch', 'Top edge chamfer', 'n', null, false)}
+      <table class="tbl" style="width:100%;margin-top:6px"><thead><tr><th>#</th><th>Feature</th><th>Parameters (key=value …)</th><th></th></tr></thead><tbody>
+      ${rows.map((r, i) => `<tr><td>${i+1}</td><td><select data-r="${i}" data-f="kind">${KINDS.map(k => `<option ${k === r.kind ? 'selected' : ''}>${k}</option>`).join('')}</select></td><td><input data-r="${i}" data-f="p" value="${r.p.replace(/"/g, '&quot;')}" style="width:100%"></td><td><button class="btn" data-del="${i}">✕</button></td></tr>`).join('')}
+      </tbody></table>
+      <div style="margin-top:6px"><button class="btn" id="sAdd">+ Add feature</button> <span class="hint" id="sHint"></span></div>
+      <div class="hint" style="margin-top:6px">${KINDS.map(k => `<b>${k}</b>: ${SOLID_KINDS[k]}`).join('<br>')}</div>`;
+    bindFields(el, W);
+    el.querySelectorAll('[data-r]').forEach(inp => { inp.onchange = () => { const r = rows[+inp.dataset.r]; if (inp.dataset.f === 'kind'){ r.kind = inp.value; r.p = EX[r.kind]; render(); } else r.p = inp.value; }; });
+    el.querySelectorAll('[data-del]').forEach(b => { b.onclick = () => { rows.splice(+b.dataset.del, 1); render(); }; });
+    el.querySelector('#sAdd').onclick = () => { rows.push({kind:'pocket', p:EX.pocket}); render(); };
+  };
+  render();
+  const parseP = s => { const o = {}; for (const m of s.matchAll(/(\w+)\s*=\s*([^\s]+)/g)){ const v = m[2]; o[m[1]] = /^[+-]?\d*\.?\d+$/.test(v) ? +v : (v === 'true' ? 1 : v === 'false' ? 0 : v); } return o; };
+  dlg({title:'Create Solid from Features', body:el, w:640, ok:close => {
+    try {
+      const spec = {block:{kind:W.shape, w:W.w, h:W.h, d:W.w, t:W.t, top_chamfer:W.ch, centered:true}, features:rows.map(r => Object.assign({kind:r.kind}, parseP(r.p))), mesh_step:W.step};
+      if (W.shape === 'circle') spec.block = {kind:'circle', cx:0, cy:0, d:W.w, t:W.t, top_chamfer:W.ch};
+      const res = applySolid(spec);
+      close(); prompt_(`Solid built: ${res.facets} facets, ${res.features.length} feature(s). Chains per feature are on their own levels — see Levels.`);
+    } catch (e){ msg('Solid from features', e.message); }
+  }});
+}
+
 const AI_TOOLS = [
   {name:'get_job', description:'Read the whole CAM job: machine, units, stock, drawing chains (numbered), tool library, operations with their parameters and warnings.', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}},
   {name:'create_operation', description:'Create a toolpath operation. chains = chain numbers from get_job (for drill/cmill: circles or points; for pocket: closed shapes; for contour: any). params = keys from param_keys for that type (depth is negative, Z0 = part top). Operation is generated immediately; the result returns warnings.', strict:true,
@@ -3654,6 +3957,8 @@ const AI_TOOLS = [
   {name:'verify', description:'Run stock verification on all operations and return collisions (rapid moves into material).', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}},
   {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole). replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
     input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
+  {name:'build_solid', description:'CAD 3D: build the part as a SOLID from features (block + cuts from the top, in order) — makes the 3D model for shading / surface toolpaths / Verify AND the 2D chains on one level per feature for pocket / drill / contour operations. block: {kind:"rectangle"|"circle"|"polygon", w, h (Y) or d or pts, t (thickness), top_chamfer?} centred at X0 Y0, Z0 = top. features (each may have the shape fields of draw_shapes: rectangle cx,cy,w,h,corner_r | circle cx,cy,d | slot cx,cy,length,width,angle | polygon pts | bolt_circle | grid): pocket {shape, …, depth, draft (deg), top_chamfer, top_fillet, floor_r}; hole {cx,cy,d, depth|through:true, cbore_d, cbore_depth, csk_d, csk_angle} (or shape bolt_circle / grid for a pattern); slot {cx,cy,length,width,angle,depth}; boss {shape, …, height, within?} (island, the area around it is cut down); step {cx,cy,w,h,depth} (open pocket, may run past the edge); slope {shape?, angle, direction:"+x"|"-x"|"+y"|"-y"|degrees} (surface goes down towards direction); dish {cx,cy,d,depth}. Features cut from whatever surface is there (a hole inside a pocket starts at the pocket floor). replace=true (default) starts a new part. Returns per feature: level, chain numbers, z_top, z_floor and the suggested operation.',
+    input_schema:{type:'object', properties:{block:{type:'object', additionalProperties:true}, features:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['pocket','hole','slot','boss','step','slope','dish']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, name:{type:'string'}}, required:['block','features']}},
   {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
   {name:'calc_speeds', description:'Industry-standard speeds-and-feeds calculator for a tool in the current material, at the shop\'s speed/feed level (100% = standard). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
   {name:'set_run_mode', description:'Set the run mode that scales speeds and feeds in the POSTED program: proto (first article, default ~60%), prod (~80%), full (100% industry standard). Operations themselves keep standard values.', strict:true, input_schema:{type:'object', properties:{mode:{type:'string', enum:['proto','prod','full']}}, required:['mode'], additionalProperties:false}},
@@ -3725,6 +4030,10 @@ async function aiRunToolNow(name, inp){
     geomChanged(); stockFromGeom(); drawStock(); setView('top');
     return {ok:true, entities_added:added.length, bbox:geomBBox(), stock:S.setup.stock, chains:chainSummary(), next:'Set stock top/bottom with set_stock or set_material(thickness), then create operations with tools that have loaded=true.'};
   }
+  if (name === 'build_solid'){
+    try { const r = applySolid({block:inp.block, features:inp.features || []}, {replace:inp.replace !== false, name:inp.name || (AI.drawingName ? 'Solid by Claude from ' + AI.drawingName : 'Solid by Claude')}); return r; }
+    catch (e){ return {error:e.message}; }
+  }
   if (name === 'clear_geometry'){ if (!inp.confirm) return {error:'Not confirmed'}; pushUndo(); S.geom.items = []; S.geom.mesh = null; S.geom.name = 'Drawn with Claude'; S.ops = []; selOps.clear(); geomChanged(); drawPaths(); drawStock(); setView('top'); return {ok:true}; }
   if (name === 'calc_speeds'){
     const t = inp.tool_num != null ? S.tools.find(x => x.num === inp.tool_num) : null;
@@ -3747,7 +4056,7 @@ async function aiRunToolNow(name, inp){
 const AI_SYS = () => `You are the machining assistant of Dynamic Int'l (Dynamic Precision Tech), a Philippine job shop, working inside "Dynamic Intl CAM", a Mastercam-style 2.5D/3D milling CAM that posts Fanuc G-code for the shop's ${MACHINE.name} (${MACHINE.control}) vertical machining centre (travel X${MACHINE.travel.x} Y${MACHINE.travel.y} Z${MACHINE.travel.z} mm, ${MACHINE.taper}, ${MACHINE.tools}-tool changer; spindle capability ${MACHINE.maxRpm} RPM but the SHOP CAP is ${S.setup.maxRpm} RPM — never program above the cap). Shop processes: CNC milling on this machine, wire EDM (Mitsubishi BA24), lathe turning, surface grinding, drilling and tapping; thin spring-steel and hardened parts go to wire EDM, not the mill.
 The shop has two of these mills, CNC1 and CNC2 (same model, separate tool magazines — see machines in get_job; the job's machine is marked current), and a Mitsubishi BA24 wire cut that is not programmed in this CAM yet (route hardened, spring-steel and fine-slot parts to it). You work like a senior programmer sitting next to a BEGINNER. Answer ANY machining question the way this chat would: speeds and feeds, tool choice, workholding, order of operations, tolerances and fits, surface finish, threads and tapping, drilling, materials and heat treatment, Fanuc G-code and M-codes, machine setup (G54, tool length H, wear D offsets), inspection, scrap avoidance, quoting. For general questions answer directly from knowledge; use the tools when the question is about the CURRENT job, when the user asks you to draw or program something, or when calc_speeds gives a better number than memory. Be practical, concrete and brief; explain each term the first time; prefer short lists and tables; give numbers in metric with the units.
 Shop rules (always apply): the CAM computes speeds and feeds for each operation from the TOOL and the JOB MATERIAL using industry-standard values (carbide end mills, HSS drills and taps, rigid setup) — the operator never has to calculate or assume them, and the RPM/Feed columns of the tool sheet are only a reference unless a tool is marked Fixed. Tool choice: pick sizes from the inventory (loaded=true) that fit the features — a cutter smaller than the smallest inside radius, a drill matching the hole or the tap drill size, the largest face mill that fits — and say why. Run modes: new jobs start in ${runLabel('proto')} (prototype / first article); once the first part is good the operator switches to ${runLabel('prod')} and posts again; ${runLabel('full')} is the industry standard. Operations keep standard values, only the posted S and F change (use set_run_mode when asked). Use calc_speeds for numbers; do not pad them downward; never exceed the shop RPM cap; Z0 is the top of the finished part and depths are negative; climb milling; depth of cut ≤ ½ tool diameter in steel and ≤ 1× in aluminium; helix or ramp entry into pockets; spot-drill before drilling; peck (G83) when the hole is deeper than 3× diameter; G84 rigid tapping with feed = pitch × RPM (the app sets it); first run in single block with rapid override low; always suggest Backplot → Verify → Post. Material notes: ${Object.values(MATS).filter(m => m.note).map(m => m.n + ': ' + m.note).join(' | ')}.
-CAD: when the user describes a part in words draw it with draw_shapes — X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations.
+CAD: when the user describes a part in words, build it with build_solid when it has depth features (pockets, bosses, steps, counterbores, slopes, dishes) or when a 3D model is useful — it gives the 3D model plus one chain level per feature; use draw_shapes for flat 2D work (profile + holes). X0 Y0 where the user says, otherwise at the part centre; replace=true for a new part; outside profile first, then holes and pockets. After drawing: set_material (with thickness), set_stock, then propose the plan and, if asked, create the operations (pocket chains → pocket op to z_floor, holes → drill, boss → contour outside, slope/dish → surface finish).
 Collision rules: check each operation's depth against the tool's flute_len and stick_out; never let the holder reach the stock top; the clearance plane must be above fixture.top_z; when stick_out or holder_dia is null tell the operator to measure it at the machine (tip to holder nose with a caliper). Tool rule: use only tools with loaded=true (they are in the machine now, see pocket); if a size is not loaded, say which tool to load and in which pocket, or pick the nearest loaded size and say why — never silently invent a tool.
 Time estimates: when asked how long a job takes or to quote hours, make sure the operations exist (create them if the user agrees), then call get_time_estimate and present the total hours for the lot, the first piece and each next piece, with the breakdown and the assumptions (setups, operator level, run mode, efficiency). State what is not included (wire EDM, grinding, turning, heat treatment). No prices — pricing is done separately by Noah. Never invent material grade, tolerances or finishes; mark guesses as Assumed. If something is outside this app (lathe programs, 4/5-axis, DWG import) say so plainly and say which shop process handles it. Units are ${S.setup.units}.`;
 // keep the request bounded: drop the oldest turns, never splitting a tool_use from its tool_result
@@ -3869,7 +4178,7 @@ if (!booted){
   prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) homeDlg(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
