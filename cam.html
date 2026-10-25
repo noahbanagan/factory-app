@@ -13,6 +13,9 @@ input,select,button,textarea{font:inherit;color:inherit}
 input,textarea{user-select:text;-webkit-user-select:text}
 #title{height:24px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px;background:linear-gradient(#DCE6F4,#C3D2E9);border-bottom:1px solid #9AAAC4}
 #title b{color:#1B3D7A}#title a{color:#1B3D7A;font-size:11px}
+#title .ws{display:inline-flex;border:1px solid #8E9AAD;border-radius:3px;overflow:hidden;margin-left:6px}#title .ws span{padding:1px 10px;font-size:11px;cursor:default;background:#fff}#title .ws span.on{background:#2458B0;color:#fff;font-weight:600}
+body.cad #mgrTabs [data-t=tp]{display:none}
+.start{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:10px}.start .big{border:2px solid #8E9AAD;border-radius:8px;padding:26px 20px;text-align:center;background:#fff;cursor:default;min-height:170px}.start .big:hover{border-color:#2458B0;background:#EEF4FC}.start .big .ic{font-size:44px}.start .big .tt{font-size:20px;font-weight:700;color:#1B3D7A;margin:6px 0}.start .big .ss{font-size:12px;color:#5A6472;line-height:1.4}
 #menu{display:flex;flex:none;background:#fff;border-bottom:1px solid var(--bd2);height:22px;position:relative;z-index:30;overflow-x:auto;overflow-y:visible}
 .mi{padding:3px 9px;cursor:default;white-space:nowrap}
 .mi:hover,.mi.open{background:#CCE4F7}
@@ -179,7 +182,7 @@ textarea.nc{width:100%;height:100%;min-height:60vh;font:12px ui-monospace,Consol
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.4/build/index.module.js","three-bvh-csg":"https://cdn.jsdelivr.net/npm/three-bvh-csg@0.0.16/build/index.module.js"}}</script>
 </head>
 <body>
-<div id="title"><b>Dynamic Intl CAM</b><span id="ttl"></span><span style="flex:1"></span><a href="index.html">◂ Production app</a></div>
+<div id="title"><b id="tName">Dynamic Intl CAM</b><span class="ws" title="Switch workspace"><span data-ws="cad">CAD</span><span data-ws="cam" class="on">CAM</span></span><span id="ttl"></span><span style="flex:1"></span><a href="#" id="startLink">⌂ Start</a><a href="index.html">◂ Production app</a></div>
 <div id="menu"></div>
 <div id="tbar"></div>
 <div id="ribbon"></div>
@@ -3149,11 +3152,12 @@ function popMenu(x, y, items){
   dd.onclick = e => { const d = e.target.closest('[data-i]'); if (!d) return; const it = items[+d.dataset.i]; if (!it[2]) return; closeMenus(); it[2](); };
   return dd;
 }
+const MENU_WS = () => MENU().filter(([n]) => WS !== 'cad' || !CAM_ONLY_MENUS.includes(n));
 function renderMenu(){
-  const m = MENU();
+  const m = MENU_WS();
   $('#menu').innerHTML = m.map(([n], i) => `<div class="mi" data-m="${i}">${n}</div>`).join('');
   $$('.mi').forEach(el => {
-    const show = () => { const r = el.getBoundingClientRect(); popMenu(r.left, r.bottom, MENU()[+el.dataset.m][1]); el.classList.add('open'); openMenu = el; };
+    const show = () => { const r = el.getBoundingClientRect(); popMenu(r.left, r.bottom, MENU_WS()[+el.dataset.m][1]); el.classList.add('open'); openMenu = el; };
     el.onclick = e => { e.stopPropagation(); if (openMenu === el) closeMenus(); else show(); };
     el.onmouseenter = () => { if (openMenu && openMenu !== el) show(); };
   });
@@ -3165,12 +3169,12 @@ const TBAR = [
   ['⤢', 'Fit (Alt+F1)', () => setView(S.gview || 'top')], ['＋', 'Zoom in (PgUp)', () => zoom(0.8)], ['－', 'Un-zoom (PgDn)', () => zoom(1.25)], ['<small>T</small>', 'Top view (Alt+1)', () => setView('top')], ['<small>F</small>', 'Front view (Alt+2)', () => setView('front')], ['<small>R</small>', 'Right view (Alt+5)', () => setView('right')], ['<small>ISO</small>', 'Isometric (Alt+7)', () => setView('iso')], ['◐', 'Toggle shading (Alt+S)', () => { shade = !shade; drawGeom(); }], '|',
   ['·', 'Create point', () => startCreate('point')], ['╱', 'Create line endpoints', () => startCreate('line')], ['◯', 'Create circle center point', () => startCreate('circle')], ['◠', 'Create arc polar', () => startCreate('arc')], ['▭', 'Create rectangle', () => startCreate('rect')], ['⁘', 'Create bolt circle', () => startCreate('bolt')], ['🗑', 'Delete selected entities (Del)', delSel], ['⇥', 'Xform translate', () => xformDlg('translate')], ['⟲', 'Xform rotate', () => xformDlg('rotate')], ['⇋', 'Xform mirror', () => xformDlg('mirror')], ['🔍', 'Analyze entity', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], '|',
   ['⌒', 'Contour toolpath', () => newOp('contour')], ['⊙', 'Drill toolpath', () => newOp('drill')], ['▣', 'Pocket toolpath', () => newOp('pocket')], ['▤', 'Face toolpath', () => newOp('face')], ['◎', 'Circle mill toolpath', () => newOp('cmill')], ['⛰', 'Surface rough parallel', () => newOp('srough')], ['〰', 'Surface finish parallel', () => newOp('sfinish')], ['≋', 'Surface finish contour (waterline)', () => newOp('scont')], '|',
-  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['⏱ Hours', 'Time estimate: realistic hours for this job from the toolpaths, setups and operator', estimateDlg], ['🏠 Home', 'Start screen: next step, jobs, machines, help', () => homeDlg()], ['🏭 Machine', 'Machine dashboard: what is in each pocket, speeds for this material, run mode', () => machineDash()]
+  ['▶', 'Backplot selected operations', () => backplotDlg()], ['◆', 'Verify selected operations', () => verifyDlg()], ['<small>G1</small>', 'Post selected operations', () => postDlg()], ['📋', 'Setup sheet for the operator (print)', setupSheet], '|', ['⏱ Hours', 'Time estimate: realistic hours for this job from the toolpaths, setups and operator', estimateDlg], ['🏠 Home', 'Home: next step, jobs, machines, help (CAD home in the CAD workspace)', () => WS === 'cad' ? cadHome() : homeDlg()], ['🏭 Machine', 'Machine dashboard: what is in each pocket, speeds for this material, run mode', () => machineDash()]
 ];
 function renderTbar(){
-  $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('') + `<span class="tsep"></span><label class="tb" title="Run mode: how fast the posted program runs. Prototype for the first part, Production after it is proven." style="display:inline-flex;align-items:center;gap:4px">Run: <select id="tbRun" style="font:inherit">${Object.entries(RUN).map(([k, v]) => `<option value="${k}"${(S.setup.run || 'proto') === k ? ' selected' : ''}>${v} ${Math.round(runK(k)*100)}%</option>`).join('')}</select></label>`;
+  $('#tbar').innerHTML = TBAR.map((b, i) => b === '|' ? '<span class="tsep"></span>' : (WS === 'cad' && CAM_ONLY_TB.test(b[1])) ? '' : `<button class="tb ${b[3] || ''}" data-t="${i}" title="${esc(b[1])}">${b[0]}</button>`).join('') + (WS === 'cad' ? '' : `<span class="tsep"></span><label class="tb" title="Run mode: how fast the posted program runs. Prototype for the first part, Production after it is proven." style="display:inline-flex;align-items:center;gap:4px">Run: <select id="tbRun" style="font:inherit">${Object.entries(RUN).map(([k, v]) => `<option value="${k}"${(S.setup.run || 'proto') === k ? ' selected' : ''}>${v} ${Math.round(runK(k)*100)}%</option>`).join('')}</select></label>`);
   $('#tbar').onclick = e => { const b = e.target.closest('[data-t]'); if (b) TBAR[+b.dataset.t][2](); };
-  $('#tbRun').onchange = e => { S.setup.run = e.target.value; autosave(); updStatus(); renderMgr(); prompt_(`Run mode: ${runLabel()}. Post again to get a program at this speed.`); };
+  if ($('#tbRun')) $('#tbRun').onchange = e => { S.setup.run = e.target.value; autosave(); updStatus(); renderMgr(); prompt_(`Run mode: ${runLabel()}. Post again to get a program at this speed.`); };
 }
 function updStatus(){
   const lv = Object.keys(S.geom.levels);
@@ -3530,6 +3534,53 @@ if (GD.autoSync !== false && (GD.csv || GD.sheet)){ setTimeout(() => { if (MACHI
 
 /* ============================== home screen (operators) ============================== */
 // Plain-language start screen: what to do next, which machine, which jobs. The Mastercam-style window stays behind it for the programmer.
+/* ============================== workspaces: CAD (draw and model) / CAM (program a machine) ============================== */
+let WS = 'cam'; try { WS = localStorage.getItem('cam5.ws') || 'cam'; } catch(e){}
+const CAM_ONLY_MENUS = ['Machine Type', 'Toolpaths'], CAM_ONLY_TB = /toolpath|backplot|verify|post|setup sheet|step-by-step|machine|hours|time estimate|rough|finish/i;
+function setWS(ws){
+  WS = ws === 'cad' ? 'cad' : 'cam'; try { localStorage.setItem('cam5.ws', WS); } catch(e){}
+  document.body.classList.toggle('cad', WS === 'cad');
+  $('#tName').textContent = WS === 'cad' ? 'Dynamic Intl CAD' : 'Dynamic Intl CAM';
+  $$('#title [data-ws]').forEach(x => x.classList.toggle('on', x.dataset.ws === WS));
+  if (WS === 'cad' && mgrTab === 'tp') mgrTab = 'levels';
+  $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === mgrTab));
+  renderMenu(); renderTbar(); renderMgr(); updTitle(); updStatus();
+}
+let startEl = null;
+function startDlg(page){
+  if (startEl && document.body.contains(startEl.closest('.dlg'))){ startEl.closest('.dlg').style.zIndex = ++zTop; if (page === 2) page2(); return; }
+  const el = document.createElement('div'); el.style.cssText = 'width:min(760px,94vw)'; startEl = el;
+  const close = () => { const d = el.closest('.dlg'); if (d) d.querySelector('.dx').click(); };
+  const page1 = () => { el.innerHTML = `<div class="start">
+      <div class="big" data-s="cad"><div class="ic">📐</div><div class="tt">CAD</div><div class="ss">Draw and model parts: lines, arcs, trim, fillet, letters, solids from features, open and edit customer STEP files. No machine needed.</div></div>
+      <div class="big" data-s="cam"><div class="ic">🏭</div><div class="tt">CAM</div><div class="ss">Program a machine: pick CNC1, CNC2 or the wire cut, then plan the job, check collisions, estimate hours and post the G-code.</div></div></div>
+      <div class="hint" style="padding:0 12px 8px">Switch any time with the CAD / CAM buttons in the title bar. The drawing stays — CAD work carries straight into CAM.</div>`; };
+  function page2(){ el.innerHTML = `<div style="font-weight:700;padding:8px 12px 0">Which machine?</div><div class="start" style="grid-template-columns:repeat(3,1fr)">
+      ${Object.values(MACHINES).map(mm => `<div class="big" data-m="${mm.id}" style="min-height:140px"><div class="ic">${mm.kind === 'mill' ? '🏭' : '⚡'}</div><div class="tt" style="font-size:16px">${esc(mm.name)}</div><div class="ss">${mm.kind === 'mill' ? `${esc(mm.control)} · ${mm.tools} pockets · speeds, tools and collision checks` : 'Mitsubishi wire cut · job routing now, wire paths after the control is confirmed'}${mm.id === S.setup.machine ? '<br><b style="color:#1E9E2E">● current</b>' : ''}</div></div>`).join('')}</div>
+      <div style="padding:0 12px 10px"><button class="btn" data-s="back">◂ Back</button></div>`; }
+  el.addEventListener('click', e => {
+    const a = e.target.closest('[data-s],[data-m]'); if (!a) return;
+    if (a.dataset.s === 'cad'){ setWS('cad'); close(); cadHome(); }
+    else if (a.dataset.s === 'cam') page2();
+    else if (a.dataset.s === 'back') page1();
+    else if (a.dataset.m){ switchMachine(a.dataset.m); setWS('cam'); close(); homeDlg(); }
+  });
+  if (page === 2) page2(); else page1();
+  dlg({title:'Dynamic Int\'l — Start', body:el, w:780, modal:false, footer:false, x:Math.max(20, (innerWidth - 780)/2), y:90, onClose:() => { startEl = null; }});
+}
+function cadHome(){
+  const el = document.createElement('div'); el.style.cssText = 'width:min(900px,94vw)';
+  const tile = (h, icon, title, sub) => `<div class="pk" data-c="${h}" style="min-height:84px;background:#fff"><div class="pg">${icon}</div><div class="pt" style="font-size:13px;white-space:normal">${title}</div><div class="ps" style="white-space:normal">${sub}</div></div>`;
+  el.innerHTML = `<div class="info">CAD workspace: draw 2D, build solids, edit customer models. When the part is ready, switch to CAM and pick a machine — the drawing goes with you.</div>
+    <div class="mag" style="grid-template-columns:repeat(4,1fr)">${tile('open', '📂', 'Open a drawing or model', 'DXF, PDF (vector or scan), STEP, IGES, STL')}${tile('new', '📄', 'New drawing', 'Start empty: Create menu for lines, arcs, rectangles, letters')}${tile('solid', '🧱', 'Solid from features', 'Block + pockets, holes, bosses, revolve, sweep, loft')}${tile('modify', '🛠', 'Add features to a model', 'Cut pockets, holes, grooves into a customer STEP')}
+      ${tile('ai', '✦', 'Ask Claude to draw it', 'Describe the part in words, or drop the customer PDF')}${tile('letters', '🔤', 'Letters', 'Single-stroke text for engraving')}${tile('save', '💾', 'Save the drawing', 'Project file you can reopen here or in CAM')}${tile('cam', '🏭', 'Go to CAM', 'Pick the machine and program this part')}</div>`;
+  dlg({title:'📐 Dynamic Intl CAD — Home', body:el, w:920, modal:false, footer:false, x:Math.max(20, (innerWidth - 920)/2), y:70});
+  el.addEventListener('click', e => {
+    const a = e.target.closest('[data-c]'); if (!a) return; const close = () => { const dd = el.closest('.dlg'); if (dd) dd.querySelector('.dx').click(); }; const act = a.dataset.c;
+    if (act === 'open'){ close(); pick('cad'); } if (act === 'new'){ close(); newProj(); } if (act === 'solid'){ close(); solidDlg(false); } if (act === 'modify'){ close(); if (!S.geom.mesh) msg('Add features', 'Open a STEP / STL model first, or build a solid.'); else solidDlg(true); }
+    if (act === 'ai'){ close(); aiPanel(); } if (act === 'letters'){ close(); lettersDlg(); } if (act === 'save'){ close(); saveProj(true); } if (act === 'cam'){ close(); startDlg(2); }
+  });
+}
 let homeEl = null;
 function homeDlg(){
   if (homeEl && document.body.contains(homeEl.closest('.dlg'))){ homeEl.closest('.dlg').style.zIndex = ++zTop; renderHome(); return; }
@@ -4478,9 +4529,12 @@ if (!booted){
   loadTools();
   buildChains(); drawGeom(); drawStock(); setView('top'); updTitle();
   prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
-  setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) homeDlg(); }, 300);
+  setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) startDlg(); }, 300);
 }
-window.__cam = {stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+setWS(WS);
+$$('#title [data-ws]').forEach(x => x.onclick = () => { if (x.dataset.ws === 'cam') startDlg(2); else setWS('cad'); });
+$('#startLink').onclick = e => { e.preventDefault(); startDlg(); };
+window.__cam = {startDlg, cadHome, setWS, get WS(){ return WS; }, stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
