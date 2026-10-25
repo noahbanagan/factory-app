@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-PH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shop Japanese Snacks | Omiyage PH</title>
+<meta name="description" content="Browse 200+ Japanese snacks, candy, KitKat, noodles and drinks. Filter by category and dietary notes. Peso prices, VAT included.">
+<link rel="canonical" href="https://omiyage.ph/shop.html">
+<meta property="og:title" content="Shop Japanese Snacks | Omiyage PH"><meta property="og:description" content="Browse 200+ Japanese snacks, candy, KitKat, noodles and drinks. Filter by category and dietary notes. Peso prices, VAT included."><meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/products.js" defer></script>
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+
+<div class="announce"><div class="wrap">Free shipping on orders over <strong>₱2,500</strong> · Ships from Metro Manila · GCash, Maya, cards, COD in Luzon</div></div>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="index.html" aria-label="Omiyage PH home"><span class="brand-mark" aria-hidden="true">お</span><span>Omiyage PH<small>Japanese snacks, delivered</small></span></a>
+  <button class="btn btn-ghost btn-sm menu-btn" aria-expanded="false" aria-controls="main-nav">Menu</button>
+  <nav class="nav" id="main-nav" aria-label="Main">
+    <a href="shop.html">Shop</a><a href="shop.html#cat=bundles">Omiyage Boxes</a><a href="shipping.html">Shipping</a><a href="blog.html">Journal</a><a href="about.html">About</a><a href="contact.html">Contact</a>
+  </nav>
+  <div class="header-tools">
+    <form class="search" id="header-search" role="search"><label class="sr-only" for="hq">Search products</label><span aria-hidden="true">⌕</span><input id="hq" name="q" type="search" placeholder="Search Pocky, matcha, ramen…" autocomplete="off"></form>
+    <a class="btn btn-ghost btn-sm cart-btn" href="cart.html">Cart <span class="cart-count" hidden>0</span></a>
+  </div>
+</div></header>
+<main id="main">
+<div class="wrap"><div class="page-head"><div class="eyebrow">Shop</div><h1>All products</h1><p>Imported from Japan, shipped from Metro Manila. Prices in pesos with 12% VAT included. Buy a full case and save about 15%.</p></div></div>
+<section class="section"><div class="wrap"><div class="shop">
+  <aside class="filters" id="filters" aria-label="Filters">
+    <div class="field"><label for="shop-q">Search</label><input type="text" id="shop-q" placeholder="Pocky, matcha, Calbee…"></div>
+    <div><h3>Aisle</h3><div id="filter-cats"></div></div>
+    <div><h3>Dietary notes</h3><div id="filter-tags"></div><p class="small muted" style="margin-top:8px">Based on the manufacturer's Japanese ingredient list. Not a certification. Items with gelatin or alcohol are noted on every product page.</p></div>
+    <button class="btn btn-ghost btn-sm" id="clear-filters" type="button">Clear all filters</button>
+  </aside>
+  <div style="min-width:0">
+    <div class="toolbar"><div class="row"><span class="muted" id="result-count"></span><div class="chips" id="active-chips"></div></div>
+      <div class="row"><label for="sort" class="small">Sort</label><select id="sort"><option value="featured">Featured</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option><option value="name">Name A–Z</option></select></div></div>
+    <div class="grid grid-4" id="shop-grid"></div>
+  </div>
+</div></div></section>
+</main>
+
+<footer class="site-footer"><div class="wrap">
+  <div class="foot-grid">
+    <div><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">お</span><span>Omiyage PH</span></a>
+      <p style="margin-top:12px;max-width:40ch">Japanese snacks, candy, noodles and drinks imported from Japan and shipped from Metro Manila to every province. Omiyage (お土産) is the gift you bring home from a trip. We bring it to you.</p>
+      <div class="pay" style="margin-top:16px" aria-label="Payment methods"><span>GCash</span><span>Maya</span><span>Visa</span><span>Mastercard</span><span>BPI / BDO transfer</span><span>COD</span></div></div>
+    <div><h4>Shop</h4><ul><li><a href="shop.html">All products</a></li><li><a href="shop.html#cat=snacks">Snacks and chips</a></li><li><a href="shop.html#cat=chocolate">Chocolate</a></li><li><a href="shop.html#cat=kitkat">Japanese KitKat</a></li><li><a href="shop.html#cat=noodles">Instant noodles</a></li><li><a href="shop.html#cat=bundles">Omiyage Boxes</a></li></ul></div>
+    <div><h4>Help</h4><ul><li><a href="shipping.html">Shipping and returns</a></li><li><a href="faq.html">FAQ</a></li><li><a href="contact.html">Contact us</a></li><li><a href="cart.html">Your cart</a></li></ul></div>
+    <div><h4>Company</h4><ul><li><a href="about.html">About Omiyage PH</a></li><li><a href="blog.html">Journal</a></li><li><a href="terms.html">Terms of use</a></li><li><a href="privacy.html">Privacy policy</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Omiyage PH · Omiyage PH Trading · DTI Business Name Reg. No. [pending] · BIR TIN [pending] · FDA LTO No. [pending]</span><span>All prices in Philippine pesos (₱), 12% VAT included.</span></div>
+</div></footer>
+</body>
+</html>
