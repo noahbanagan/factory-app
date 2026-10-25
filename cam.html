@@ -1693,6 +1693,7 @@ function initPointer(){
     if (mode === 'dist'){ distPick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'scale'){ scalePick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'analyze'){ if (it) analyzeDlg(it); return; }
+    if (mode === 'edit'){ editPick(it, w); return; }
     if (mode === 'chain'){ if (it) chainClick(it, w); return; }
     if (it){ selEnt.has(it.id) ? selEnt.delete(it.id) : selEnt.add(it.id); }
     else selEnt.clear();
@@ -2080,14 +2081,22 @@ function xformAll(f, mir){
 function xformDlg(kind){
   const targets = S.geom.items.filter(it => selEnt.has(it.id) && visItem(it));
   if (!targets.length){ msg('Xform', 'Select the entities to transform first (click them, or drag a window), then choose the Xform function.'); return; }
-  const W = {dx:0, dy:0, ang:90, cx:0, cy:0, axis:'y', f:2, copy:false, n:1};
-  const rows = {translate:[['dx','Delta X'],['dy','Delta Y'],['n','Number of copies','i']], rotate:[['ang','Angle (deg)'],['cx','Center X'],['cy','Center Y'],['n','Number of copies','i']], mirror:[['axis','Mirror about','s',SEL(['y','Y axis (X = 0)'],['x','X axis (Y = 0)'])]], scale:[['f','Scale factor'],['cx','About X'],['cy','About Y']]}[kind];
+  const W = {dx:0, dy:0, ang:90, cx:0, cy:0, axis:'y', f:2, copy:false, n:1, nx:3, ny:2, px:rnd(20*K()), py:rnd(20*K()), nr:6, span:360};
+  const rows = {arrayRect:[['nx','Columns (X)','i'],['ny','Rows (Y)','i'],['px','Pitch X'],['py','Pitch Y']], arrayRot:[['nr','Number of copies (incl. original)','i'],['span','Total angle (deg)'],['cx','Center X'],['cy','Center Y']], translate:[['dx','Delta X'],['dy','Delta Y'],['n','Number of copies','i']], rotate:[['ang','Angle (deg)'],['cx','Center X'],['cy','Center Y'],['n','Number of copies','i']], mirror:[['axis','Mirror about','s',SEL(['y','Y axis (X = 0)'],['x','X axis (Y = 0)'])]], scale:[['f','Scale factor'],['cx','About X'],['cy','About Y']]}[kind];
   const el = document.createElement('div');
   el.innerHTML = `<div class="info">${targets.length} entit${targets.length === 1 ? 'y' : 'ies'} selected</div>${rows.map(r => fRow(W, r[0], r[1], r[2] || 'n', r[3], false)).join('')}${fRow(W, 'copy', 'Copy (keep originals)', 'c')}`;
   bindFields(el, W);
-  dlg({title:`Xform ${kind[0].toUpperCase() + kind.slice(1)}`, body:el, w:340, ok:close => {
+  dlg({title:({arrayRect:'Xform Rectangular Array', arrayRot:'Xform Rotary Array'})[kind] || `Xform ${kind[0].toUpperCase() + kind.slice(1)}`, body:el, w:340, ok:close => {
     pushUndo();
-    const n = (kind === 'translate' || kind === 'rotate') ? Math.max(1, W.n|0) : 1, added = [];
+    const added = [];
+    if (kind === 'arrayRect' || kind === 'arrayRot'){
+      const fs = [];
+      if (kind === 'arrayRect'){ for (let i = 0; i < Math.max(1, W.nx|0); i++) for (let j = 0; j < Math.max(1, W.ny|0); j++) if (i || j) fs.push(p => [p[0] + W.px*i, p[1] + W.py*j]); }
+      else { const n = Math.max(2, W.nr|0), step = (W.span || 360)*DEG/(Math.abs(W.span) >= 360 ? n : n - 1); for (let i = 1; i < n; i++){ const a = step*i, c = Math.cos(a), s = Math.sin(a); fs.push(p => [W.cx + (p[0]-W.cx)*c - (p[1]-W.cy)*s, W.cy + (p[0]-W.cx)*s + (p[1]-W.cy)*c]); } }
+      for (const f of fs) for (const it of targets){ const nt = xformItem(it, f, false); nt.id = S.geom.nextId++; S.geom.items.push(nt); added.push(nt.id); }
+      selEnt = new Set(added); close(); geomChanged(); return;
+    }
+    const n = (kind === 'translate' || kind === 'rotate') ? Math.max(1, W.n|0) : 1;
     for (let k = 1; k <= n; k++){
       let f, mir = false;
       if (kind === 'translate') f = p => [p[0] + W.dx*k, p[1] + W.dy*k];
@@ -2103,6 +2112,160 @@ function xformDlg(kind){
     selEnt = new Set(added.length ? added : targets.map(t => t.id));
     close(); geomChanged();
   }});
+}
+
+/* ---------- edit tools (Mastercam-style Trim / Divide / Break / Extend / Fillet / Chamfer / Offset) ---------- */
+let editCtx = null;
+const EDIT = {
+  trim2:{t:'Trim / Extend 2 entities', hint:'click the first entity on the part to KEEP, then the second', picks:2},
+  trim1:{t:'Trim / Extend 1 entity', hint:'click the entity to trim on the part to KEEP, then the entity to trim to', picks:2},
+  divide:{t:'Divide', hint:'click the piece of an entity between two crossings to remove it', picks:1},
+  brk:{t:'Break at point', hint:'click an entity where it should be broken in two', picks:1},
+  extend:{t:'Extend by length', f:[['d','Length']], hint:'click an entity near the end to extend', picks:1},
+  fillet:{t:'Fillet 2 lines', f:[['r','Radius']], hint:'click the two lines on the parts to keep', picks:2},
+  chamfer:{t:'Chamfer 2 lines', f:[['d','Distance']], hint:'click the two lines on the parts to keep', picks:2},
+  offset:{t:'Offset entity', f:[['d','Distance']], hint:'click an entity, then click the side to offset to', picks:2},
+  offsetChain:{t:'Offset contour (whole chain)', f:[['d','Distance']], s:[['side','Side',[['out','Outside (larger)'],['in','Inside (smaller)']]]], hint:'click a closed chain', picks:1}
+};
+// geometry helpers (2D)
+const pOnLine = (it, t) => [it.x1 + (it.x2 - it.x1)*t, it.y1 + (it.y2 - it.y1)*t];
+const lineT = (it, p) => { const dx = it.x2 - it.x1, dy = it.y2 - it.y1, L2 = dx*dx + dy*dy; return L2 ? ((p[0] - it.x1)*dx + (p[1] - it.y1)*dy)/L2 : 0; };
+const angOf = (it, p) => Math.atan2(p[1] - it.cy, p[0] - it.cx);
+const inArc = (it, a) => { let d = a - it.a0; while (d < -1e-9) d += 2*Math.PI; while (d > 2*Math.PI) d -= 2*Math.PI; return d <= it.a1 - it.a0 + 1e-9; };
+function isectInf(A, B){   // intersections of the INFINITE line / FULL circle versions of A and B
+  const out = [];
+  const circ = it => ({cx:it.cx, cy:it.cy, r:it.r});
+  if (A.kind === 'line' && B.kind === 'line'){
+    const d1x = A.x2 - A.x1, d1y = A.y2 - A.y1, d2x = B.x2 - B.x1, d2y = B.y2 - B.y1, den = d1x*d2y - d1y*d2x;
+    if (Math.abs(den) < 1e-12) return out;
+    const t = ((B.x1 - A.x1)*d2y - (B.y1 - A.y1)*d2x)/den; out.push([A.x1 + d1x*t, A.y1 + d1y*t]); return out;
+  }
+  const lineCirc = (L, C) => { const dx = L.x2 - L.x1, dy = L.y2 - L.y1, fx = L.x1 - C.cx, fy = L.y1 - C.cy, a = dx*dx + dy*dy, b = 2*(fx*dx + fy*dy), c = fx*fx + fy*fy - C.r*C.r, disc = b*b - 4*a*c; if (disc < 0 || a === 0) return []; const q = Math.sqrt(disc); return [(-b - q)/(2*a), (-b + q)/(2*a)].map(t => [L.x1 + dx*t, L.y1 + dy*t]); };
+  if (A.kind === 'line') return lineCirc(A, circ(B));
+  if (B.kind === 'line') return lineCirc(B, circ(A));
+  const a = circ(A), b = circ(B), d = hyp(b.cx - a.cx, b.cy - a.cy); if (d < 1e-9 || d > a.r + b.r + 1e-9 || d < Math.abs(a.r - b.r) - 1e-9) return out;
+  const x = (d*d - b.r*b.r + a.r*a.r)/(2*d), h2 = a.r*a.r - x*x, h = Math.sqrt(Math.max(0, h2)), ux = (b.cx - a.cx)/d, uy = (b.cy - a.cy)/d, mx = a.cx + ux*x, my = a.cy + uy*x;
+  out.push([mx - uy*h, my + ux*h]); if (h > 1e-9) out.push([mx + uy*h, my - ux*h]); return out;
+}
+const onSeg = (it, p) => it.kind === 'line' ? (t => t > -1e-6 && t < 1 + 1e-6)(lineT(it, p)) : it.kind === 'arc' ? inArc(it, angOf(it, p)) : true;
+function isectSeg(A, B){ return isectInf(A, B).filter(p => onSeg(A, p) && onSeg(B, p)); }
+function nearestOn(it, p){   // closest point on the entity to p
+  if (it.kind === 'line'){ const t = Math.max(0, Math.min(1, lineT(it, p))); return pOnLine(it, t); }
+  const a = angOf(it, p); if (it.kind === 'circle' || inArc(it, a)) return [it.cx + it.r*Math.cos(a), it.cy + it.r*Math.sin(a)];
+  const e0 = [it.cx + it.r*Math.cos(it.a0), it.cy + it.r*Math.sin(it.a0)], e1 = [it.cx + it.r*Math.cos(it.a1), it.cy + it.r*Math.sin(it.a1)];
+  return hyp(e0[0]-p[0], e0[1]-p[1]) < hyp(e1[0]-p[0], e1[1]-p[1]) ? e0 : e1;
+}
+// keep the part of `it` that contains the click `cp`, ending at point `q` (which may lie beyond the current extent = extend)
+function keepTo(it, q, cp){
+  if (it.kind === 'line'){ const tq = lineT(it, q), tc = lineT(it, cp); const keepStart = tc < tq; return keepStart ? {...it, x2:q[0], y2:q[1]} : {...it, x1:q[0], y1:q[1]}; }
+  const th = angOf(it, q), ph = angOf(it, cp);
+  if (it.kind === 'circle'){ return null; }
+  const ccw = (from, to) => { let d = to - from; while (d < 0) d += 2*Math.PI; return d; };
+  const A = {...it, a0:it.a0, a1:it.a0 + ccw(it.a0, th)}, B = {...it, a0:th, a1:th + ccw(th, it.a1)};
+  const has = (arc, a) => inArc(arc, a);
+  if (has(A, ph) && !has(B, ph)) return normArc(A); if (has(B, ph) && !has(A, ph)) return normArc(B);
+  return normArc((A.a1 - A.a0) <= (B.a1 - B.a0) ? A : B);
+}
+function pickIsect(A, B, cpA, cpB){ const pts = isectInf(A, B); if (!pts.length) return null; const m = [(cpA[0] + cpB[0])/2, (cpA[1] + cpB[1])/2]; return pts.reduce((b, p) => !b || hyp(p[0]-m[0], p[1]-m[1]) < hyp(b[0]-m[0], b[1]-m[1]) ? p : b, null); }
+function splitAt(it, p){   // break into two entities at point p (on the entity)
+  if (it.kind === 'line') return [{...it, x2:p[0], y2:p[1]}, {...it, x1:p[0], y1:p[1]}];
+  if (it.kind === 'arc'){ const th = angOf(it, p); const a = {...it}; let t = th; while (t < a.a0) t += 2*Math.PI; return [normArc({...a, a1:t}), normArc({...a, a0:t, a1:a.a1})]; }
+  if (it.kind === 'circle'){ const th = angOf(it, p); return [normArc({kind:'arc', level:it.level, cx:it.cx, cy:it.cy, r:it.r, a0:th, a1:th + 2*Math.PI})]; }
+  return [it];
+}
+function paramOf(it, p){ return it.kind === 'line' ? lineT(it, p) : (a => { let d = a - (it.kind === 'arc' ? it.a0 : 0); while (d < 0) d += 2*Math.PI; return d; })(angOf(it, p)); }
+function editApply(ctx){
+  const [A, B] = ctx.items, [ca, cb] = ctx.cps, V = ctx.V, kind = ctx.kind, out = [], del = [];
+  const bad = it => it && !['line', 'arc', 'circle'].includes(it.kind);
+  if (kind !== 'offsetChain' && (bad(A) || bad(B))){ msg('Edit', 'This tool works on lines, arcs and circles. Polylines: select them and use Edit ▸ Explode polyline first.'); return false; }
+  if (kind === 'trim2' || kind === 'trim1'){
+    const q = pickIsect(A, B, ca, cb); if (!q){ prompt_('No intersection between those two entities (even extended).'); return false; }
+    const na = A.kind === 'circle' ? null : keepTo(A, q, ca); if (A.kind === 'circle'){ prompt_('Use Divide on a circle.'); return false; }
+    del.push(A); out.push(na);
+    if (kind === 'trim2'){ if (B.kind === 'circle'){ prompt_('Use Divide on a circle.'); return false; } del.push(B); out.push(keepTo(B, q, cb)); }
+  }
+  if (kind === 'divide'){
+    const others = S.geom.items.filter(o => o !== A && visItem(o) && ['line', 'arc', 'circle'].includes(o.kind));
+    const ps = []; for (const o of others) for (const p of isectSeg(A, o)) ps.push(paramOf(A, p));
+    const pc = paramOf(A, ca), lo = ps.filter(t => t < pc - 1e-7).sort((a, b) => b - a)[0], hi = ps.filter(t => t > pc + 1e-7).sort((a, b) => a - b)[0];
+    const at = t => A.kind === 'line' ? pOnLine(A, t) : [A.cx + A.r*Math.cos((A.kind === 'arc' ? A.a0 : 0) + t), A.cy + A.r*Math.sin((A.kind === 'arc' ? A.a0 : 0) + t)];
+    if (lo == null && hi == null){ prompt_('Nothing crosses this entity — nothing to divide.'); return false; }
+    del.push(A);
+    if (A.kind === 'circle'){ const a0 = hi != null ? hi : lo, a1 = lo != null ? lo : hi; out.push(normArc({kind:'arc', level:A.level, cx:A.cx, cy:A.cy, r:A.r, a0:a0, a1:a1 + (a1 <= a0 ? 2*Math.PI : 0)})); }
+    else {
+      if (lo != null){ const [p1] = splitAt(A, at(lo)); out.push(p1); }
+      if (hi != null){ const [, p2] = splitAt(A, at(hi)); out.push(p2); }
+    }
+  }
+  if (kind === 'brk'){ const p = nearestOn(A, ca); del.push(A); out.push(...splitAt(A, p)); }
+  if (kind === 'extend'){
+    const d = +V.d || 0; if (!d){ prompt_('Type the length first.'); return false; }
+    if (A.kind === 'line'){ const L = hyp(A.x2 - A.x1, A.y2 - A.y1), ux = (A.x2 - A.x1)/L, uy = (A.y2 - A.y1)/L; const nearEnd = lineT(A, ca) > 0.5; del.push(A); out.push(nearEnd ? {...A, x2:A.x2 + ux*d, y2:A.y2 + uy*d} : {...A, x1:A.x1 - ux*d, y1:A.y1 - uy*d}); }
+    else if (A.kind === 'arc'){ const da = d/A.r, ph = angOf(A, ca); let t = ph - A.a0; while (t < 0) t += 2*Math.PI; const nearEnd = t > (A.a1 - A.a0)/2; del.push(A); out.push(normArc(nearEnd ? {...A, a1:A.a1 + da} : {...A, a0:A.a0 - da})); }
+    else { prompt_('A circle has no end to extend.'); return false; }
+  }
+  if (kind === 'fillet' || kind === 'chamfer'){
+    if (A.kind !== 'line' || B.kind !== 'line'){ prompt_('Fillet / chamfer here works between two lines.'); return false; }
+    const P = pickIsect(A, B, ca, cb); if (!P){ prompt_('The lines are parallel.'); return false; }
+    const dir = (L, cp) => { const q = nearestOn(L, cp), v = [q[0] - P[0], q[1] - P[1]], n = hyp(v[0], v[1]) || 1; return [v[0]/n, v[1]/n]; };
+    const u = dir(A, ca), v = dir(B, cb), ang = Math.acos(Math.max(-1, Math.min(1, u[0]*v[0] + u[1]*v[1])));
+    if (ang < 1e-6 || Math.abs(ang - Math.PI) < 1e-6){ prompt_('The lines are collinear.'); return false; }
+    let ta, tb, extra = null;
+    if (kind === 'fillet'){
+      const r = +V.r || 0; if (!(r > 0)){ prompt_('Type the radius first.'); return false; }
+      const dist = r/Math.tan(ang/2); ta = [P[0] + u[0]*dist, P[1] + u[1]*dist]; tb = [P[0] + v[0]*dist, P[1] + v[1]*dist];
+      const bx = u[0] + v[0], by = u[1] + v[1], bn = hyp(bx, by), cd = r/Math.sin(ang/2), c = [P[0] + bx/bn*cd, P[1] + by/bn*cd];
+      let a0 = Math.atan2(ta[1] - c[1], ta[0] - c[0]), a1 = Math.atan2(tb[1] - c[1], tb[0] - c[0]);
+      let sw = a1 - a0; while (sw <= -Math.PI) sw += 2*Math.PI; while (sw > Math.PI) sw -= 2*Math.PI;
+      extra = normArc(sw >= 0 ? {kind:'arc', level:A.level, cx:c[0], cy:c[1], r, a0, a1:a0 + sw} : {kind:'arc', level:A.level, cx:c[0], cy:c[1], r, a0:a1, a1:a1 - sw});
+    } else {
+      const d = +V.d || 0; if (!(d > 0)){ prompt_('Type the distance first.'); return false; }
+      ta = [P[0] + u[0]*d, P[1] + u[1]*d]; tb = [P[0] + v[0]*d, P[1] + v[1]*d]; extra = {kind:'line', level:A.level, x1:ta[0], y1:ta[1], x2:tb[0], y2:tb[1]};
+    }
+    del.push(A, B); out.push(keepTo(A, ta, ca), keepTo(B, tb, cb), extra);
+  }
+  if (kind === 'offset'){
+    const d = +V.d || 0; if (!(d > 0)){ prompt_('Type the distance first.'); return false; }
+    if (A.kind === 'line'){ const dx = A.x2 - A.x1, dy = A.y2 - A.y1, L = hyp(dx, dy), nx = -dy/L, ny = dx/L, side = Math.sign((cb[0] - A.x1)*nx + (cb[1] - A.y1)*ny) || 1; out.push({...A, id:undefined, x1:A.x1 + nx*d*side, y1:A.y1 + ny*d*side, x2:A.x2 + nx*d*side, y2:A.y2 + ny*d*side}); }
+    else { const inside = hyp(cb[0] - A.cx, cb[1] - A.cy) < A.r, r = inside ? A.r - d : A.r + d; if (r <= 0){ prompt_('Offset larger than the radius.'); return false; } out.push({...A, id:undefined, r}); }
+  }
+  if (kind === 'offsetChain'){
+    const c = CH.find(ch => ch.items.includes(A.id)); if (!c || !c.closed){ prompt_('Click an entity of a CLOSED chain.'); return false; }
+    const d = (+V.d || 0)*(V.side === 'in' ? -1 : 1); if (!d){ prompt_('Type the distance first.'); return false; }
+    const polys = clOffset([c.pts], d); if (!polys.length){ prompt_('The offset collapsed to nothing.'); return false; }
+    for (const pp of polys) out.push({kind:'poly', closed:true, level:A.level, pts:pp});
+  }
+  pushUndo();
+  const delIds = new Set(del.map(x => x.id)); S.geom.items = S.geom.items.filter(x => !delIds.has(x.id));
+  for (const o of out){ if (!o) continue; const {id, ...rest} = o; addItem(rest, o.level || S.geom.main); }
+  geomChanged();
+  return true;
+}
+function startEdit(kind){
+  endMode();
+  const d = EDIT[kind], k = K();
+  const V = {d:rnd(5*k), r:rnd(3*k), side:'out'};
+  editCtx = {kind, V, items:[], cps:[]}; mode = 'edit';
+  const rb = $('#ribbon');
+  rb.innerHTML = `<b>${d.t}</b>${(d.f || []).map(([key, l]) => `<label>${l}<input type="number" step="any" data-ef="${key}" value="${V[key]}"></label>`).join('')}${(d.s || []).map(([key, l, o]) => `<label>${l}<select data-ef="${key}">${o.map(([a, b]) => `<option value="${a}"${V[key] === a ? ' selected' : ''}>${b}</option>`).join('')}</select></label>`).join('')}<span class="hint" style="width:auto;margin:0">${d.hint}</span><span style="flex:1"></span><button class="btn" id="edX">✕ Done</button>`;
+  rb.classList.add('on');
+  rb.oninput = e => { const key = e.target.dataset.ef; if (key) V[key] = e.target.tagName === 'SELECT' ? e.target.value : parseFloat(e.target.value); };
+  $('#edX').onclick = () => endMode();
+  prompt_(`${d.t}: ${d.hint}`);
+}
+function editPick(it, w){
+  if (!editCtx) return;
+  const d = EDIT[editCtx.kind];
+  if (editCtx.kind === 'offset' && editCtx.items.length === 1){ editCtx.cps.push([w.x, w.y]); editCtx.items.push(null); }
+  else { if (!it){ prompt_(`${d.t}: click ON an entity`); return; } editCtx.items.push(it); editCtx.cps.push([w.x, w.y]); selEnt = new Set(editCtx.items.filter(Boolean).map(x => x.id)); drawGeom(); }
+  if (editCtx.items.length >= d.picks){ const ok = editApply(editCtx); editCtx.items = []; editCtx.cps = []; selEnt.clear(); drawGeom(); prompt_(`${d.t}: ${d.hint}${ok ? ' (done — again, or ✕)' : ''}`); }
+  else prompt_(`${d.t}: now ${editCtx.kind === 'offset' ? 'click the side to offset to' : 'click the second entity'}`);
+}
+function explodePolys(){
+  const sel = S.geom.items.filter(it => selEnt.has(it.id) && it.kind === 'poly'); if (!sel.length){ msg('Explode polyline', 'Select one or more polylines first.'); return; }
+  pushUndo(); let n = 0;
+  for (const it of sel){ const P = it.pts; for (let i = 0; i + 1 < P.length; i++){ addItem({kind:'line', x1:P[i][0], y1:P[i][1], x2:P[i+1][0], y2:P[i+1][1]}, it.level); n++; } if (it.closed && P.length > 2){ addItem({kind:'line', x1:P[P.length-1][0], y1:P[P.length-1][1], x2:P[0][0], y2:P[0][1]}, it.level); n++; } }
+  const ids = new Set(sel.map(x => x.id)); S.geom.items = S.geom.items.filter(x => !ids.has(x.id)); selEnt.clear(); geomChanged(); prompt_(`${sel.length} polyline(s) exploded into ${n} lines.`);
 }
 
 /* ---------- create (ribbon bar) ---------- */
@@ -2190,6 +2353,7 @@ function applyCreate(){
 }
 function endMode(){
   if (mode === 'create'){ createCtx = null; clearG(G.prev); $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
+  if (mode === 'edit'){ editCtx = null; $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
   if (mode === 'chain' && chainDlgEl) chainDlgEl.querySelector('.cn').click();
   mode = null; distPts = []; scalePts = []; prompt_(''); $('#snap').style.display = $('#snaptxt').style.display = 'none';
 }
@@ -2914,11 +3078,11 @@ function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ?
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
   ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Open from Google Drive link…', '', driveLinkDlg], ['Merge drawing / model…', '', () => pick('merge')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
-  ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg]]],
+  ['Edit', [['Undo', 'Ctrl+Z', undo], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg], '-', ['Trim / Extend 2 entities', '', () => startEdit('trim2')], ['Trim / Extend 1 entity', '', () => startEdit('trim1')], ['Divide (remove between crossings)', '', () => startEdit('divide')], ['Break at point', '', () => startEdit('brk')], ['Extend by length…', '', () => startEdit('extend')], ['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Explode polyline into lines', '', explodePolys]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
-  ['Create', [['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Rectangle', '', () => startCreate('rect')], ['Bolt circle', '', () => startCreate('bolt')]]],
-  ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
+  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Rectangle', '', () => startCreate('rect')], ['Bolt circle', '', () => startCreate('bolt')]]],
+  ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], ['Offset entity…', '', () => startEdit('offset')], ['Offset contour (chain)…', '', () => startEdit('offsetChain')], ['Rectangular array…', '', () => xformDlg('arrayRect')], ['Rotary array…', '', () => xformDlg('arrayRot')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['⏱ Time estimate (hours)…', '', estimateDlg]]],
   ['Screen', [[`${x5Look ? '✓ ' : ''}Classic X5 look (black screen, green lines)`, '', () => setX5Look(!x5Look)], ['Toggle toolpath display', 'Alt+T', togglePaths], ['Toggle shading', 'Alt+S', () => { shade = !shade; drawGeom(); }], ['Toggle WCS axes', 'F9', () => { axesOn = !axesOn; drawAxes(); }], ['Clear verify stock', '', () => clearG(G.sim)], ['Clear selection', '', () => { selEnt.clear(); drawGeom(); updStatus(); }]]],
@@ -3705,7 +3869,7 @@ if (!booted){
   prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) homeDlg(); }, 300);
 }
-window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
