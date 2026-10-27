@@ -2381,10 +2381,13 @@ const CREATE = {
   polygon:{t:'Polygon', f:[['cx','Center X'],['cy','Center Y'],['n','Sides'],['r','Radius'],['ang','Rotation']], s:[['anchor','Radius to',SEL(['c','Corner'],['f','Flat'])]], picks:[['cx','cy']]},
   ellipse:{t:'Ellipse', f:[['cx','Center X'],['cy','Center Y'],['w','Width'],['h','Height'],['ang','Rotation']], picks:[['cx','cy']]},
   spline:{t:'Spline (click the points, ✔ to finish)', f:[], picks:[], many:true},
-  dimH:{t:'Dimension Horizontal', f:[['th','Text height']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
-  dimV:{t:'Dimension Vertical', f:[['th','Text height']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
-  dimA:{t:'Dimension Parallel (aligned)', f:[['th','Text height']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
-  dimD:{t:'Dimension Diameter / Radius (click the circle, then the text position)', f:[['th','Text height']], picks:[['x1','y1'],['x2','y2']], auto:true, dim:true},
+  dimH:{t:'Dimension Horizontal', f:[['th','Text height']], ft:[['tol','Tolerance']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
+  dimV:{t:'Dimension Vertical', f:[['th','Text height']], ft:[['tol','Tolerance']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
+  dimA:{t:'Dimension Parallel (aligned)', f:[['th','Text height']], ft:[['tol','Tolerance']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
+  dimD:{t:'Dimension Diameter / Radius (click the circle, then the text position)', f:[['th','Text height']], ft:[['tol','Tolerance']], picks:[['x1','y1'],['x2','y2']], auto:true, dim:true},
+  dimAng:{t:'Dimension Angle (click line 1, line 2, then where the arc goes)', f:[['th','Text height']], ft:[['tol','Tolerance']], picks:[['x1','y1'],['x2','y2'],['x3','y3']], auto:true, dim:true},
+  gdt:{t:'GD&T feature control frame', f:[['th','Text height']], ft:[['txt','Tolerance (e.g. 0.05)'],['dat','Datums (e.g. A B)']], s:[['sym','Symbol',SEL(['⏤','⏤ Straightness'],['⏥','⏥ Flatness'],['○','○ Circularity'],['⌭','⌭ Cylindricity'],['⟂','⟂ Perpendicularity'],['∥','∥ Parallelism'],['∠','∠ Angularity'],['⌖','⌖ Position'],['◎','◎ Concentricity'],['⌯','⌯ Symmetry'],['⌒','⌒ Profile of a line'],['⌓','⌓ Profile of a surface'],['↗','↗ Runout'])]], picks:[['x','y']], auto:true, dim:true},
+  datum:{t:'Datum feature symbol', f:[['th','Text height']], ft:[['txt','Datum letter']], picks:[['x','y']], auto:true, dim:true},
   note:{t:'Note', f:[['th','Text height'],['ang','Angle']], ft:[['txt','Text']], picks:[['x','y']], auto:true}
 };
 // dimension graphics: lines + arrow heads + stroke text, all flagged dim:true (level DIM, never chained)
@@ -2393,7 +2396,33 @@ function dimItems(V, kind, ref){
   const arrow = (x, y, ux, uy) => { const L = h*0.9, w = h*0.22; add(x, y, x - ux*L - uy*w, y - uy*L + ux*w); add(x, y, x - ux*L + uy*w, y - uy*L - ux*w); };
   const tw = txt => (String(txt).length*(4 + 1.5) - 1.5)*h/6;
   const label = (txt, cx, cy, ang) => { const w = tw(txt), c = Math.cos(ang), si = Math.sin(ang); for (const it of textItems({text:txt, x:cx - c*w/2 + si*h*0.25, y:cy - si*w/2 - c*h*0.25, height:h, angle:ang/DEG})) out.push(Object.assign(it, {dim:true})); };
-  const txtOf = v => fmt(Math.abs(v));
+  const txtOf = v => fmt(Math.abs(v)) + (V.tol ? ' ' + V.tol : '');
+  const box = (x0, y0, w, hh) => { add(x0, y0, x0 + w, y0); add(x0 + w, y0, x0 + w, y0 + hh); add(x0 + w, y0 + hh, x0, y0 + hh); add(x0, y0 + hh, x0, y0); };
+  if (kind === 'gdt'){
+    const cells = [V.sym || '⏥', String(V.txt || ''), ...String(V.dat || '').trim().split(/\s+/).filter(Boolean)], hh = h*1.8; let x = V.x;
+    for (const c of cells){ const w = Math.max(hh, tw(c) + h*0.8); box(x, V.y, w, hh); for (const it of textItems({text:c, x:x + (w - tw(c))/2, y:V.y + h*0.4, height:h})) out.push(Object.assign(it, {dim:true})); x += w; }
+    return out;
+  }
+  if (kind === 'datum'){
+    const c = String(V.txt || 'A').toUpperCase(), hh = h*1.8, w = Math.max(hh, tw(c) + h*0.8);
+    box(V.x - w/2, V.y + h*1.2, w, hh); for (const it of textItems({text:c, x:V.x - tw(c)/2, y:V.y + h*1.6, height:h})) out.push(Object.assign(it, {dim:true}));
+    add(V.x, V.y + h*1.2, V.x, V.y + h*0.6); add(V.x - h*0.5, V.y, V.x + h*0.5, V.y); add(V.x - h*0.5, V.y, V.x, V.y + h*0.6); add(V.x + h*0.5, V.y, V.x, V.y + h*0.6);
+    return out;
+  }
+  if (kind === 'dimAng' && ref && ref.A && ref.B){
+    const A = ref.A, B = ref.B, P = isectInf(A, B)[0]; if (!P) return out;
+    const dirTo = (L, q) => { const t = nearestOn(L, q), v = [t[0] - P[0], t[1] - P[1]], n = hyp(v[0], v[1]) || 1; return [v[0]/n, v[1]/n]; };
+    const u = dirTo(A, [V.x1, V.y1]), v = dirTo(B, [V.x2, V.y2]), R = Math.max(h*2, hyp(V.x3 - P[0], V.y3 - P[1]));
+    let a0 = Math.atan2(u[1], u[0]), a1 = Math.atan2(v[1], v[0]), sw = a1 - a0; while (sw <= -Math.PI) sw += 2*Math.PI; while (sw > Math.PI) sw -= 2*Math.PI;
+    if (sw < 0){ [a0, a1] = [a1, a0]; sw = -sw; }
+    const arc = arcPts(P[0], P[1], R, a0, a1, chordTol()); for (let i = 0; i + 1 < arc.length; i++) add(arc[i][0], arc[i][1], arc[i+1][0], arc[i+1][1]);
+    const e0 = arc[0], e1 = arc[arc.length-1], t0 = [-Math.sin(a0), Math.cos(a0)], t1 = [-Math.sin(a1), Math.cos(a1)];
+    arrow(e0[0], e0[1], -t0[0], -t0[1]); arrow(e1[0], e1[1], t1[0], t1[1]);
+    for (const [L, e] of [[A, e0], [B, e1]]){ const far = hyp(nearestOn(L, e)[0] - e[0], nearestOn(L, e)[1] - e[1]) > h*0.2; if (far){ const q = L.kind === 'line' ? (hyp(L.x1 - P[0], L.y1 - P[1]) > hyp(L.x2 - P[0], L.y2 - P[1]) ? [L.x1, L.y1] : [L.x2, L.y2]) : e; const d = unit(P, e); add(q[0], q[1], P[0] + d[0]*(R + h*0.5), P[1] + d[1]*(R + h*0.5)); } }
+    const am = (a0 + a1)/2, tx = P[0] + (R + h*1.2)*Math.cos(am), ty = P[1] + (R + h*1.2)*Math.sin(am);
+    label((sw/DEG).toFixed(1).replace(/\.0$/, '') + '°' + (V.tol ? ' ' + V.tol : ''), tx, ty, 0);
+    return out;
+  }
   if (kind === 'dimH' || kind === 'dimV' || kind === 'dimA'){
     const p1 = [V.x1, V.y1], p2 = [V.x2, V.y2], p3 = [V.x3, V.y3];
     let a, b, d, n;
@@ -2419,6 +2448,7 @@ function dimItems(V, kind, ref){
   }
   return out;
 }
+function nearLine(p){ let best = null, bd = Infinity; for (const it of S.geom.items){ if (!visItem(it) || it.dim || it.kind !== 'line') continue; const q = nearestOn(it, p), d = hyp(q[0] - p[0], q[1] - p[1]); if (d < bd){ bd = d; best = it; } } return best && bd < pxWorld()*12 ? best : null; }
 function nearCircle(p){ let best = null, bd = Infinity; for (const it of S.geom.items){ if (!visItem(it) || (it.kind !== 'circle' && it.kind !== 'arc')) continue; const d = Math.abs(hyp(p[0] - it.cx, p[1] - it.cy) - it.r); if (d < bd){ bd = d; best = it; } } return best && bd < pxWorld()*12 ? best : null; }
 // Catmull-Rom spline through points, sampled
 function splinePts(P, closed, seg = 10){
@@ -2441,7 +2471,7 @@ function ellipsePts(cx, cy, a, b, ang, n = 72){ const c = Math.cos(ang*DEG), si 
 function startCreate(kind){
   endMode();
   const k = K(), d = CREATE[kind];
-  const V = {x:0, y:0, x1:0, y1:0, x2:rnd(50*k), y2:0, x3:0, y3:0, len:rnd(50*k), ang:0, w:rnd(100*k), h:rnd(60*k), rad:0, anchor:kind === 'polygon' ? 'c' : 'll', cx:0, cy:0, d:rnd(20*k), r:rnd(10*k), a0:0, a1:90, bcd:rnd(80*k), n:6, hd:rnd(8.5*k), th:rnd(3.5*k), txt:'NOTE', pts:[]};
+  const V = {x:0, y:0, x1:0, y1:0, x2:rnd(50*k), y2:0, x3:0, y3:0, len:rnd(50*k), ang:0, w:rnd(100*k), h:rnd(60*k), rad:0, anchor:kind === 'polygon' ? 'c' : 'll', cx:0, cy:0, d:rnd(20*k), r:rnd(10*k), a0:0, a1:90, bcd:rnd(80*k), n:6, hd:rnd(8.5*k), th:rnd(3.5*k), txt:kind === 'gdt' ? '0.05' : kind === 'datum' ? 'A' : 'NOTE', tol:'', dat:'A', sym:'⏥', pts:[]};
   if (kind === 'ellipse'){ V.w = rnd(40*k); V.h = rnd(24*k); }
   createCtx = {kind, V, pick:0, ref:null};
   mode = 'create'; SNAPS = null;
@@ -2503,6 +2533,7 @@ function createPick(p){
   if ((kind === 'circle' || kind === 'arc') && createCtx.pick === 1){ applyCreate(); return; }
   if (d.many){ V.pts.push([rnd(p.x), rnd(p.y)]); createCtx.pick = V.pts.length; preview(); prompt_(`${d.t}: ${V.pts.length} point(s) — click more, ✔ to finish`); return; }
   if (kind === 'dimD' && createCtx.pick === 0){ const ref = nearCircle([p.x, p.y]); if (!ref){ prompt_('Dimension: click ON a circle or arc first'); return; } createCtx.ref = ref; }
+  if (kind === 'dimAng' && createCtx.pick < 2){ const L = nearLine([p.x, p.y]); if (!L){ prompt_('Angle: click ON a line'); return; } createCtx.ref = createCtx.ref || {}; createCtx.ref[createCtx.pick === 0 ? 'A' : 'B'] = L; }
   const pk = d.picks[createCtx.pick];
   if (pk){ V[pk[0]] = rnd(p.x); V[pk[1]] = rnd(p.y); createCtx.pick++; }
   if (kind === 'line' && createCtx.pick === 1){ V.x2 = V.x1; V.y2 = V.y1; }
@@ -3116,6 +3147,71 @@ function writeDXF(){
   w(0, 'ENDSEC'); w(0, 'EOF');
   return L.join('\n') + '\n';
 }
+// STEP AP214: planar faces merged into polygons (with holes), curved faces as triangles. Always in millimetres.
+function writeSTEP(pos, name){
+  const sc = isMM() ? 1 : 25.4, L = []; let id = 0;
+  const E = txt => { L.push(`#${++id}=${txt};`); return id; }, f = v => { const s = (+(v*sc).toFixed(5)).toString(); return s.includes('.') || s.includes('e') ? s : s + '.'; };
+  const pt = p => E(`CARTESIAN_POINT('',(${f(p[0])},${f(p[1])},${f(p[2])}))`), dir = d => E(`DIRECTION('',(${(+d[0].toFixed(7))},${(+d[1].toFixed(7))},${(+d[2].toFixed(7))}))`);
+  const u3 = (a, b) => { const v = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], n = hyp(...v) || 1; return [v[0]/n, v[1]/n, v[2]/n]; };
+  const refDir = n => { const a = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]; const c = [n[1]*a[2]-n[2]*a[1], n[2]*a[0]-n[0]*a[2], n[0]*a[1]-n[1]*a[0]], m = hyp(...c) || 1; return [c[0]/m, c[1]/m, c[2]/m]; };
+  const faces = [];
+  const emitFace = (loops, n) => {
+    const bounds = loops.map((loop, li) => {
+      const vp = loop.map(p => E(`VERTEX_POINT('',#${pt(p)})`));
+      const ed = loop.map((p, i) => { const q = loop[(i+1)%loop.length], ln = E(`LINE('',#${pt(p)},#${E(`VECTOR('',#${dir(u3(p, q))},1.)`)})`); return E(`EDGE_CURVE('',#${vp[i]},#${vp[(i+1)%loop.length]},#${ln},.T.)`); });
+      const el = E(`EDGE_LOOP('',(${ed.map(e => '#' + E(`ORIENTED_EDGE('',*,*,#${e},.T.)`)).join(',')}))`);
+      return E(`${li === 0 ? 'FACE_OUTER_BOUND' : 'FACE_BOUND'}('',#${el},.T.)`);
+    });
+    const ax = E(`AXIS2_PLACEMENT_3D('',#${pt(loops[0][0])},#${dir(n)},#${dir(refDir(n))})`);
+    faces.push(E(`ADVANCED_FACE('',(${bounds.map(b => '#' + b).join(',')}),#${E(`PLANE('',#${ax})`)},.T.)`));
+  };
+  // group coplanar connected triangles
+  const tri = []; for (let t = 0; t < pos.length; t += 9){ const a = [pos[t], pos[t+1], pos[t+2]], b = [pos[t+3], pos[t+4], pos[t+5]], c = [pos[t+6], pos[t+7], pos[t+8]]; const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]]; let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; const m = hyp(...n); if (m < 1e-12) continue; n = [n[0]/m, n[1]/m, n[2]/m]; tri.push({a, b, c, n, d:n[0]*a[0] + n[1]*a[1] + n[2]*a[2]}); }
+  const vk = p => Math.round(p[0]*1e4) + ',' + Math.round(p[1]*1e4) + ',' + Math.round(p[2]*1e4), ek = (p, q) => { const a = vk(p), b = vk(q); return a < b ? a + '|' + b : b + '|' + a; };
+  const byPlane = new Map(); tri.forEach((T, i) => { const k = T.n.map(v => Math.round(v*1000)).join(',') + ':' + Math.round(T.d*1000); if (!byPlane.has(k)) byPlane.set(k, []); byPlane.get(k).push(i); });
+  for (const idxs of byPlane.values()){
+    // split the plane group into connected components, then boundary loops
+    const edgeOwner = new Map(); for (const i of idxs){ const T = tri[i]; for (const [p, q] of [[T.a, T.b], [T.b, T.c], [T.c, T.a]]){ const k = ek(p, q); if (!edgeOwner.has(k)) edgeOwner.set(k, []); edgeOwner.get(k).push(i); } }
+    const seen = new Set(); 
+    for (const s0 of idxs){ if (seen.has(s0)) continue; const comp = []; const st = [s0]; seen.add(s0);
+      while (st.length){ const i = st.pop(); comp.push(i); const T = tri[i]; for (const [p, q] of [[T.a, T.b], [T.b, T.c], [T.c, T.a]]) for (const j of edgeOwner.get(ek(p, q))) if (!seen.has(j)){ seen.add(j); st.push(j); } }
+      const n = tri[comp[0]].n, bnd = new Map();
+      for (const i of comp){ const T = tri[i]; for (const [p, q] of [[T.a, T.b], [T.b, T.c], [T.c, T.a]]) if (edgeOwner.get(ek(p, q)).length === 1){ const k = vk(p); if (!bnd.has(k)) bnd.set(k, []); bnd.get(k).push({p, q}); } }
+      let ok = true, loops = []; const used = new Set();
+      for (const [k0, lst] of bnd){ for (const e0 of lst){ if (used.has(e0)) continue; const loop = [e0.p]; let cur = e0; used.add(e0); let guard = 0;
+        while (guard++ < 100000){ const nx = (bnd.get(vk(cur.q)) || []).find(e => !used.has(e)); if (!nx){ ok = vk(cur.q) === vk(loop[0]); break; } used.add(nx); if (vk(nx.p) === vk(loop[0])){ break; } loop.push(nx.p); cur = nx; }
+        if (!ok) break; if (loop.length >= 3) loops.push(loop); } if (!ok) break; }
+      if (!ok || !loops.length || [...bnd.values()].some(l => l.length !== 1)){ for (const i of comp){ const T = tri[i]; emitFace([[T.a, T.b, T.c]], T.n); } continue; }
+      const ax = refDir(n), ay = [n[1]*ax[2]-n[2]*ax[1], n[2]*ax[0]-n[0]*ax[2], n[0]*ax[1]-n[1]*ax[0]];
+      const area2 = loop => { let a = 0; for (let i = 0; i < loop.length; i++){ const p = loop[i], q = loop[(i+1)%loop.length]; const px = p[0]*ax[0]+p[1]*ax[1]+p[2]*ax[2], py = p[0]*ay[0]+p[1]*ay[1]+p[2]*ay[2], qx = q[0]*ax[0]+q[1]*ax[1]+q[2]*ax[2], qy = q[0]*ay[0]+q[1]*ay[1]+q[2]*ay[2]; a += px*qy - qx*py; } return a/2; };
+      loops = loops.map(lp => { const simp = dp3(lp.concat([lp[0]]).map(q => q.slice()), 1e-6).slice(0, -1); return simp.length >= 3 ? simp : lp; });
+      loops.sort((p, q) => Math.abs(area2(q)) - Math.abs(area2(p)));
+      loops = loops.map((lp, i) => { const a = area2(lp); return (i === 0 ? a < 0 : a > 0) ? lp.slice().reverse() : lp; });
+      emitFace(loops, n);
+    }
+  }
+  const shell = E(`CLOSED_SHELL('',(${faces.map(x => '#' + x).join(',')}))`), brep = E(`MANIFOLD_SOLID_BREP('${name}',#${shell})`);
+  const u1 = E(`( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) )`), u2 = E(`( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($,.RADIAN.) )`), u3id = E(`( NAMED_UNIT(*) SI_UNIT($,.STERADIAN.) SOLID_ANGLE_UNIT() )`);
+  const unc = E(`UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-05),#${u1},'distance_accuracy_value','')`);
+  const ctx = E(`( GEOMETRIC_REPRESENTATION_CONTEXT(3) GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#${unc})) GLOBAL_UNIT_ASSIGNED_CONTEXT((#${u1},#${u2},#${u3id})) REPRESENTATION_CONTEXT('','') )`);
+  const ap = E(`APPLICATION_CONTEXT('automotive design')`); E(`APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#${ap})`);
+  const pc = E(`PRODUCT_CONTEXT('',#${ap},'mechanical')`), prod = E(`PRODUCT('${name}','${name}','',(#${pc}))`), pdc = E(`PRODUCT_DEFINITION_CONTEXT('part definition',#${ap},'design')`);
+  const pdf = E(`PRODUCT_DEFINITION_FORMATION('','',#${prod})`), pd = E(`PRODUCT_DEFINITION('design','',#${pdf},#${pdc})`), pds = E(`PRODUCT_DEFINITION_SHAPE('','',#${pd})`);
+  const org = E(`AXIS2_PLACEMENT_3D('',#${pt([0, 0, 0])},#${dir([0, 0, 1])},#${dir([1, 0, 0])})`), sr = E(`ADVANCED_BREP_SHAPE_REPRESENTATION('',(#${org},#${brep}),#${ctx})`);
+  E(`SHAPE_DEFINITION_REPRESENTATION(#${pds},#${sr})`); E(`PRODUCT_RELATED_PRODUCT_CATEGORY('part','',(#${prod}))`);
+  const d = new Date().toISOString().slice(0, 19);
+  return `ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('Dynamic CAD/CAM'),'2;1');\nFILE_NAME('${name}.step','${d}',(''),('Dynamic Int\\'l. Precision Technology & Tooling Inc.'),'Dynamic CAD/CAM','','');\nFILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));\nENDSEC;\nDATA;\n${L.join('\n')}\nENDSEC;\nEND-ISO-10303-21;\n`;
+}
+function writeSTL(pos, name){
+  const sc = isMM() ? 1 : 25.4, out = [`solid ${name}`];
+  for (let t = 0; t < pos.length; t += 9){ const a = [pos[t], pos[t+1], pos[t+2]], b = [pos[t+3], pos[t+4], pos[t+5]], c = [pos[t+6], pos[t+7], pos[t+8]]; const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]]; let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; const m = hyp(...n) || 1; n = n.map(x => x/m);
+    out.push(`  facet normal ${n[0].toExponential(6)} ${n[1].toExponential(6)} ${n[2].toExponential(6)}`, '    outer loop', ...[a, b, c].map(p => `      vertex ${(p[0]*sc).toExponential(6)} ${(p[1]*sc).toExponential(6)} ${(p[2]*sc).toExponential(6)}`), '    endloop', '  endfacet'); }
+  out.push(`endsolid ${name}`); return out.join('\n') + '\n';
+}
+function exportModel(kind){
+  if (!S.geom.mesh){ msg('Export ' + kind.toUpperCase(), 'No 3D model to export — build a solid or open a STEP/STL first.'); return; }
+  ask('Export ' + kind.toUpperCase(), 'File name', S.file === 'untitled' ? S.setup.progName : S.file).then(n => { if (!n) return; const nm = n.replace(/\.(step|stp|stl)$/i, ''); busy(true, 'Writing ' + kind.toUpperCase() + '…'); setTimeout(() => { try { download(nm + (kind === 'step' ? '.step' : '.stl'), kind === 'step' ? writeSTEP(S.geom.mesh.pos, nm) : writeSTL(S.geom.mesh.pos, nm)); } catch (e){ msg('Export', e.message); } finally { busy(false); } }, 30); });
+}
 function exportDXF(){ if (!S.geom.items.length){ msg('Export DXF', 'Nothing to export — the drawing is empty.'); return; } ask('Export DXF', 'File name', S.file === 'untitled' ? S.setup.progName : S.file).then(n => { if (n) download(n.replace(/\.dxf$/i, '') + '.dxf', writeDXF()); }); }
 function saveProj(as){ const go = n => { S.file = n; download(n + '.cam.json', projectJSON()); updTitle(); }; if (as || S.file === 'untitled') ask('Save As', 'File name', S.file === 'untitled' ? S.setup.progName : S.file).then(n => n && go(n)); else go(S.file); }
 function autosave(){ try { const s = projectJSON(); if (s.length < 4.5e6) localStorage.setItem('cam5.project', s); recentSave(s); } catch(e){} }
@@ -3303,11 +3399,11 @@ function wizard(){
 function togglePaths(){ showPaths = !showPaths; drawPaths(); prompt_(showPaths ? '' : 'Toolpath display off (Alt+T)'); }
 function delSel(){ if (!selEnt.size) return; pushUndo(); S.geom.items = S.geom.items.filter(it => !selEnt.has(it.id)); selEnt.clear(); geomChanged(); }
 const MENU = () => [
-  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Open from Google Drive link…', '', driveLinkDlg], ['Merge drawing / model…', '', () => pick('merge')], ['Export DXF…', '', exportDXF], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
+  ['File', [['New', 'Ctrl+N', newProj], ['Open project…', 'Ctrl+O', () => pick('proj')], ['Recent jobs…', '', recentDlg], ['☁ Job queue (Google Drive RFQ folders)…', '', jobQueue], ['☁ Save job to the RFQ folder on Drive', '', () => saveToDrive()], ['Open drawing / model (DXF, PDF, STEP, IGES, STL)…', '', () => pick('cad')], ['Open from Google Drive link…', '', driveLinkDlg], ['Merge drawing / model…', '', () => pick('merge')], ['Export DXF…', '', exportDXF], ['Export STEP (3D model)…', '', () => exportModel('step')], ['Export STL (3D model)…', '', () => exportModel('stl')], '-', ['Save', 'Ctrl+S', () => saveProj(false)], ['Save As…', '', () => saveProj(true)], '-', ['Post selected operations (NC)…', '', postDlg], '-', ['Exit to production app', '', () => location.href = 'index.html']]],
   ['Edit', [['Undo', 'Ctrl+Z', undo], ['Delete duplicate entities', '', deleteDuplicates], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg], '-', ['Trim / Extend 2 entities', '', () => startEdit('trim2')], ['Trim / Extend 1 entity', '', () => startEdit('trim1')], ['Trim 3 entities', '', () => startEdit('trim3')], ['Fillet chain…', '', () => startEdit('filletChain')], ['Divide (remove between crossings)', '', () => startEdit('divide')], ['Break at point', '', () => startEdit('brk')], ['Extend by length…', '', () => startEdit('extend')], ['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Explode polyline into lines', '', explodePolys]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
-  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Arc ▸ Arc 3 points', '', () => startCreate('arc3')], ['Circle 3 points', '', () => startCreate('circ3')], ['Rectangle', '', () => startCreate('rect')], ['Polygon', '', () => startCreate('polygon')], ['Ellipse', '', () => startCreate('ellipse')], ['Spline', '', () => startCreate('spline')], ['Bolt circle', '', () => startCreate('bolt')], ['Letters…', '', () => lettersDlg()], '-', ['Dimension ▸ Horizontal', '', () => startCreate('dimH')], ['Dimension ▸ Vertical', '', () => startCreate('dimV')], ['Dimension ▸ Parallel', '', () => startCreate('dimA')], ['Dimension ▸ Diameter / Radius', '', () => startCreate('dimD')], ['Note', '', () => startCreate('note')], '-', ['Solid ▸ Extrude selected sketch…', '', extrudeDlg], ['Solid ▸ Revolve selected sketch…', '', revolveDlg], ['Solid ▸ Solid from features…', '', () => solidDlg(false)], ['Solid ▸ Add features to the model (STEP / built)…', '', () => solidDlg(true)], ['Solid ▸ Fillet a model edge', '', () => startEdgePick('edgeFillet')], ['Solid ▸ Chamfer a model edge', '', () => startEdgePick('edgeChamfer')], ['Solid ▸ Place another model (assembly view)…', '', () => pick('ins')], ['Solid ▸ Feature tree (Solid tab)', '', () => { mgrTab = 'solid'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'solid')); renderMgr(); }]]],
+  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Arc ▸ Arc 3 points', '', () => startCreate('arc3')], ['Circle 3 points', '', () => startCreate('circ3')], ['Rectangle', '', () => startCreate('rect')], ['Polygon', '', () => startCreate('polygon')], ['Ellipse', '', () => startCreate('ellipse')], ['Spline', '', () => startCreate('spline')], ['Bolt circle', '', () => startCreate('bolt')], ['Letters…', '', () => lettersDlg()], '-', ['Dimension ▸ Horizontal', '', () => startCreate('dimH')], ['Dimension ▸ Vertical', '', () => startCreate('dimV')], ['Dimension ▸ Parallel', '', () => startCreate('dimA')], ['Dimension ▸ Diameter / Radius', '', () => startCreate('dimD')], ['Dimension ▸ Angle', '', () => startCreate('dimAng')], ['Note', '', () => startCreate('note')], ['GD&T feature control frame', '', () => startCreate('gdt')], ['Datum symbol', '', () => startCreate('datum')], ['Title block…', '', titleBlockDlg], '-', ['Sheet metal ▸ Flat pattern…', '', flatPatternDlg], '-', ['Solid ▸ Extrude selected sketch…', '', extrudeDlg], ['Solid ▸ Revolve selected sketch…', '', revolveDlg], ['Solid ▸ Solid from features…', '', () => solidDlg(false)], ['Solid ▸ Add features to the model (STEP / built)…', '', () => solidDlg(true)], ['Solid ▸ Fillet a model edge', '', () => startEdgePick('edgeFillet')], ['Solid ▸ Chamfer a model edge', '', () => startEdgePick('edgeChamfer')], ['Solid ▸ Place another model (assembly view)…', '', () => pick('ins')], ['Solid ▸ Feature tree (Solid tab)', '', () => { mgrTab = 'solid'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'solid')); renderMgr(); }]]],
   ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], ['Offset entity…', '', () => startEdit('offset')], ['Offset contour (chain)…', '', () => startEdit('offsetChain')], ['Rectangular array…', '', () => xformDlg('arrayRect')], ['Rotary array…', '', () => xformDlg('arrayRot')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], ['Circle Paths ▸ Thread Mill…', '', () => newOp('tmill')], ['Engrave letters (contour, comp off)…', '', () => newOp('contour', {comp:'off', depth:rnd(-0.3*K()), dcOn:false, leadOn:false, mpOn:false, tabOn:false})], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['⏱ Time estimate (hours)…', '', estimateDlg]]],
@@ -3753,12 +3849,12 @@ function cadHome(){
   const tile = (h, icon, title, sub) => `<div class="pk" data-c="${h}" style="min-height:84px;background:#fff"><div class="pg">${icon}</div><div class="pt" style="font-size:13px;white-space:normal">${title}</div><div class="ps" style="white-space:normal">${sub}</div></div>`;
   el.innerHTML = `<div class="info">CAD workspace: draw 2D, build solids, edit customer models. When the part is ready, switch to CAM and pick a machine — the drawing goes with you.</div>
     <div class="mag" style="grid-template-columns:repeat(5,1fr)">${tile('open', '📂', 'Open a drawing or model', 'DXF, PDF (vector or scan), STEP, IGES, STL')}${tile('new', '📄', 'New drawing', 'Start empty: Create menu for lines, arcs, rectangles, letters')}${tile('solid', '🧱', 'Solid from features', 'Block + pockets, holes, bosses, revolve, sweep, loft')}${tile('modify', '🛠', 'Add features to a model', 'Cut pockets, holes, grooves into a customer STEP')}
-      ${tile('ai', '✦', 'Ask Claude to draw it', 'Describe the part in words, or drop the customer PDF')}${tile('letters', '🔤', 'Letters', 'Single-stroke text for engraving')}${tile('extrude', '⬆', 'Extrude / Revolve a sketch', 'SolidWorks-style: closed sketch → boss or cut')}${tile('dxf', '📤', 'Export DXF', 'Give the drawing to a customer or to X5')}${tile('save', '💾', 'Save the drawing', 'Project file you can reopen here or in CAM')}${tile('cam', '🏭', 'Go to CAM', 'Pick the machine and program this part')}</div>`;
+      ${tile('ai', '✦', 'Ask Claude to draw it', 'Describe the part in words, or drop the customer PDF')}${tile('letters', '🔤', 'Letters', 'Single-stroke text for engraving')}${tile('extrude', '⬆', 'Extrude / Revolve a sketch', 'SolidWorks-style: closed sketch → boss or cut')}${tile('dxf', '📤', 'Export DXF / STEP / STL', 'Give the drawing or the 3D model to a customer or to X5')}${tile('title', '🗂', 'Dimensions & title block', 'Dimensions, GD&T, notes, title block')}${tile('sheet', '📐', 'Sheet metal flat pattern', 'Flat length and bend lines from flanges')}${tile('save', '💾', 'Save the drawing', 'Project file you can reopen here or in CAM')}${tile('cam', '🏭', 'Go to CAM', 'Pick the machine and program this part')}</div>`;
   dlg({title:'📐 Dynamic CAD/CAM — CAD Home', body:el, w:920, modal:false, footer:false, x:Math.max(20, (innerWidth - 920)/2), y:70});
   el.addEventListener('click', e => {
     const a = e.target.closest('[data-c]'); if (!a) return; const close = () => { const dd = el.closest('.dlg'); if (dd) dd.querySelector('.dx').click(); }; const act = a.dataset.c;
     if (act === 'open'){ close(); pick('cad'); } if (act === 'new'){ close(); newProj(); } if (act === 'solid'){ close(); solidDlg(false); } if (act === 'modify'){ close(); if (!S.geom.mesh) msg('Add features', 'Open a STEP / STL model first, or build a solid.'); else solidDlg(true); }
-    if (act === 'ai'){ close(); aiPanel(); } if (act === 'letters'){ close(); lettersDlg(); } if (act === 'save'){ close(); saveProj(true); } if (act === 'extrude'){ close(); if (sketchChains().length) extrudeDlg(); else msg('Extrude / Revolve', 'Draw a closed sketch (rectangle, circle, polygon, lines joined), select it, then Create ▸ Solid ▸ Extrude or Revolve.'); } if (act === 'dxf'){ close(); exportDXF(); } if (act === 'cam'){ close(); startDlg(2); }
+    if (act === 'ai'){ close(); aiPanel(); } if (act === 'letters'){ close(); lettersDlg(); } if (act === 'save'){ close(); saveProj(true); } if (act === 'extrude'){ close(); if (sketchChains().length) extrudeDlg(); else msg('Extrude / Revolve', 'Draw a closed sketch (rectangle, circle, polygon, lines joined), select it, then Create ▸ Solid ▸ Extrude or Revolve.'); } if (act === 'dxf'){ close(); if (S.geom.mesh) exportModel('step'); else exportDXF(); } if (act === 'title'){ close(); titleBlockDlg(); } if (act === 'sheet'){ close(); flatPatternDlg(); } if (act === 'cam'){ close(); startDlg(2); }
   });
 }
 let homeEl = null;
@@ -4545,6 +4641,50 @@ function revolveDlg(){
     } catch (e){ msg('Revolve', e.message); }
   }});
 }
+function titleBlockDlg(){
+  const k = K(), bb = geomBBox(), W = {part:S.setup.progName || '', dwg:'', mat:MATS[S.setup.material].n, scale:'1:1', by:'', date:new Date().toISOString().slice(0, 10), qty:1, finish:'', rev:'A', th:rnd(3.5*k), margin:rnd(15*k)};
+  const el = document.createElement('div');
+  el.innerHTML = `<div class="info">Draws a border around the drawing and a title block at the bottom right (level TITLE). Company: Dynamic Int'l. Precision Technology & Tooling Inc.</div>
+    ${fRow(W, 'part', 'Part name', 't', null, false)}${fRow(W, 'dwg', 'Drawing no.', 't', null, false)}${fRow(W, 'rev', 'Revision', 't', null, false)}${fRow(W, 'mat', 'Material', 't', null, false)}${fRow(W, 'finish', 'Finish / treatment', 't', null, false)}${fRow(W, 'qty', 'Quantity', 'i', null, false)}${fRow(W, 'scale', 'Scale', 't', null, false)}${fRow(W, 'by', 'Drawn by', 't', null, false)}${fRow(W, 'date', 'Date', 't', null, false)}${fRow(W, 'th', 'Text height', 'n', null, false)}${fRow(W, 'margin', 'Border margin around the drawing', 'n', null, false)}`;
+  bindFields(el, W);
+  dlg({title:'Title Block', body:el, w:460, ok:close => {
+    const h = W.th, items = [], add = (x1, y1, x2, y2) => items.push({kind:'line', x1:rnd(x1), y1:rnd(y1), x2:rnd(x2), y2:rnd(y2), dim:true});
+    const txt = (t, x, y, hh) => { for (const it of textItems({text:t, x, y, height:hh || h})) items.push(Object.assign(it, {dim:true})); };
+    const m = W.margin, x0 = (bb ? bb.x0 : -50*k) - m, y0 = (bb ? bb.y0 : -50*k) - m - h*9, x1 = (bb ? bb.x1 : 50*k) + m, y1 = (bb ? bb.y1 : 50*k) + m;
+    const tbW = Math.min(x1 - x0, Math.max(h*44, (x1 - x0)*0.55)), tbH = h*8.5, bx = x1 - tbW, by = y0;
+    add(x0, y0, x1, y0); add(x1, y0, x1, y1); add(x1, y1, x0, y1); add(x0, y1, x0, y0);
+    add(bx, by, bx, by + tbH); add(bx, by + tbH, x1, by + tbH);
+    const rows = [[`DYNAMIC INT'L. PRECISION TECHNOLOGY & TOOLING INC.`, h*0.85], [`PART: ${W.part}`, h], [`DWG NO: ${W.dwg}   REV: ${W.rev}   QTY: ${W.qty}`, h], [`MATERIAL: ${W.mat}`, h], [`FINISH: ${W.finish}   SCALE: ${W.scale}   UNITS: ${S.setup.units.toUpperCase()}`, h], [`DRAWN: ${W.by}   DATE: ${W.date}`, h]];
+    let yy = by + tbH - h*1.4;
+    for (const [t, hh] of rows){ txt(t, bx + h*0.6, yy, hh); add(bx, yy - h*0.4, x1, yy - h*0.4); yy -= h*1.4; }
+    pushUndo(); ensureLevel('TITLE'); items.forEach(it => addItem(it, 'TITLE')); close(); geomChanged(); setView('top'); prompt_('Title block drawn on level TITLE.');
+  }});
+}
+// sheet metal: flat pattern from flanges and bends (K-factor method)
+function flatPatternDlg(){
+  const k = K(), W = {t:rnd(2*k), r:rnd(2*k), kf:0.4, w:rnd(100*k), rows:'100 90, 50 90, 30 0'};
+  const el = document.createElement('div');
+  el.innerHTML = `<div class="info">Flanges are OUTSIDE dimensions (mould line to mould line). Enter each flange as "length angle": the bend angle comes AFTER that flange (0 = last flange). Example: 100 90, 50 90, 30 0 = a Z-bracket.</div>
+    ${fRow(W, 't', 'Sheet thickness', 'n', null, false)}${fRow(W, 'r', 'Inside bend radius', 'n', null, false)}${fRow(W, 'kf', 'K-factor (0.33 soft … 0.5 hard; 0.4 typical steel)', 'n', null, false)}${fRow(W, 'w', 'Blank width (bend line length)', 'n', null, false)}${fRow(W, 'rows', 'Flanges: length angle, …', 't', null, false)}`;
+  bindFields(el, W); el.querySelector('input[data-k=rows]').style.width = '280px';
+  dlg({title:'Sheet Metal Flat Pattern', body:el, w:520, ok:close => {
+    try {
+      const segs = String(W.rows).split(',').map(x => x.trim().split(/\s+/).map(Number)).filter(a => a.length && a[0] > 0);
+      if (segs.length < 2) throw new Error('Give at least two flanges.');
+      const t = W.t, r = W.r, kf = W.kf, out = [], notes = []; let x = 0, flat = 0;
+      const bends = segs.slice(0, -1).map((sg, i) => { const th = Math.abs(sg[1] || 0)*DEG; const BA = th*(r + kf*t), OSSB = (r + t)*Math.tan(th/2), BD = 2*OSSB - BA; return {ang:Math.abs(sg[1] || 0), BA, OSSB, BD}; });
+      const total = segs.reduce((a, sg) => a + sg[0], 0) - bends.reduce((a, b) => a + b.BD, 0);
+      const lines = []; let pos = 0;
+      bends.forEach((b, i) => { const flange = segs[i][0] - (i ? bends[i-1].OSSB : 0) - b.OSSB; pos += flange; const c = pos + b.BA/2; lines.push({c, a:pos, b:pos + b.BA, i, bend:b}); pos += b.BA; });
+      pushUndo(); ensureLevel('FLAT'); ensureLevel('BEND');
+      addItem({kind:'line', x1:0, y1:0, x2:rnd(total), y2:0}, 'FLAT'); addItem({kind:'line', x1:rnd(total), y1:0, x2:rnd(total), y2:W.w}, 'FLAT'); addItem({kind:'line', x1:rnd(total), y1:W.w, x2:0, y2:W.w}, 'FLAT'); addItem({kind:'line', x1:0, y1:W.w, x2:0, y2:0}, 'FLAT');
+      for (const L of lines){ addItem({kind:'line', x1:rnd(L.c), y1:0, x2:rnd(L.c), y2:W.w, dim:true}, 'BEND'); for (const it of textItems({text:`BEND ${L.i + 1}: ${L.bend.ang}° R${fmt(r)} BA ${fmt(L.bend.BA)}`, x:rnd(L.c) + 1*k, y:W.w*0.5, height:rnd(3*k), angle:90})) addItem(Object.assign(it, {dim:true}), 'BEND'); }
+      for (const it of textItems({text:`FLAT ${fmt(total)} X ${fmt(W.w)} T${fmt(t)} K${kf}`, x:0, y:rnd(W.w + 3*k), height:rnd(3.5*k)})) addItem(Object.assign(it, {dim:true}), 'BEND');
+      close(); geomChanged(); stockFromGeom(); drawStock(); renderMgr(); setView('top');
+      msg('Flat pattern', `<b>Flat length ${fmt(total)} × ${fmt(W.w)}</b>, thickness ${fmt(t)}.<br>${bends.map((b, i) => `Bend ${i + 1}: ${b.ang}°, allowance ${fmt(b.BA)}, deduction ${fmt(b.BD)}, outside setback ${fmt(b.OSSB)}`).join('<br>')}<br><span class="hint">BA = θ·(R + K·T); BD = 2·(R+T)·tan(θ/2) − BA. Check the K-factor against a test bend on your brake.</span>`);
+    } catch (e){ msg('Flat pattern', e.message); }
+  }});
+}
 function lettersDlg(){
   const k = K(), W = {text:'DYNAMIC', height:rnd(8*k), x:0, y:0, angle:0, spacing:1.5, level:'TEXT'};
   const el = document.createElement('div');
@@ -4626,8 +4766,8 @@ const AI_TOOLS = [
   {name:'get_gcode', description:'Post all operations and return the G-code (first max_lines lines).', strict:true, input_schema:{type:'object', properties:{max_lines:{type:'integer'}}, required:['max_lines'], additionalProperties:false}},
   {name:'get_time_estimate', description:'Realistic HOURS for the current job on this machine (no prices): cutting time from the toolpaths at the chosen run mode, tool changes, machine efficiency, setups, load/unload, inspection, programming and prove-out, scaled by operator skill. Returns the breakdown and the total for the lot. Unknown values use the shop defaults.', strict:true, input_schema:{type:'object', properties:{qty:{type:'integer'}, nSetups:{type:['integer','null']}, skill:{type:['string','null'], enum:['junior','regular','senior',null]}, mode:{type:['string','null'], enum:['proto','prod','full',null]}, extra_minutes_per_piece:{type:['number','null'], description:'manual work per piece not in the toolpaths (deburr, flip, manual tap)'}}, required:['qty','nSetups','skill','mode','extra_minutes_per_piece'], additionalProperties:false}},
   {name:'verify', description:'Run stock verification on all operations and return collisions (rapid moves into material).', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}},
-  {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole); text {text,x,y,height,angle?,spacing?} single-stroke letters for engraving (x,y = baseline left; A-Z 0-9 - . / : + = # ( ) % ° Ø); polygon_n {cx,cy,n,d (corner-to-corner), angle?, flat?} regular polygon; ellipse {cx,cy,w,h,angle?}; spline {pts:[[x,y],...], closed?}; dim {type:"h"|"v"|"a"|"d", x1,y1,x2,y2 (the two measured points; for d: a point ON the circle), x3,y3 (where the dimension line sits; for d: the text position), height?} drafting dimension on level DIM; note {text,x,y,height}. replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
-    input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid','text','polygon_n','ellipse','spline','dim','note']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
+  {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole); text {text,x,y,height,angle?,spacing?} single-stroke letters for engraving (x,y = baseline left; A-Z 0-9 - . / : + = # ( ) % ° Ø); polygon_n {cx,cy,n,d (corner-to-corner), angle?, flat?} regular polygon; ellipse {cx,cy,w,h,angle?}; spline {pts:[[x,y],...], closed?}; dim {type:"h"|"v"|"a"|"d"|"ang", x1,y1,x2,y2 (the two measured points; for d: a point ON the circle; for ang: a point ON each of the two lines), x3,y3 (where the dimension line / arc sits; for d: the text position), height?, tol? (e.g. "±0.05")} drafting dimension on level DIM; note {text,x,y,height}; gdt {x,y,symbol (⏤ ⏥ ○ ⌭ ⟂ ∥ ∠ ⌖ ◎ ⌯ ⌒ ⌓ ↗),tolerance,datums,height} feature control frame; datum {x,y,letter,height}. replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
+    input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid','text','polygon_n','ellipse','spline','dim','note','gdt','datum']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
   {name:'build_solid', description:'CAD 3D: build the part as a SOLID from features (block + cuts from the top, in order) — makes the 3D model for shading / surface toolpaths / Verify AND the 2D chains on one level per feature for pocket / drill / contour operations. block: {kind:"rectangle"|"circle"|"polygon", w, h (Y) or d or pts, t (thickness), top_chamfer?} centred at X0 Y0, Z0 = top. features (each may have the shape fields of draw_shapes: rectangle cx,cy,w,h,corner_r | circle cx,cy,d | slot cx,cy,length,width,angle | polygon pts | bolt_circle | grid): pocket {shape, …, depth, draft (deg), top_chamfer, top_fillet, floor_r}; hole {cx,cy,d, depth|through:true, cbore_d, cbore_depth, csk_d, csk_angle} (or shape bolt_circle / grid for a pattern); slot {cx,cy,length,width,angle,depth}; boss {shape, …, height, draft?, top_fillet?} (adds material standing height above the surface); step {cx,cy,w,h,depth} (open pocket, may run past the edge); slope {shape?, angle, direction:"+x"|"-x"|"+y"|"-y"|degrees} (surface goes down towards direction); dish {cx,cy,d,depth}; revolve {cx,cy, profile:[[r,z],…] r from the axis, z ≤ 0 down from the surface, add?} (turned recess, or add:true = turned boss); sweep {path:[[x,y],…] or chain, width, depth, section:"round"|"rect"|"vee", vee_angle?, add?} (groove, or add:true = rib); loft {top:{shape…}, bottom:{shape…}, depth, add?} (tapered cut between two shapes); shell {wall, floor} (hollow block). Features cut from whatever surface is there (a hole inside a pocket starts at the pocket floor); z_top overrides. replace=true (default) starts a new part. Returns per feature: level, chain numbers, z_top, z_floor and the suggested operation.',
     input_schema:{type:'object', properties:{block:{type:'object', additionalProperties:true}, features:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['pocket','hole','slot','boss','step','slope','dish','revolve','sweep','loft','shell','edgeFillet','edgeChamfer']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, name:{type:'string'}}, required:['block','features']}},
   {name:'modify_model', description:'CAD 3D: cut features into, or add bosses/ribs onto, the 3D model that is loaded NOW (a customer STEP/IGES/STL or a built solid) using solid booleans — e.g. add a pocket, holes, a counterbore, a groove or a boss to the customer\'s part. Same feature objects as build_solid (pocket, hole, slot, boss, step, slope, dish, revolve, sweep, loft) plus edgeFillet {x,y,z,r} and edgeChamfer {x,y,z,d} to round or chamfer an edge of the model at a point on that edge (edges where a flat face meets a wall; get edge coordinates from the feature outlines / bbox); each starts from the model surface at its position unless z_top is given. Features go into the feature tree (parametric: the operator can edit or suppress them later). Returns the new chains per feature.',
@@ -4645,7 +4785,8 @@ const FONT = {A:'0,0 2,6 4,0|1,3 3,3', B:'0,0 0,6 3,6 4,5 4,4 3,3 0,3|3,3 4,2 4,
   T:'0,6 4,6|2,6 2,0', U:'0,6 0,1 1,0 3,0 4,1 4,6', V:'0,6 2,0 4,6', W:'0,6 1,0 2,4 3,0 4,6', X:'0,0 4,6|0,6 4,0', Y:'0,6 2,3 4,6|2,3 2,0', Z:'0,6 4,6 0,0 4,0',
   0:'1,0 3,0 4,1 4,5 3,6 1,6 0,5 0,1 1,0|0,1 4,5', 1:'1,5 2,6 2,0|1,0 3,0', 2:'0,5 1,6 3,6 4,5 4,4 0,0 4,0', 3:'0,6 4,6 2,3 3,3 4,2 4,1 3,0 1,0 0,1', 4:'3,0 3,6 0,2 4,2', 5:'4,6 0,6 0,3 3,3 4,2 4,1 3,0 1,0 0,1',
   6:'4,5 3,6 1,6 0,5 0,1 1,0 3,0 4,1 4,2 3,3 0,3', 7:'0,6 4,6 1,0', 8:'1,3 0,4 0,5 1,6 3,6 4,5 4,4 3,3 1,3 0,2 0,1 1,0 3,0 4,1 4,2 3,3', 9:'0,1 1,0 3,0 4,1 4,5 3,6 1,6 0,5 0,4 1,3 4,3',
-  '-':'0,3 4,3', '.':'1.5,0 2.5,0 2.5,1 1.5,1 1.5,0', '/':'0,0 4,6', ':':'1.5,1 2.5,1 2.5,2 1.5,2 1.5,1|1.5,4 2.5,4 2.5,5 1.5,5 1.5,4', '+':'0,3 4,3|2,1 2,5', '(':'3,6 2,5 2,1 3,0', ')':'1,6 2,5 2,1 1,0', '=':'0,2 4,2|0,4 4,4', '#':'1,0 1,6|3,0 3,6|0,2 4,2|0,4 4,4', ',':'2.5,1 2.5,0 1.5,-1', "'":'2,6 2,4.5', '"':'1.5,6 1.5,4.5|2.5,6 2.5,4.5', '%':'0,0 4,6|0.5,4.5 1.5,4.5 1.5,5.5 0.5,5.5 0.5,4.5|2.5,0.5 3.5,0.5 3.5,1.5 2.5,1.5 2.5,0.5', '°':'1,5 2,6 3,5 2,4 1,5', 'Ø':'1,0 3,0 4,1 4,5 3,6 1,6 0,5 0,1 1,0|0,-0.5 4,6.5'};
+  '-':'0,3 4,3', '.':'1.5,0 2.5,0 2.5,1 1.5,1 1.5,0', '/':'0,0 4,6', ':':'1.5,1 2.5,1 2.5,2 1.5,2 1.5,1|1.5,4 2.5,4 2.5,5 1.5,5 1.5,4', '+':'0,3 4,3|2,1 2,5', '(':'3,6 2,5 2,1 3,0', ')':'1,6 2,5 2,1 1,0', '=':'0,2 4,2|0,4 4,4', '#':'1,0 1,6|3,0 3,6|0,2 4,2|0,4 4,4', ',':'2.5,1 2.5,0 1.5,-1', "'":'2,6 2,4.5', '"':'1.5,6 1.5,4.5|2.5,6 2.5,4.5', '%':'0,0 4,6|0.5,4.5 1.5,4.5 1.5,5.5 0.5,5.5 0.5,4.5|2.5,0.5 3.5,0.5 3.5,1.5 2.5,1.5 2.5,0.5', '°':'1,5 2,6 3,5 2,4 1,5', '±':'0,2.5 4,2.5|2,1 2,4|0,0 4,0', '<':'4,0 0,3 4,6', '>':'0,0 4,3 0,6', '~':'0,2.5 1,3.5 2,2.5 3,1.5 4,2.5',
+  '⏤':'0,3 4,3', '⏥':'0,2 1,4 4,4 3,2 0,2', '○':'1,0.5 3,0.5 4,1.5 4,4.5 3,5.5 1,5.5 0,4.5 0,1.5 1,0.5', '⌭':'1,0.5 3,0.5 4,1.5 4,4.5 3,5.5 1,5.5 0,4.5 0,1.5 1,0.5|0,0 0,6|4,0 4,6', '⟂':'2,0.5 2,5.5|0,0.5 4,0.5', '∥':'1,0.5 2.5,5.5|2.5,0.5 4,5.5', '∠':'0,0.5 4,0.5|0,0.5 3.5,4.5', '⌖':'1,0.5 3,0.5 4,1.5 4,4.5 3,5.5 1,5.5 0,4.5 0,1.5 1,0.5|2,0 2,6|0,3 4,3', '◎':'1,0.5 3,0.5 4,1.5 4,4.5 3,5.5 1,5.5 0,4.5 0,1.5 1,0.5|1.5,2 2.5,2 3,3 2.5,4 1.5,4 1,3 1.5,2', '⌯':'0,1.5 4,1.5|0,3 4,3|0,4.5 4,4.5', '⌒':'0,2 1,4.5 3,4.5 4,2', '⌓':'0,2 1,4.5 3,4.5 4,2|0,2 4,2', '↗':'0,0.5 4,5.5|2,5.5 4,5.5 4,3.5', 'Ø':'1,0 3,0 4,1 4,5 3,6 1,6 0,5 0,1 1,0|0,-0.5 4,6.5'};
 // open polylines for a text string: x,y = baseline start, height = cap height, angle in degrees, spacing in letter widths
 function textItems(sh){
   const n = v => +v || 0, h = n(sh.height) || 5*K(), sc = h/6, a = n(sh.angle)*DEG, co = Math.cos(a), si = Math.sin(a), x0 = n(sh.x), y0 = n(sh.y), adv = (4 + (sh.spacing != null ? +sh.spacing : 1.5))*sc, out = [];
@@ -4687,7 +4828,9 @@ function shapeItems(sh){
     case 'polygon_n': out.push(...polygonLines(n(sh.cx), n(sh.cy), n(sh.n) || 6, (n(sh.d) || 2*n(sh.r))/2, n(sh.angle), !!sh.flat)); break;
     case 'ellipse': out.push({kind:'poly', closed:true, pts:ellipsePts(n(sh.cx), n(sh.cy), (n(sh.w) || 2*n(sh.a))/2, (n(sh.h) || 2*n(sh.b))/2, n(sh.angle))}); break;
     case 'spline': { const P = (sh.pts || []).map(p => [n(p[0]), n(p[1])]); if (P.length >= 2) out.push({kind:'poly', closed:!!sh.closed, pts:splinePts(P, !!sh.closed)}); break; }
-    case 'dim': { const t = {h:'dimH', v:'dimV', a:'dimA', d:'dimD', r:'dimD'}[sh.type || 'h'] || 'dimH'; const V = {x1:n(sh.x1), y1:n(sh.y1), x2:n(sh.x2), y2:n(sh.y2), x3:n(sh.x3), y3:n(sh.y3), th:n(sh.height)}; const ref = t === 'dimD' ? nearCircle([V.x1, V.y1]) : null; if (t === 'dimD' && !ref) break; out.push(...dimItems(V, t, ref)); break; }
+    case 'dim': { const t = {h:'dimH', v:'dimV', a:'dimA', d:'dimD', r:'dimD', ang:'dimAng'}[sh.type || 'h'] || 'dimH'; const V = {x1:n(sh.x1), y1:n(sh.y1), x2:n(sh.x2), y2:n(sh.y2), x3:n(sh.x3), y3:n(sh.y3), th:n(sh.height), tol:sh.tol || ''}; let ref = t === 'dimD' ? nearCircle([V.x1, V.y1]) : null; if (t === 'dimAng'){ const A = nearLine([V.x1, V.y1]), B = nearLine([V.x2, V.y2]); if (!A || !B) break; ref = {A, B}; } if (t === 'dimD' && !ref) break; out.push(...dimItems(V, t, ref)); break; }
+    case 'gdt': out.push(...dimItems({x:n(sh.x), y:n(sh.y), th:n(sh.height), sym:sh.symbol || '⏥', txt:sh.tolerance || '', dat:sh.datums || ''}, 'gdt')); break;
+    case 'datum': out.push(...dimItems({x:n(sh.x), y:n(sh.y), th:n(sh.height), txt:sh.letter || 'A'}, 'datum')); break;
     case 'grid': { const C = Math.max(1, n(sh.cols) | 0), R = Math.max(1, n(sh.rows) | 0); for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) out.push({kind:'circle', cx:n(sh.x) + i*n(sh.pitch_x), cy:n(sh.y) + j*n(sh.pitch_y), r:n(sh.d)/2}); break; }
     default: throw new Error('Unknown shape kind ' + sh.kind);
   }
@@ -4886,7 +5029,7 @@ if (!booted){
 setWS(WS);
 $$('#title [data-ws]').forEach(x => x.onclick = () => { if (x.dataset.ws === 'cam') startDlg(2); else setWS('cad'); });
 $('#startLink').onclick = e => { e.preventDefault(); startDlg(); };
-window.__cam = {solidRebuild, findEdgeLoop, meshSharpEdges, startEdgePick, featEditDlg, insertDlg, fileToMesh, parseKV, dimItems, splinePts, polygonLines, ellipsePts, filletPoly, writeDXF, exportDXF, extrudeDlg, revolveDlg, sketchChains, deleteDuplicates, nearCircle, startCreate, createPick, applyCreate, get createCtx(){ return createCtx; }, startDlg, hideStart, cadHome, setWS, get WS(){ return WS; }, stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {writeSTEP, writeSTL, exportModel, titleBlockDlg, flatPatternDlg, nearLine, solidRebuild, findEdgeLoop, meshSharpEdges, startEdgePick, featEditDlg, insertDlg, fileToMesh, parseKV, dimItems, splinePts, polygonLines, ellipsePts, filletPoly, writeDXF, exportDXF, extrudeDlg, revolveDlg, sketchChains, deleteDuplicates, nearCircle, startCreate, createPick, applyCreate, get createCtx(){ return createCtx; }, startDlg, hideStart, cadHome, setWS, get WS(){ return WS; }, stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
