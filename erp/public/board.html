@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Floor Board - Dynamic ERP</title>
+<style>
+:root{--bg:#0B1220;--col:#141F33;--txt:#E8EDF5;--mut:#9FB3D1;--ok:#3DCB5A;--warn:#FFC84A;--bad:#FF5A5A;--blue:#4C8BE0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.3 "Segoe UI",system-ui,Arial,sans-serif;overflow:hidden}
+#hd{height:56px;display:flex;align-items:center;gap:18px;padding:0 20px;background:#060B14;border-bottom:1px solid #223}#hd b{font-size:22px}#hd .t{margin-left:auto;font-size:22px;font-variant-numeric:tabular-nums}#hd .co{color:var(--mut);font-size:13px}#hd .st{color:var(--mut);font-size:13px}#hd .st.off{color:var(--bad)}
+#cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(260px,1fr);gap:10px;padding:10px;height:calc(100vh - 56px);overflow-x:auto}
+.col{background:var(--col);border-radius:10px;display:flex;flex-direction:column;min-width:0}.col .h{padding:10px 12px;border-bottom:1px solid #223;display:flex;align-items:baseline;gap:8px}.col .h b{font-size:20px}.col .h .q{margin-left:auto;color:var(--mut);font-size:13px;white-space:nowrap}.col .h .q.hot{color:var(--warn)}
+.col .list{flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:7px}.col .ft{padding:6px 12px;border-top:1px solid #223;color:var(--mut);font-size:13px}
+.job{background:#1C2A45;border-left:6px solid var(--blue);border-radius:7px;padding:8px 10px;position:relative}.job.late{border-left-color:var(--bad)}.job.soon{border-left-color:var(--warn)}.job.running{background:#143A2A;border-left-color:var(--ok);box-shadow:0 0 0 2px var(--ok) inset}.job.blocked{background:#4A1C1C;border-left-color:var(--bad)}.job.paused{background:#3A3016;border-left-color:var(--warn)}.job.wait{opacity:.55}
+.job .no{font-size:18px;font-weight:700}.job.running .no,.job.blocked .no,.job.paused .no{padding-right:52%}.job .cu{color:var(--mut);font-size:13px}.job .op{margin-top:3px;font-size:15px}.job .m{display:flex;gap:10px;margin-top:4px;font-size:13px;color:var(--mut);flex-wrap:wrap}.job .m b{color:var(--txt)}.job .st{position:absolute;right:8px;top:8px;font-size:12px;padding:2px 8px;border-radius:10px;background:#0B1220}.job.running .st{background:var(--ok);color:#06220E}.job.blocked .st{background:var(--bad);color:#fff}.job.paused .st{background:var(--warn);color:#3A2A00}
+.job .nx{position:absolute;right:8px;top:8px;font-size:11px;color:var(--mut)}.big{font-size:22px}
+#today{display:none;padding:14px;height:calc(100vh - 56px);overflow:auto;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}#today .c{background:var(--col);border-radius:10px;padding:12px}#today .c b{font-size:20px}#today .n{font-size:40px;font-weight:800}#today .n small{font-size:16px;color:var(--mut)}
+</style></head><body>
+<div id="hd"><b>DYNAMIC FLOOR BOARD</b><span class="co">Dynamic Int'l. Precision Technology &amp; Tooling Inc.</span><span class="st" id="st">live</span><span class="t" id="clock"></span></div>
+<div id="cols"></div><div id="today"></div>
+<script>
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+const qs = new URLSearchParams(location.search), only = (qs.get('station') || '').split(',').filter(Boolean), view = qs.get('view') || 'queue';
+const hm = m => { m = +m || 0; const h = Math.floor(m/60), mm = Math.round(m%60); return h ? `${h}h ${mm}m` : `${mm}m`; };
+let data = null;
+async function load(){ try { const r = await fetch('/api/board'); data = await r.json(); render(); document.getElementById('st').textContent = 'live'; document.getElementById('st').className = 'st'; } catch (e){ document.getElementById('st').textContent = 'no connection — showing last state'; document.getElementById('st').className = 'st off'; } }
+function render(){
+  if (!data) return;
+  const cols = document.getElementById('cols'), today = document.getElementById('today');
+  const st = data.stations.filter(s => !only.length || only.includes(s.code));
+  if (view === 'today'){ cols.style.display = 'none'; today.style.display = 'grid'; today.innerHTML = st.map(s => { const due = s.queue.filter(o => o.due && o.due <= data.today).length; return `<div class="c"><b>${esc(s.code)}</b> <span style="color:#9FB3D1">${esc(s.name)}</span><div class="n">${s.done_today} <small>done today</small></div><div>${due} must finish today · ${s.queue.length} in queue · ${s.hours} h lined up</div></div>`; }).join(''); return; }
+  cols.innerHTML = st.map(s => `<div class="col"><div class="h"><b>${esc(s.code)}</b><span style="color:#9FB3D1;font-size:13px">${esc(s.name.replace(/^.*? - /, ''))}</span><span class="q ${s.days > 3 ? 'hot' : ''}">${s.hours} h · ${s.days} days</span></div><div class="list">${s.queue.length ? s.queue.map((o, i) => `
+    <div class="job ${o.status} ${o.late ? 'late' : o.soon ? 'soon' : ''} ${!o.ready && o.status === 'queued' ? 'wait' : ''}">
+      ${o.status === 'running' ? `<span class="st">RUNNING · ${esc(o.operator || '')} · ${hm((Date.now() - new Date(o.run_since))/60000)}</span>` : o.status === 'blocked' ? `<span class="st">BLOCKED</span>` : o.status === 'paused' ? `<span class="st">PAUSED</span>` : i === 0 || (i === 1 && s.queue[0].status === 'running') ? `<span class="nx">NEXT ▸</span>` : ''}
+      <div class="no">${esc(o.job_no)} ${o.pinned ? '📌' : ''}</div><div class="cu">${esc(o.customer || '')} · ${esc(o.part)}</div>
+      <div class="op">${esc(o.name)}</div>
+      <div class="m"><span>Qty <b>${o.qty}</b></span><span>Due <b style="color:${o.late ? '#FF5A5A' : o.soon ? '#FFC84A' : '#E8EDF5'}">${esc(o.due || '-')}</b></span><span>Est <b>${hm(o.est_min)}</b></span>${o.spent_min ? `<span>Spent <b>${hm(o.spent_min)}</b></span>` : ''}${!o.ready ? `<span style="color:#FFC84A">waiting: ${o.waiting_on} step(s) before</span>` : ''}${o.block_reason ? `<span style="color:#FF5A5A">${esc(o.block_reason)}</span>` : ''}</div>
+    </div>`).join('') : '<div style="color:#9FB3D1;padding:10px">Walang naka-line up (nothing lined up)</div>'}</div><div class="ft">${s.done_today} done today · ${s.queue.filter(o => o.late).length} late</div></div>`).join('');
+}
+function clock(){ const d = new Date(); document.getElementById('clock').textContent = d.toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric'}) + '  ' + d.toTimeString().slice(0, 5); }
+clock(); setInterval(clock, 10000); setInterval(render, 30000); load(); setInterval(load, 60000);
+(function live(){ let es; const c = () => { es = new EventSource('/api/stream'); es.addEventListener('board', load); es.onerror = () => { es.close(); setTimeout(c, 4000); }; }; c(); })();
+</script></body></html>

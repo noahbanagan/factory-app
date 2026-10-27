@@ -5026,6 +5026,8 @@ if (!booted){
   prompt_('Start with 🏠 Home, 🧭 Job Wizard, or File ▸ Open a DXF / STEP / STL');
   setTimeout(() => { if (!S.geom.items.length && !S.geom.mesh) startDlg(); }, 300);
 }
+// opened from the ERP job record: carry the job number, part and material into the program
+try { const qp = new URLSearchParams(location.search); if (qp.get('job')){ S.setup.progName = qp.get('job').replace(/[^A-Z0-9-]/gi, '').slice(0, 16).toUpperCase() || S.setup.progName; S.file = qp.get('job') + (qp.get('part') ? ' ' + qp.get('part') : ''); const mk = Object.keys(MATS).find(k => (qp.get('material') || '').toLowerCase().includes(k.replace(/[0-9]/g, '').slice(0, 3))); if (mk) S.setup.material = mk; updTitle(); } } catch (e){}
 setWS(WS);
 $$('#title [data-ws]').forEach(x => x.onclick = () => { if (x.dataset.ws === 'cam') startDlg(2); else setWS('cad'); });
 $('#startLink').onclick = e => { e.preventDefault(); startDlg(); };

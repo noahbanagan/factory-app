@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order status - Dynamic Int'l</title><link rel="stylesheet" href="/erp/erp.css">
+<style>#main{max-width:900px}.prog{height:10px;background:#E6E9EF;border-radius:5px;overflow:hidden}.prog i{display:block;height:100%;background:#1E9E2E}</style></head><body>
+<div id="top"><b>Dynamic Int'l</b><span class="co">Precision Technology &amp; Tooling Inc. · Customer portal</span></div>
+<div id="main"><div id="c"></div></div>
+<script src="/erp/erp.js"></script>
+<script>
+const t = new URLSearchParams(location.search).get('t') || '';
+const STEP = {new:'Received', estimating:'Being estimated', quoted:'Quotation sent — awaiting your approval', won:'Approved / PO received', lost:'Closed'};
+const JS = {planned:'Scheduled', released:'Scheduled', in_progress:'In production', qa:'Final inspection', done:'Ready for delivery', shipped:'Delivered'};
+async function load(){
+  const el = document.getElementById('c');
+  try { const r = await (await fetch('/api/portal?t=' + encodeURIComponent(t))).json(); if (r.error) throw new Error(r.error);
+    el.innerHTML = `<h2>${esc(r.customer.name)}</h2><h3>Quotations</h3><table class="g"><tr><th>RFQ</th><th>Items</th><th>Received</th><th>Status</th><th>Quote</th><th></th></tr>${r.rfqs.map(q => `<tr><td>${esc(q.no)}</td><td>${JSON.parse(q.items || '[]').map(i => `${esc(i.part)} × ${i.qty}`).join('<br>')}</td><td>${esc(q.received)}</td><td>${esc(STEP[q.status] || q.status)}${q.po_no ? '<br><span class="hint">PO ' + esc(q.po_no) + '</span>' : ''}</td><td>${q.quote_total ? '₱' + (+q.quote_total).toLocaleString() : ''}</td><td>${q.status === 'quoted' ? `<button class="pri" data-acc="${esc(q.no)}">Approve quote</button>` : ''}</td></tr>`).join('') || '<tr><td colspan=6>No quotations yet</td></tr>'}</table>
+      <h3>Orders in production</h3><table class="g"><tr><th>Job</th><th>Part</th><th>Qty</th><th>Due</th><th>Status</th><th style="width:160px">Progress</th></tr>${r.jobs.map(j => `<tr><td>${esc(j.no)}</td><td>${esc(j.part)}<br><span class="hint">${esc(j.drawing_no || '')} ${j.rev ? 'rev ' + esc(j.rev) : ''}</span></td><td>${j.qty}</td><td>${esc(j.due)}</td><td>${esc(JS[j.status] || j.status)}${j.dr_no ? '<br><span class="hint">DR ' + esc(j.dr_no) + '</span>' : ''}</td><td><div class="prog"><i style="width:${j.ops ? Math.round(100*j.done_ops/j.ops) : 0}%"></i></div><span class="hint">${j.done_ops} of ${j.ops} steps</span></td></tr>`).join('') || '<tr><td colspan=6>No open orders</td></tr>'}</table>
+      <p class="hint">Questions: reply to your RFQ email or call the office. This page updates automatically.</p>`;
+    el.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => { const po = prompt('Your PO number (optional):') || ''; const x = await (await fetch('/api/portal_accept', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({t, no:b.dataset.acc, po_no:po})})).json(); if (x.ok){ toast('Thank you — the quote is approved'); load(); } else toast(x.error || 'Error', true); });
+  } catch (e){ el.innerHTML = `<div class="pane"><h2>Link not recognised</h2><p>${esc(e.message)}. Ask Dynamic Int'l for your portal link.</p></div>`; }
+}
+load(); setInterval(load, 60000);
+</script></body></html>

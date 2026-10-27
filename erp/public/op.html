@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Dynamic Operator</title>
+<link rel="manifest" href="/erp/manifest.webmanifest"><meta name="theme-color" content="#132A4D"><link rel="apple-touch-icon" href="/erp/icon.svg"><link rel="stylesheet" href="/erp/erp.css">
+<style>
+body{background:#0B1220;color:#E8EDF5;font-size:17px;-webkit-user-select:none;user-select:none}#top{height:52px}
+#app{padding:12px;max-width:560px;margin:0 auto}
+.job{background:#1C2A45;border-left:7px solid #4C8BE0;border-radius:10px;padding:12px;margin-bottom:9px}.job.running{background:#143A2A;border-left-color:#3DCB5A}.job.blocked{background:#4A1C1C;border-left-color:#FF5A5A}.job.paused{background:#3A3016;border-left-color:#FFC84A}.job.wait{opacity:.6}.job.late{border-left-color:#FF5A5A}
+.job .no{font-size:21px;font-weight:700}.job .cu{color:#9FB3D1;font-size:14px}.job .op{font-size:17px;margin-top:4px}.job .m{color:#9FB3D1;font-size:14px;margin-top:4px}
+.bigbtn{display:block;width:100%;height:74px;font-size:24px;font-weight:700;border-radius:12px;border:none;margin:8px 0;color:#fff}.bigbtn.start{background:#1E9E2E}.bigbtn.stop{background:#C62828}.bigbtn.pause{background:#D98E04;color:#2A1D00}.bigbtn.finish{background:#2458B0}.bigbtn.grey{background:#2A3650;height:54px;font-size:18px;font-weight:600}
+.timer{font-size:46px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:6px 0}
+.pinbox{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.pinbox button{height:58px;font-size:24px;background:#1C2A45;color:#fff;border:1px solid #334}
+input,select,textarea{background:#101A2E;color:#E8EDF5;border-color:#334;height:44px;font-size:17px}.fr>label{color:#9FB3D1;width:120px}
+.dlg{background:#141F33;color:#E8EDF5}.dlg h3{color:#9FB3D1}.pill{display:inline-block;padding:2px 10px;border-radius:12px;background:#223;font-size:13px;margin-right:6px}
+#off{display:none;background:#C62828;color:#fff;padding:6px 12px;font-size:14px;text-align:center}#off.on{display:block}
+.reasons button{display:block;width:100%;height:50px;margin:6px 0;background:#1C2A45;color:#fff;border:1px solid #334;font-size:17px;text-align:left;padding-left:14px}
+</style></head><body>
+<div id="top"><b>Dynamic Operator</b><span class="sp"></span><span class="u" id="who"></span><button id="out" style="display:none">Sign out</button></div>
+<div id="off">Walang signal — naka-save ang Start/Stop, ipapadala pag may signal na.</div>
+<div id="app"></div>
+<script src="/erp/erp.js"></script>
+<script>
+let ME = null, STATIONS = [], Q = null, timerIv = null;
+const PENDING = () => JSON.parse(localStorage.getItem('op.pending') || '[]'), savePending = l => localStorage.setItem('op.pending', JSON.stringify(l));
+async function post(path, data){ try { const r = await api(path, 'POST', data); flush(); return r; } catch (e){ if (e.code){ throw e; } const l = PENDING(); l.push({path, data, t:Date.now()}); savePending(l); document.getElementById('off').classList.add('on'); toast('Saved on the phone — will send when the signal is back'); return {queued:true}; } }
+async function flush(){ const l = PENDING(); if (!l.length) return; const left = []; for (const it of l){ try { await api(it.path, 'POST', it.data); } catch (e){ if (!e.code) left.push(it); } } savePending(left); document.getElementById('off').classList.toggle('on', left.length > 0); }
+setInterval(flush, 15000); window.addEventListener('online', flush);
+async function boot(){
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/erp/sw.js').catch(() => {});
+  try { const m = await api('me'); ME = m.user; STATIONS = m.stations; } catch (e){ ME = null; }
+  if (!ME) return login();
+  document.getElementById('who').textContent = ME.name; document.getElementById('out').style.display = ''; document.getElementById('out').onclick = () => { localStorage.removeItem('erp.token'); location.reload(); };
+  if (!ME.station_id) ME.station_id = +localStorage.getItem('op.station') || 0;
+  await load(); live(() => load());
+}
+function login(){
+  const app = document.getElementById('app'); let pin = '';
+  const draw = () => { app.innerHTML = `<div class="pane" style="background:#141F33;border-color:#334"><h2 style="margin:0 0 8px">Mag-sign in</h2><div class="fr"><label>Pangalan</label><input id="nm" value="${esc(localStorage.getItem('op.name') || '')}"></div><div class="fr"><label>PIN</label><input id="pn" type="password" inputmode="numeric" value="${'•'.repeat(pin.length)}" readonly></div><div class="pinbox">${[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].map(k => `<button data-k="${k}">${k}</button>`).join('')}</div><div class="hint" style="margin-top:8px">Demo: Operator CNC1 / 2222 · Operator WEDM / 3333</div></div>`;
+    app.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => { const k = b.dataset.k; if (k === '⌫') pin = pin.slice(0, -1); else if (k === 'OK'){ try { const r = await api('login', 'POST', {name:$('#nm').value.trim(), pin}); localStorage.setItem('erp.token', r.token); localStorage.setItem('op.name', $('#nm').value.trim()); location.reload(); } catch (e){ toast(e.message, true); pin = ''; } return; } else pin += k; $('#pn').value = '•'.repeat(pin.length); }); };
+  draw();
+}
+async function load(){ try { Q = await api('queue?station=' + ME.station_id); document.getElementById('off').classList.remove('on'); } catch (e){ if (!e.code) document.getElementById('off').classList.add('on'); if (!Q) Q = {station:null, queue:[], running:[]}; } render(); }
+function render(){
+  const app = document.getElementById('app'); clearInterval(timerIv);
+  const st = Q.station, run = Q.running[0];
+  if (!st){ app.innerHTML = `<div class="pane" style="background:#141F33;border-color:#334"><h3>Aling station ka?</h3>${STATIONS.map(s => `<button class="bigbtn grey" data-s="${s.id}">${esc(s.name)}</button>`).join('')}</div>`; app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { ME.station_id = +b.dataset.s; localStorage.setItem('op.station', ME.station_id); load(); }); return; }
+  let h = `<div class="bar" style="justify-content:space-between"><span class="pill">${esc(st.code)}</span><span style="color:#9FB3D1">${esc(st.name.replace(/^.*? - /, ''))}</span><span class="sp"></span><button id="scan" class="btn" style="background:#1C2A45;color:#fff;border-color:#334;height:36px">📷 Scan</button><button id="chg" class="btn" style="background:#1C2A45;color:#fff;border-color:#334;height:36px">Station</button></div>`;
+  if (run){ const o = Q.queue.find(x => x.id === run.op_id) || {job_no:run.job_no, name:run.op, id:run.op_id};
+    h += `<div class="job running"><div class="no">${esc(o.job_no)} <span class="pill" style="background:#1E9E2E;color:#fff">${run.kind === 'setup' ? 'SETUP' : 'RUNNING'}</span></div><div class="cu">${esc(o.customer || '')} · ${esc(o.part || '')}</div><div class="op">${esc(o.name)}</div><div class="timer" id="tm">00:00</div>
+      <button class="bigbtn finish" data-a="finish" data-id="${o.id}">✔ TAPOS NA (Finish)</button><button class="bigbtn pause" data-a="pause" data-id="${o.id}">⏸ Pause (break / tool change)</button><button class="bigbtn stop" data-a="block" data-id="${o.id}">⚠ May problema (Report)</button>${run.kind === 'setup' ? `<button class="bigbtn grey" data-a="start" data-id="${o.id}">▶ Setup done — start RUN</button>` : ''}</div>`;
+    const t0 = new Date(run.start); timerIv = setInterval(() => { const s = Math.floor((Date.now() - t0)/1000); const el = document.getElementById('tm'); if (el) el.textContent = `${String(Math.floor(s/3600)).padStart(2, '0')}:${String(Math.floor(s%3600/60)).padStart(2, '0')}:${String(s%60).padStart(2, '0')}`; }, 1000);
+  }
+  h += `<h3 style="color:#9FB3D1">Naka-line up sa ${esc(st.code)} (${Q.queue.length})</h3>`;
+  h += Q.queue.filter(o => !run || o.id !== run.op_id).map(o => `<div class="job ${o.status} ${o.late ? 'late' : ''} ${!o.ready && o.status === 'queued' ? 'wait' : ''}" data-open="${o.id}"><div class="no">${esc(o.job_no)} ${o.pinned ? '📌' : ''} ${o.status !== 'queued' ? `<span class="pill">${esc(o.status)}</span>` : ''}</div><div class="cu">${esc(o.customer || '')} · ${esc(o.part)} · qty ${o.qty}</div><div class="op">${esc(o.name)}</div><div class="m">Due ${esc(o.due || '-')} · est ${hm(o.est_min)}${o.spent_min ? ' · spent ' + hm(o.spent_min) : ''}${!o.ready ? ` · <span style="color:#FFC84A">hintayin: ${o.waiting_on} step bago ito</span>` : ''}${o.block_reason ? ` · <span style="color:#FF5A5A">${esc(o.block_reason)}</span>` : ''}</div></div>`).join('') || '<div class="hint">Wala pang naka-line up dito.</div>';
+  app.innerHTML = h;
+  $('#chg').onclick = () => { Q.station = null; render(); }; $('#scan').onclick = scan;
+  app.querySelectorAll('[data-open]').forEach(el => el.onclick = () => openJob(+el.dataset.open));
+  app.querySelectorAll('[data-a]').forEach(b => b.onclick = () => action(b.dataset.a, +b.dataset.id));
+}
+function openJob(id){
+  const o = Q.queue.find(x => x.id === id); if (!o) return;
+  dlg(`${o.job_no} — ${o.name}`, `<div class="hint">${esc(o.customer || '')} · ${esc(o.part)} · drawing ${esc(o.drawing_no || '-')} rev ${esc(o.rev || '')} · ${esc(o.material || '')}</div><div class="hint">Qty ${o.qty} · due ${esc(o.due || '-')} · est ${hm(o.est_min)}</div>
+    ${!o.ready ? '<div style="color:#FFC84A;margin:8px 0">Hindi pa pwede: may step pa bago ito sa ibang station.</div>' : ''}
+    <button class="bigbtn start" data-a="start" ${!o.ready && o.status === 'queued' ? 'disabled' : ''}>▶ START</button><button class="bigbtn grey" data-a="setup" ${!o.ready && o.status === 'queued' ? 'disabled' : ''}>🔧 Start SETUP first</button>
+    <div class="bar"><a class="btn" style="background:#1C2A45;color:#fff;border-color:#334;line-height:28px" href="/cam.html?job=${encodeURIComponent(o.job_no)}" target="_blank">📐 Drawing / program (CAD/CAM)</a><button data-a="block" class="btn" style="background:#1C2A45;color:#fff;border-color:#334">⚠ Problem</button></div>`, null).querySelectorAll('[data-a]').forEach(b => b.onclick = async () => { b.closest('.dlg-bg').remove(); action(b.dataset.a, id); });
+}
+async function action(a, id){
+  try {
+    if (a === 'start' || a === 'setup'){ await post(`ops/${id}/${a}`); toast(a === 'setup' ? 'Setup started' : 'Started'); }
+    if (a === 'pause'){ const bg = dlg('Pause — bakit?', `<div class="reasons">${['Break / merienda', 'Tool change', 'Waiting for QA check', 'Waiting for material', 'Machine warm-up', 'Iba pa'].map(r => `<button data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div>`, null); bg.querySelectorAll('[data-r]').forEach(b => b.onclick = async () => { bg.remove(); await post(`ops/${id}/pause`, {note:b.dataset.r}); toast('Paused'); load(); }); return; }
+    if (a === 'block'){ const bg = dlg('Anong problema?', `<div class="reasons">${['Walang material', 'Walang tool / sira ang tool', 'Problema sa program', 'Sira ang makina', 'Hindi malinaw ang drawing', 'Hintayin ang QA', 'Iba pa'].map(r => `<button data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div>`, null); bg.querySelectorAll('[data-r]').forEach(b => b.onclick = async () => { bg.remove(); let r = b.dataset.r; if (r === 'Iba pa') r = prompt('Ano ang problema?') || r; await post(`ops/${id}/block`, {reason:r}); toast('Reported — nakita na ng office'); load(); }); return; }
+    if (a === 'finish'){ const o = Q.queue.find(x => x.id === id) || {}; dlg('Tapos na — ilang piraso?', `<div class="fr"><label>Good pcs</label><input name="qty_done" type="number" value="${o.qty || 1}"></div><div class="fr"><label>Scrap</label><input name="scrap" type="number" value="0"></div><div class="fr"><label>Note</label><input name="note" placeholder="optional"></div>`, async bg => { await post(`ops/${id}/finish`, {qty_done:+bg.querySelector('[name=qty_done]').value, scrap:+bg.querySelector('[name=scrap]').value, note:bg.querySelector('[name=note]').value}); toast('Tapos — lumipat na sa susunod na station'); load(); }, 'Finish'); return; }
+    load();
+  } catch (e){ toast(e.message, true); }
+}
+async function scan(){
+  if (!('BarcodeDetector' in window)){ const c = prompt('Walang camera scanner sa browser na ito. I-type ang job number:'); if (c) found(c); return; }
+  const bg = dlg('I-scan ang QR sa traveller', `<video id="v" autoplay playsinline style="width:100%;border-radius:8px;background:#000"></video><div class="hint">Itutok ang camera sa QR code</div>`, null);
+  const v = bg.querySelector('#v'); let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); v.srcObject = stream; } catch (e){ bg.remove(); toast('Hindi mabuksan ang camera', true); return; }
+  const det = new BarcodeDetector({formats:['qr_code', 'code_128']}); const stop = () => { stream.getTracks().forEach(t => t.stop()); bg.remove(); };
+  bg.querySelector('.cn').onclick = stop;
+  const tick = async () => { if (!document.body.contains(bg)) return; try { const codes = await det.detect(v); if (codes.length){ stop(); found(codes[0].rawValue); return; } } catch (e){} setTimeout(tick, 300); }; tick();
+}
+async function found(code){ try { const r = await api('scan?code=' + encodeURIComponent(code)); if (!r.job){ toast('Hindi kilala ang code: ' + code, true); return; } const mine = r.ops.filter(o => o.station_id === ME.station_id && o.status !== 'done'); if (mine.length){ await load(); openJob(mine[0].id); } else dlg(r.job.no + ' — ' + r.job.part, `<div class="hint">${esc(r.job.customer || '')} · qty ${r.job.qty} · due ${esc(r.job.due)}</div><h3>Routing</h3>${r.ops.map(o => `<div>${o.seq}. ${esc(o.station)} — ${esc(o.name)} ${tag(o.status)}</div>`).join('')}<div class="hint" style="margin-top:8px">Walang step nito sa station mo.</div>`, null); } catch (e){ toast(e.message, true); } }
+boot();
+</script></body></html>
