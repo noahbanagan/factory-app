@@ -195,7 +195,7 @@ textarea.nc{width:100%;height:100%;min-height:60vh;font:12px ui-monospace,Consol
     <div id="mgrHead">Toolpath Manager</div>
     <div id="mgrBar"></div>
     <div id="mgrBody"></div>
-    <div id="mgrTabs"><button data-t="tp" class="on">Toolpaths</button><button data-t="tools">Tools</button><button data-t="levels">Levels</button></div>
+    <div id="mgrTabs"><button data-t="tp" class="on">Toolpaths</button><button data-t="solid">Solid</button><button data-t="tools">Tools</button><button data-t="levels">Levels</button></div>
   </div>
   <div id="gfx"><div id="prompt"></div><div id="vlabel"></div><div id="scale"></div><div id="rubber"></div><div id="snap"></div><div id="snaptxt"></div><div id="busy">Calculating…</div></div>
 </div>
@@ -295,7 +295,7 @@ function defSetup(u){
     fix:{type:'vise', top:rnd(-15*k), jaw:rnd(15*k), boxes:[]},
     post:{short:true, lineNums:true, nStart:100, nInc:2, tcFmt:'T# M6', nextTool:false, home:'G91 G28 Z0.', endY:false, m01:true, rigid:true, arcs:true, toolCmt:true}};
 }
-const S = {setup:defSetup('mm'), tools:defTools('mm'), ops:[], geom:{items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, name:''}, file:'untitled'};
+const S = {setup:defSetup('mm'), tools:defTools('mm'), ops:[], geom:{items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, solid:null, name:''}, file:'untitled'};
 let CH = [], CHK = new Map(), ITEMCH = new Map();
 let selEnt = new Set(), selOps = new Set(), mode = null, chainCtx = null, createCtx = null;
 let showPaths = true, shade = true;
@@ -1745,11 +1745,12 @@ function initPointer(){
       down = null; return;
     }
     down = null;
-    const w = worldAt(e), it = (mode === 'create' || mode === 'dist' || mode === 'scale') ? null : hitItem(e);
+    const w = worldAt(e), it = (mode === 'create' || mode === 'dist' || mode === 'scale' || mode === 'edge3d') ? null : hitItem(e);
     if (mode === 'create'){ createPick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'dist'){ distPick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'scale'){ scalePick(snapP ? {x:snapP[0], y:snapP[1]} : w); return; }
     if (mode === 'analyze'){ if (it) analyzeDlg(it); return; }
+    if (mode === 'edge3d'){ edgePick(e); return; }
     if (mode === 'edit'){ editPick(it, w); return; }
     if (mode === 'chain'){ if (it) chainClick(it, w); return; }
     if (it){ selEnt.has(it.id) ? selEnt.delete(it.id) : selEnt.add(it.id); }
@@ -2524,6 +2525,7 @@ function applyCreate(){
 function endMode(){
   if (mode === 'create'){ createCtx = null; clearG(G.prev); $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
   if (mode === 'edit'){ editCtx = null; $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
+  if (mode === 'edge3d'){ edgeCtx = null; $('#ribbon').classList.remove('on'); $('#ribbon').innerHTML = ''; }
   if (mode === 'chain' && chainDlgEl) chainDlgEl.querySelector('.cn').click();
   mode = null; distPts = []; scalePts = []; prompt_(''); $('#snap').style.display = $('#snaptxt').style.display = 'none';
 }
@@ -2590,7 +2592,7 @@ function renderMgrBar(){
 function renderMgr(){
   renderMgrBar();
   const el = $('#mgrBody'), top = el.scrollTop;
-  $('#mgrHead').textContent = {tp:'Toolpath Manager', tools:'Tool Manager', levels:'Level Manager'}[mgrTab];
+  $('#mgrHead').textContent = {tp:'Toolpath Manager', tools:'Tool Manager', levels:'Level Manager', solid:'Solid Manager (feature tree)'}[mgrTab];
   if (mgrTab === 'tp'){
     const node = (depth, tw, ic, lb, attrs = '', cls = '') => `<div class="tn ${cls}" ${attrs} style="padding-left:${depth*14 + 2}px"><span class="tw">${tw}</span><span class="ic">${ic}</span><span class="lb">${lb}</span></div>`;
     const st = S.setup, s = st.stock;
@@ -2617,6 +2619,21 @@ function renderMgr(){
     const tot = S.ops.filter(o => o.moves && o.post !== false).reduce((a, o) => a + cycleTime(o), 0), left = S.ops.filter(o => o.post !== false && !o.done);
     if (S.ops.length) h += `<div style="padding:6px 8px;color:#555;border-top:1px solid #eee;margin-top:6px">Estimated cycle time: <b>${hms(tot)}</b><br>${left.length ? `Still to run at the machine: <b>${left.length}</b> of ${S.ops.filter(o => o.post !== false).length}` : '<span class="ok-ic">All operations ticked done</span>'}</div>`;
     el.innerHTML = h;
+  } else if (mgrTab === 'solid'){
+    const sol = S.geom.solid;
+    const fl = f => { const o = {...f}; delete o.id; delete o.sup; delete o.kind; delete o.chains; delete o.level; delete o.pos; return Object.entries(o).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' '); };
+    el.innerHTML = `<div style="padding:4px 6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn" id="sdAdd">+ Add feature…</button><button class="btn" id="sdRebuild">⟳ Rebuild</button><button class="btn" id="sdFillet">◠ Fillet an edge</button><button class="btn" id="sdChamfer">◢ Chamfer an edge</button></div>
+      ${!sol ? '<div class="info" style="margin:6px">No solid yet. Draw a closed sketch and use Create ▸ Solid ▸ Extrude, or Create ▸ Solid ▸ Solid from features, or open a STEP / STL and add features to it.</div>' :
+      `<div class="tn"><span class="ic">${sol.base.kind === 'mesh' ? '📦' : '🧱'}</span><span class="lb"><b>${sol.base.kind === 'mesh' ? 'Imported model: ' + esc(sol.base.name || 'model') : 'Block ' + esc(fl(sol.base.block))}</b></span></div>
+      ${sol.feats.map((f, i) => `<div class="tn" style="padding-left:16px;${f.sup ? 'opacity:.5' : ''}"><input type="checkbox" data-sf="${i}" ${f.sup ? '' : 'checked'} title="Suppress / unsuppress"><span class="ic">${({pocket:'▣', hole:'⊙', slot:'▭', boss:'⬤', step:'▙', slope:'◢', dish:'◡', revolve:'◎', sweep:'〰', loft:'⬡', shell:'▢', edgeFillet:'◠', edgeChamfer:'◢', insert:'📦'})[f.kind] || '•'}</span><span class="lb" data-se="${i}" style="cursor:pointer" title="Click to edit">F${i + 1} <b>${esc(f.kind)}</b> ${esc(fl(f)).slice(0, 70)}</span><button class="btn" data-sd="${i}" style="height:18px;padding:0 5px" title="Delete feature">✕</button></div>`).join('')}
+      <div class="hint" style="margin:6px">Click a feature to change its numbers; untick to suppress it. The whole model rebuilds from the tree each time (parametric). ${(S.geom.mesh ? (S.geom.mesh.pos.length/9 | 0) + ' facets.' : '')}</div>`}`;
+    el.querySelector('#sdAdd').onclick = () => { if (!S.geom.mesh) solidDlg(false); else solidDlg(true); };
+    el.querySelector('#sdRebuild').onclick = () => { if (sol) solidRebuild({view:false}).catch(e => msg('Rebuild', e.message)); };
+    el.querySelector('#sdFillet').onclick = () => startEdgePick('edgeFillet');
+    el.querySelector('#sdChamfer').onclick = () => startEdgePick('edgeChamfer');
+    el.querySelectorAll('[data-sf]').forEach(c => c.onchange = () => { sol.feats[+c.dataset.sf].sup = !c.checked; solidRebuild({view:false}).catch(e => msg('Rebuild', e.message)); });
+    el.querySelectorAll('[data-sd]').forEach(b => b.onclick = () => { if (!confirm(`Delete feature F${+b.dataset.sd + 1}?`)) return; sol.feats.splice(+b.dataset.sd, 1); solidRebuild({view:false}).catch(e => msg('Rebuild', e.message)); });
+    el.querySelectorAll('[data-se]').forEach(l => l.onclick = () => featEditDlg(+l.dataset.se));
   } else if (mgrTab === 'tools'){
     el.innerHTML = `<div style="padding:4px 6px;display:flex;gap:6px;align-items:center"><button class="btn" id="tlSync">⟳ Sync from Google Sheet</button> <button class="btn" id="tlDash">🏭 Machine dashboard</button><span class="hint" style="margin:0">${GD.sheetSynced ? 'synced ' + esc(GD.sheetSynced) : GD.sheet ? 'not synced yet' : 'no sheet set (Settings ▸ Google connection)'}</span></div><table class="grid"><tr><th>#</th><th>Name</th><th>Type</th><th>Dia</th><th>RPM</th><th>Feed</th></tr>${S.tools.slice().sort((a, b) => a.num - b.num).map(t => `<tr data-tid="${t.id}" class="${t.id === selTool ? 'on' : ''}"><td>${t.num}${t.loaded ? ' <span class="ok-ic" title="Loaded in the machine">●</span>' : ''}</td><td>${esc(t.name)}${t.pocket ? ' <span class="bdg">pot ' + esc(t.pocket) + '</span>' : ''}</td><td>${TT[t.type][0]}</td><td>${fmt(t.dia)}</td><td>${t.rpm}</td><td>${t.feed}</td></tr>`).join('')}</table><div style="padding:6px;color:#666">Double-click a tool to edit it. Material for speeds/feeds: <b>${esc(MATS[S.setup.material].n)}</b></div>`;
   } else {
@@ -2986,9 +3003,10 @@ function loadOCCT(){
   return occtP;
 }
 let pickMode = 'cad', pickCb = null;
-function pick(m, cb){ pickMode = m; pickCb = cb || null; const f = $('#fFile'); f.accept = m === 'proj' ? '.json,.cam' : '.dxf,.stl,.step,.stp,.iges,.igs,.dwg,.pdf'; f.click(); }
+function pick(m, cb){ pickMode = m; pickCb = cb || null; const f = $('#fFile'); f.accept = m === 'proj' ? '.json,.cam' : m === 'ins' ? '.stl,.step,.stp,.iges,.igs' : '.dxf,.stl,.step,.stp,.iges,.igs,.dwg,.pdf'; f.click(); }
 $('#fFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (pickMode === 'ins'){ try { const pos = await fileToMesh(f); insertDlg(pos, f.name); } catch (err){ alert(err.message); } return; }
   if (pickMode === 'proj' || /\.(json|cam)$/i.test(f.name)){ try { applyProject(JSON.parse(await f.text())); S.file = f.name.replace(/\.cam\.json$|\.json$/i, ''); updTitle(); } catch(err){ alert('Not a valid project file.'); } return; }
   const ok = await openCAD(f, pickMode === 'merge'); if (pickCb) pickCb(); else if (ok && pickMode !== 'merge') offerClaudeLook(f.name);
 });
@@ -3040,7 +3058,7 @@ async function openCAD(file, merge){
       setMesh(new Float32Array(out));
       prompt_(`${file.name}: ${r.meshes.length} bodies, ${(out.length/9) | 0} facets — top of part placed at Z0`);
     } else { alert('Unsupported file type: .' + ext); return false; }
-    if (!merge){ S.geom.name = file.name; if (S.file === 'untitled') S.file = file.name.replace(/\.[^.]+$/, ''); stockFromGeom(); }
+    if (!merge){ S.geom.name = file.name; if (S.file === 'untitled') S.file = file.name.replace(/\.[^.]+$/, ''); stockFromGeom(); S.geom.solid = null; }
     selEnt.clear(); S.ops.forEach(o => { o.dirty = true; o.moves = null; }); clearG(G.path); clearG(G.sim);
     geomChanged(); drawStock(); setView(is3D ? 'iso' : 'top'); updTitle();
     return true;
@@ -3049,7 +3067,7 @@ async function openCAD(file, merge){
 }
 function scaleItem(e, f){ for (const k of ['x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'x', 'y']) if (e[k] != null) e[k] *= f; if (e.pts) e.pts = e.pts.map(p => [p[0]*f, p[1]*f]); }
 function stockFromGeom(){ const bb = geomBBox(), s = S.setup.stock; if (!bb) return; const m = s.margin; Object.assign(s, {x0:rnd(bb.x0 - m), y0:rnd(bb.y0 - m), x1:rnd(bb.x1 + m), y1:rnd(bb.y1 + m)}); if (S.geom.mesh) s.bottom = rnd(Math.min(s.bottom, bb.z0 - m)); }
-function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, posted:S.posted || {}, drive:S.drive || null, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null}}); }
+function projectJSON(){ const g = S.geom; return JSON.stringify({v:2, file:S.file, est:S.est || null, posted:S.posted || {}, drive:S.drive || null, setup:S.setup, tools:S.tools, ops:S.ops.map(o => ({...o, moves:null, warn:[]})), geom:{items:g.items, levels:g.levels, main:g.main, nextId:g.nextId, name:g.name, mesh:g.mesh ? Array.from(g.mesh.pos, v => +v.toFixed(5)) : null, solid:g.solid ? {base:g.solid.base.kind === 'mesh' ? {kind:'mesh', name:g.solid.base.name, pos:Array.from(g.solid.base.pos, v => +v.toFixed(5))} : g.solid.base, feats:g.solid.feats.map(f => f.pos ? Object.assign({}, f, {pos:Array.from(f.pos, v => +v.toFixed(5))}) : f)} : null}}); }
 function applyProject(d){
   if (!d || d.v !== 2) throw new Error('old');
   const base = defSetup(d.setup.units);
@@ -3057,9 +3075,29 @@ function applyProject(d){
   S.tools = d.tools; S.ops = d.ops.map(o => ({...o, moves:null, warn:[], dirty:true})); S.file = d.file || 'untitled'; S.est = d.est || null; S.posted = d.posted || {}; S.drive = d.drive || null;
   Object.assign(S.geom, {items:d.geom.items || [], levels:d.geom.levels || {'1':{vis:true, num:1}}, main:d.geom.main || '1', nextId:d.geom.nextId || 1, name:d.geom.name || '', mesh:null});
   if (d.geom.mesh){ S.geom.mesh = {pos:Float32Array.from(d.geom.mesh)}; S.geom.mesh.bb = meshBB(S.geom.mesh.pos); }
+  S.geom.solid = d.geom.solid ? {base:d.geom.solid.base.kind === 'mesh' ? {kind:'mesh', name:d.geom.solid.base.name, pos:Float32Array.from(d.geom.solid.base.pos)} : d.geom.solid.base, feats:(d.geom.solid.feats || []).map(f => f.pos ? Object.assign({}, f, {pos:Float32Array.from(f.pos)}) : f)} : null;
   selOps.clear(); selEnt.clear(); UNDO.length = 0;
   buildChains(); drawGeom(); drawStock(); clearG(G.sim); clearG(G.path); renderMgr(); updTitle(); updStatus(); setView(S.geom.mesh ? 'iso' : 'top'); renderMenu();
   if (S.ops.length) regen(S.ops.slice(), true);
+}
+// read a STEP / IGES / STL file into a triangle array (no change to the job)
+async function fileToMesh(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'stl'){ const g = new STLLoader().parse(await file.arrayBuffer()); return new Float32Array(g.attributes.position.array); }
+  if (!['step', 'stp', 'iges', 'igs'].includes(ext)) throw new Error('Choose a STEP, IGES or STL file.');
+  busy(true, 'Loading STEP/IGES reader…'); try {
+    const occt = await loadOCCT(); busy(true, 'Meshing ' + file.name + '…'); await tick();
+    const buf = new Uint8Array(await file.arrayBuffer()), prm = {linearUnit:isMM() ? 'millimeter' : 'inch', linearDeflectionType:'absolute_value', linearDeflection:isMM() ? 0.01 : 0.0004, angularDeflection:0.1};
+    const r = ext.startsWith('st') ? occt.ReadStepFile(buf, prm) : occt.ReadIgesFile(buf, prm); if (!r.success || !r.meshes.length) throw new Error('Could not read the model.');
+    const out = []; for (const m of r.meshes){ const p = m.attributes.position.array, ix = m.index ? m.index.array : null; if (ix) for (const k of ix) out.push(p[k*3], p[k*3+1], p[k*3+2]); else out.push(...p); }
+    return new Float32Array(out);
+  } finally { busy(false); }
+}
+function insertDlg(pos, name){
+  const bb = meshBB(pos), W = {dx:0, dy:0, dz:0, rz:0, top:true}, el = document.createElement('div');
+  el.innerHTML = `<div class="info">${esc(name)}: ${(pos.length/9) | 0} facets, ${fmt(bb[3]-bb[0])} × ${fmt(bb[4]-bb[1])} × ${fmt(bb[5]-bb[2])}. It is joined to the current model as one body (assembly view).</div>${fRow(W, 'dx', 'Move X', 'n', null, false)}${fRow(W, 'dy', 'Move Y', 'n', null, false)}${fRow(W, 'dz', 'Move Z', 'n', null, false)}${fRow(W, 'rz', 'Rotate about Z (deg)', 'n', null, false)}${fRow(W, 'top', 'Put its bottom on the current top (Z0) first', 'c')}`;
+  bindFields(el, W);
+  dlg({title:'Place another model', body:el, w:420, ok:async close => { try { const dz = W.dz + (W.top ? -bb[2] : 0); if (!S.geom.mesh){ S.geom.mesh = {pos:new Float32Array(0), bb:[0,0,0,0,0,0]}; } const r = S.geom.mesh.pos.length ? await applySolid({features:[{kind:'insert', pos, dx:W.dx, dy:W.dy, dz, rz:W.rz, name}]}, {modify:true}) : (() => { setMesh(pos); S.geom.name = name; S.geom.solid = null; geomChanged(); drawStock(); return {facets:pos.length/9 | 0}; })(); close(); prompt_(`${name} placed: ${r.facets} facets.`); setView('iso'); } catch (e){ msg('Place model', e.message); } }});
 }
 function writeDXF(){
   const L = [], w = (c, v) => L.push(c, v), f = v => (+(+v).toFixed(6)).toString(), lv = Object.keys(S.geom.levels).filter(k => k !== '1' || S.geom.items.some(it => it.level === '1'));
@@ -3102,7 +3140,7 @@ function recentDlg(){
     const x = e.target.closest('[data-del]'); if (x){ list.splice(+x.dataset.del, 1); localStorage.setItem('cam5.recent', JSON.stringify(list)); d.close(); recentDlg(); }
   });
 }
-function newProj(){ if ((S.ops.length || S.geom.items.length) && !confirm('Start a new file? Unsaved work is lost.')) return; pushUndo(); S.geom = {items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, name:''}; S.ops = []; S.file = 'untitled'; S.setup.progName = 'PART'; S.setup.stock = defSetup(S.setup.units).stock; selOps.clear(); selEnt.clear(); buildChains(); drawGeom(); drawStock(); clearG(G.path); clearG(G.sim); renderMgr(); updTitle(); setView('top'); autosave(); }
+function newProj(){ if ((S.ops.length || S.geom.items.length) && !confirm('Start a new file? Unsaved work is lost.')) return; pushUndo(); S.geom = {items:[], levels:{'1':{vis:true, num:1}}, main:'1', nextId:1, mesh:null, solid:null, name:''}; S.ops = []; S.file = 'untitled'; S.setup.progName = 'PART'; S.setup.stock = defSetup(S.setup.units).stock; selOps.clear(); selEnt.clear(); buildChains(); drawGeom(); drawStock(); clearG(G.path); clearG(G.sim); renderMgr(); updTitle(); setView('top'); autosave(); }
 function setUnits(u){
   if (u === S.setup.units) return;
   if (!confirm(`Switch configuration to ${u === 'mm' ? 'Metric' : 'English (inch)'}? Geometry, stock, tools and operations are converted.`)) return;
@@ -3269,7 +3307,7 @@ const MENU = () => [
   ['Edit', [['Undo', 'Ctrl+Z', undo], ['Delete duplicate entities', '', deleteDuplicates], '-', ['Select all', 'Ctrl+A', () => { S.geom.items.filter(visItem).forEach(i => selEnt.add(i.id)); drawGeom(); updStatus(); }], ['Unselect all', 'Esc', () => { selEnt.clear(); drawGeom(); updStatus(); }], ['Delete entities', 'Del', delSel], ['Keep selected only (delete everything else)', '', keepSelected], ['Close small gaps…', '', closeGapsDlg], '-', ['Trim / Extend 2 entities', '', () => startEdit('trim2')], ['Trim / Extend 1 entity', '', () => startEdit('trim1')], ['Trim 3 entities', '', () => startEdit('trim3')], ['Fillet chain…', '', () => startEdit('filletChain')], ['Divide (remove between crossings)', '', () => startEdit('divide')], ['Break at point', '', () => startEdit('brk')], ['Extend by length…', '', () => startEdit('extend')], ['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Explode polyline into lines', '', explodePolys]]],
   ['View', [['Toolpath / Operations Manager', 'Alt+O', () => $('#mgr').classList.toggle('hide')], '-', ['Top (WCS)', 'Alt+1', () => setView('top')], ['Front (WCS)', 'Alt+2', () => setView('front')], ['Right side (WCS)', 'Alt+5', () => setView('right')], ['Isometric (WCS)', 'Alt+7', () => setView('iso')], '-', ['Fit', 'Alt+F1', () => setView(S.gview || 'top')], ['Zoom in', 'PgUp', () => zoom(0.8)], ['Un-zoom', 'PgDn', () => zoom(1.25)]]],
   ['Analyze', [['Entity properties', '', () => { endMode(); mode = 'analyze'; prompt_('Analyze: select an entity'); }], ['Distance', '', () => { endMode(); mode = 'dist'; SNAPS = null; distPts = []; prompt_('Distance: select first point'); }], ['Scale check (fix PDF scale from a known dimension)', '', () => { endMode(); mode = 'scale'; SNAPS = null; scalePts = []; prompt_('Scale check: click one end of a dimension you know'); }]]],
-  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Arc ▸ Arc 3 points', '', () => startCreate('arc3')], ['Circle 3 points', '', () => startCreate('circ3')], ['Rectangle', '', () => startCreate('rect')], ['Polygon', '', () => startCreate('polygon')], ['Ellipse', '', () => startCreate('ellipse')], ['Spline', '', () => startCreate('spline')], ['Bolt circle', '', () => startCreate('bolt')], ['Letters…', '', () => lettersDlg()], '-', ['Dimension ▸ Horizontal', '', () => startCreate('dimH')], ['Dimension ▸ Vertical', '', () => startCreate('dimV')], ['Dimension ▸ Parallel', '', () => startCreate('dimA')], ['Dimension ▸ Diameter / Radius', '', () => startCreate('dimD')], ['Note', '', () => startCreate('note')], '-', ['Solid ▸ Extrude selected sketch…', '', extrudeDlg], ['Solid ▸ Revolve selected sketch…', '', revolveDlg], ['Solid ▸ Solid from features…', '', () => solidDlg(false)], ['Solid ▸ Add features to the model (STEP / built)…', '', () => solidDlg(true)]]],
+  ['Create', [['Fillet 2 lines…', '', () => startEdit('fillet')], ['Chamfer 2 lines…', '', () => startEdit('chamfer')], ['Trim / Extend…', '', () => startEdit('trim2')], ['Divide', '', () => startEdit('divide')], '-', ['Point ▸ Position', '', () => startCreate('point')], ['Line ▸ Endpoints', '', () => startCreate('line')], ['Arc ▸ Circle center point', '', () => startCreate('circle')], ['Arc ▸ Arc polar', '', () => startCreate('arc')], ['Arc ▸ Arc 3 points', '', () => startCreate('arc3')], ['Circle 3 points', '', () => startCreate('circ3')], ['Rectangle', '', () => startCreate('rect')], ['Polygon', '', () => startCreate('polygon')], ['Ellipse', '', () => startCreate('ellipse')], ['Spline', '', () => startCreate('spline')], ['Bolt circle', '', () => startCreate('bolt')], ['Letters…', '', () => lettersDlg()], '-', ['Dimension ▸ Horizontal', '', () => startCreate('dimH')], ['Dimension ▸ Vertical', '', () => startCreate('dimV')], ['Dimension ▸ Parallel', '', () => startCreate('dimA')], ['Dimension ▸ Diameter / Radius', '', () => startCreate('dimD')], ['Note', '', () => startCreate('note')], '-', ['Solid ▸ Extrude selected sketch…', '', extrudeDlg], ['Solid ▸ Revolve selected sketch…', '', revolveDlg], ['Solid ▸ Solid from features…', '', () => solidDlg(false)], ['Solid ▸ Add features to the model (STEP / built)…', '', () => solidDlg(true)], ['Solid ▸ Fillet a model edge', '', () => startEdgePick('edgeFillet')], ['Solid ▸ Chamfer a model edge', '', () => startEdgePick('edgeChamfer')], ['Solid ▸ Place another model (assembly view)…', '', () => pick('ins')], ['Solid ▸ Feature tree (Solid tab)', '', () => { mgrTab = 'solid'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'solid')); renderMgr(); }]]],
   ['Xform', [['Translate', '', () => xformDlg('translate')], ['Rotate', '', () => xformDlg('rotate')], ['Mirror', '', () => xformDlg('mirror')], ['Scale', '', () => xformDlg('scale')], ['Offset entity…', '', () => startEdit('offset')], ['Offset contour (chain)…', '', () => startEdit('offsetChain')], ['Rectangular array…', '', () => xformDlg('arrayRect')], ['Rotary array…', '', () => xformDlg('arrayRot')], '-', ['Move origin to lower-left of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - bb.x0, p[1] - bb.y0], false); stockFromGeom(); drawStock(); setView('top'); } }], ['Move origin to center of part', '', () => { const bb = geomBBox(); if (bb){ xformAll(p => [p[0] - (bb.x0 + bb.x1)/2, p[1] - (bb.y0 + bb.y1)/2], false); stockFromGeom(); drawStock(); setView('top'); } }]]],
   ['Machine Type', [[`✔ Mill ▸ ${MACHINE.name} (${MACHINE.control})`, '', () => propsDlg('machine')], ['Lathe (not yet available)', '', null]]],
   ['Toolpaths', [['🧭 Job Wizard…', '', wizard], '-', ['Contour…', '', () => newOp('contour')], ['Drill…', '', () => newOp('drill')], ['Pocket…', '', () => newOp('pocket')], ['Face…', '', () => newOp('face')], ['Circle Paths ▸ Circle Mill…', '', () => newOp('cmill')], ['Circle Paths ▸ Thread Mill…', '', () => newOp('tmill')], ['Engrave letters (contour, comp off)…', '', () => newOp('contour', {comp:'off', depth:rnd(-0.3*K()), dcOn:false, leadOn:false, mpOn:false, tabOn:false})], '-', ['Surface Rough ▸ Parallel…', '', () => newOp('srough')], ['Surface Finish ▸ Parallel…', '', () => newOp('sfinish')], ['Surface Finish ▸ Contour…', '', () => newOp('scont')], '-', ['Tool Manager', '', () => { mgrTab = 'tools'; $$('#mgrTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'tools')); renderMgr(); }], ['Stock setup…', '', () => propsDlg('stock')], '-', ['Backplot selected', '', backplotDlg], ['Verify selected', '', verifyDlg], ['Post selected (G1)…', '', postDlg], ['📋 Setup sheet (print for the operator)', '', setupSheet], '-', ['⏱ Time estimate (hours)…', '', estimateDlg]]],
@@ -3889,7 +3927,7 @@ const SOLID_KINDS = {
   pocket:'closed cut from the current surface: shape + depth (+ corner_r, draft, top_chamfer, top_fillet, floor_r)',
   hole:'round hole: cx, cy, d, depth or through:true (+ cbore_d, cbore_depth, csk_d, csk_angle); or bolt_circle / grid shape',
   slot:'rounded slot: cx, cy, length, width, angle, depth (+ floor_r)',
-  boss:'island left standing: shape + height; everything around it inside "within" (default: whole block) is cut down',
+  boss:'boss standing on the surface: shape + height (+ draft, top_fillet); base_z to start from another level',
   step:'open pocket / ledge: a rectangle that may run past the block edge, depth',
   slope:'tilt the surface inside the shape (default whole top): angle (deg) going DOWN towards direction (+x, -x, +y, -y or degrees)',
   dish:'spherical dish: cx, cy, d (rim diameter), depth'
@@ -4144,6 +4182,9 @@ function buildSolid(spec){
 // Revolve, sweep, loft and shell, and any feature cut into (or added onto) an existing model — including a customer's STEP.
 // Uses three-bvh-csg (loaded on demand). The 2.5D region builder above stays the fast path for block + features.
 const CSG_KINDS = {
+  edgeFillet:'round an edge of ANY model (imported STEP too): x, y, z = a point on the edge, r = radius; works on edges where a flat top or floor meets a wall',
+  edgeChamfer:'chamfer an edge of any model: x, y, z = a point on the edge, d = distance',
+  insert:'place another model (STEP/STL) on this one: dx, dy, dz, rz (deg) — assembly view, joined as one body',
   revolve:'turned shape: profile [[r, z], …] (r from the axis, z down from the surface) spun about a vertical axis at cx, cy; cut, or add:true for a turned boss',
   sweep:'groove along a path: path [[x,y],…] (or chain no.), width, depth, section round | rect | vee (vee_angle); add:true for a rib',
   loft:'tapered cut between two shapes: top {shape…}, bottom {shape…}, depth; add:true for a lofted boss',
@@ -4217,21 +4258,23 @@ function revolveMesh(profile, cx, cy, zt, segs = 72){
   return new Float32Array(tri);
 }
 // sweep a cross-section [[u, v]] (u sideways, v = z relative to zt) along an open 2D path, mitred corners, capped ends
-function sweepMesh(path, section, zt){
-  const P = dp3(path.map(p => [p[0], p[1], 0]), 1e-6).map(p => [p[0], p[1]]);
+function sweepMesh(path, section, zt, closed){
+  let P = dp3(path.map(p => [p[0], p[1], 0]), 1e-6).map(p => [p[0], p[1]]);
+  if (closed && P.length > 2 && hyp(P[0][0]-P[P.length-1][0], P[0][1]-P[P.length-1][1]) < 1e-6) P.pop();
   if (P.length < 2) throw new Error('sweep: the path needs at least 2 points');
-  const rings = [];
-  for (let i = 0; i < P.length; i++){
-    const t0 = i > 0 ? unit(P[i-1], P[i]) : unit(P[i], P[i+1]), t1 = i + 1 < P.length ? unit(P[i], P[i+1]) : t0;
+  const rings = [], N = P.length;
+  for (let i = 0; i < N; i++){
+    const t0 = closed ? unit(P[(i+N-1)%N], P[i]) : (i > 0 ? unit(P[i-1], P[i]) : unit(P[i], P[i+1])), t1 = closed ? unit(P[i], P[(i+1)%N]) : (i + 1 < P.length ? unit(P[i], P[i+1]) : t0);
     let m = [t0[0] + t1[0], t0[1] + t1[1]]; const lm = hyp(m[0], m[1]); m = lm < 1e-9 ? t1 : [m[0]/lm, m[1]/lm];
     const n = [-m[1], m[0]], k = 1/Math.max(0.33, n[0]*(-t1[1]) + n[1]*t1[0]);
     rings.push(section.map(([u, v]) => [P[i][0] + n[0]*u*k, P[i][1] + n[1]*u*k, zt + v]));
   }
   const tri = [], push = (a, b, c) => tri.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
   const ns = section.length;
-  for (let i = 0; i + 1 < rings.length; i++) for (let k = 0; k < ns; k++){ const j = (k+1)%ns; push(rings[i][k], rings[i][j], rings[i+1][j]); push(rings[i][k], rings[i+1][j], rings[i+1][k]); }
-  const cap = (R, flip) => { const idx = THREE.ShapeUtils.triangulateShape(section.map(q => new THREE.Vector2(q[0], q[1])), []); for (const [a, b, c] of idx) flip ? push(R[a], R[c], R[b]) : push(R[a], R[b], R[c]); };
-  cap(rings[0], true); cap(rings[rings.length-1], false);
+  const nr = closed ? rings.length : rings.length - 1;
+  for (let i = 0; i < nr; i++){ const R0 = rings[i], R1 = rings[(i+1)%rings.length]; for (let k = 0; k < ns; k++){ const j = (k+1)%ns; push(R0[k], R0[j], R1[j]); push(R0[k], R1[j], R1[k]); } }
+  if (!closed){ const cap = (R, flip) => { const idx = THREE.ShapeUtils.triangulateShape(section.map(q => new THREE.Vector2(q[0], q[1])), []); for (const [a, b, c] of idx) flip ? push(R[a], R[c], R[b]) : push(R[a], R[b], R[c]); };
+  cap(rings[0], true); cap(rings[rings.length-1], false); }
   return new Float32Array(tri);
 }
 function sweepSection(f, ext){
@@ -4241,6 +4284,69 @@ function sweepSection(f, ext){
   if (kind === 'round'){ const r = w/2, zc = -d + r; out.push([-r, ext]); for (let k = 0; k <= 16; k++){ const a = Math.PI + Math.PI*k/16; out.push([r*Math.cos(a), Math.min(0, zc + r*Math.sin(a))]); } out.push([r, ext]); return out; }
   if (kind === 'vee'){ const a = (n(f.vee_angle) || 90)*DEG, hw = Math.min(w/2, d*Math.tan(a/2)); return [[-hw, ext], [-hw, 0], [0, -d], [hw, 0], [hw, ext]]; }
   return [[-w/2, ext], [-w/2, -d], [w/2, -d], [w/2, ext]];
+}
+// horizontal edges of a mesh where a wall meets a flat face (top, floor or bottom). Geometric, so it also works when the
+// triangles on the two sides do not share vertices (T-junctions from the builders and from booleans).
+function meshSharpEdges(P){
+  const tri = [], flatByZ = new Map();
+  for (let t = 0; t < P.length; t += 9){
+    const a = [P[t], P[t+1], P[t+2]], b = [P[t+3], P[t+4], P[t+5]], c = [P[t+6], P[t+7], P[t+8]];
+    const ux = b[0]-a[0], uy = b[1]-a[1], uz = b[2]-a[2], vx = c[0]-a[0], vy = c[1]-a[1], vz = c[2]-a[2];
+    let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; const L = hyp(nx, ny, nz); if (L < 1e-12) continue; nx /= L; ny /= L; nz /= L;
+    const T = {a, b, c, n:[nx, ny, nz], cen:[(a[0]+b[0]+c[0])/3, (a[1]+b[1]+c[1])/3, (a[2]+b[2]+c[2])/3]};
+    tri.push(T);
+    if (Math.abs(nz) > 0.9 && Math.abs(a[2]-b[2]) < 1e-3 && Math.abs(a[2]-c[2]) < 1e-3){ const k = Math.round(a[2]*1000); if (!flatByZ.has(k)) flatByZ.set(k, []); flatByZ.get(k).push(T); }
+  }
+  const inTri = (T, x, y, tol) => { const [ax, ay] = T.a, [bx, by] = T.b, [cx, cy] = T.c; const d = (by-cy)*(ax-cx) + (cx-bx)*(ay-cy); if (Math.abs(d) < 1e-12) return false; const l1 = ((by-cy)*(x-cx) + (cx-bx)*(y-cy))/d, l2 = ((cy-ay)*(x-cx) + (ax-cx)*(y-cy))/d, l3 = 1 - l1 - l2; const e = -tol; return l1 >= e && l2 >= e && l3 >= e; };
+  const out = [], seen = new Set(), key = p => Math.round(p[0]*1e4) + ',' + Math.round(p[1]*1e4) + ',' + Math.round(p[2]*1e4);
+  for (const T of tri){
+    if (Math.abs(T.n[2]) > 0.6) continue;                                   // walls only
+    for (const [p, q] of [[T.a, T.b], [T.b, T.c], [T.c, T.a]]){
+      if (Math.abs(p[2] - q[2]) > 1e-3 || hyp(q[0]-p[0], q[1]-p[1]) < 1e-6) continue;
+      const kp = key(p), kq = key(q), k = kp < kq ? kp + '|' + kq : kq + '|' + kp; if (seen.has(k)) continue; seen.add(k);
+      const z = (p[2] + q[2])/2, mx = (p[0]+q[0])/2, my = (p[1]+q[1])/2, L = hyp(q[0]-p[0], q[1]-p[1]);
+      let flat = null;
+      for (const dz of [0, 1, -1]){ const list = flatByZ.get(Math.round(z*1000) + dz); if (!list) continue; for (const F of list){ if (inTri(F, mx, my, 0.02/Math.max(L, 1e-3))){ flat = F; break; } } if (flat) break; }
+      if (!flat) continue;
+      out.push({a:p, b:q, f:[{n:flat.n, c:flat.cen}, {n:T.n, c:T.cen}]});
+    }
+  }
+  return out;
+}
+// the horizontal sharp-edge loop nearest to a 3D point: path in XY, its Z, convex or concave, which way is air
+function findEdgeLoop(P, pt, tol){
+  const edges = meshSharpEdges(P).filter(e => Math.abs(e.a[2] - e.b[2]) < 1e-3);
+  const dseg = e => { const ax = e.a[0], ay = e.a[1], az = e.a[2], dx = e.b[0]-ax, dy = e.b[1]-ay, dz = e.b[2]-az, L2 = dx*dx + dy*dy + dz*dz || 1e-18; let u = ((pt[0]-ax)*dx + (pt[1]-ay)*dy + (pt[2]-az)*dz)/L2; u = Math.max(0, Math.min(1, u)); return hyp(ax + dx*u - pt[0], ay + dy*u - pt[1], az + dz*u - pt[2]); };
+  let best = null, bd = Infinity; for (const e of edges){ const d = dseg(e); if (d < bd){ bd = d; best = e; } }
+  if (!best || bd > tol) throw new Error('No sharp edge near that point. Click on an edge where a flat top or floor meets a wall.');
+  const flatOf = e => e.f.find(f => Math.abs(f.n[2]) > 0.9), wallOf = e => e.f.find(f => Math.abs(f.n[2]) < 0.6);
+  if (!flatOf(best) || !wallOf(best)) throw new Error('That edge is not between a flat face and a wall — only those can be rounded here.');
+  const z = best.a[2], vSign = flatOf(best).n[2] > 0 ? 1 : -1;
+  const ok = e => Math.abs(e.a[2] - z) < 1e-3 && flatOf(e) && wallOf(e) && Math.sign(flatOf(e).n[2]) === vSign;
+  const pool = edges.filter(ok), vk = p => Math.round(p[0]*1e4) + ',' + Math.round(p[1]*1e4), adj = new Map();
+  for (const e of pool){ for (const k of [vk(e.a), vk(e.b)]){ if (!adj.has(k)) adj.set(k, []); adj.get(k).push(e); } }
+  const used = new Set([best]);
+  const walk = (from, dirPrev) => { const out = []; let cur = from, prevDir = dirPrev; for (let g = 0; g < 100000; g++){ const cand = (adj.get(vk(cur)) || []).filter(e => !used.has(e)); if (!cand.length) break; let pick = null, bs = -2; for (const e of cand){ const o = vk(e.a) === vk(cur) ? e.b : e.a, d = unit([cur[0], cur[1]], [o[0], o[1]]), sc = d[0]*prevDir[0] + d[1]*prevDir[1]; if (sc > bs){ bs = sc; pick = {e, o, d}; } } used.add(pick.e); out.push(pick.o); prevDir = pick.d; cur = pick.o; if (vk(cur) === vk(from) ) break; } return out; };
+  const d0 = unit([best.a[0], best.a[1]], [best.b[0], best.b[1]]);
+  const fwd = walk(best.b, d0), back = walk(best.a, [-d0[0], -d0[1]]);
+  let path = back.reverse().concat([best.a, best.b], fwd).map(q => [q[0], q[1]]);
+  const closed = path.length > 3 && hyp(path[0][0]-path[path.length-1][0], path[0][1]-path[path.length-1][1]) < 1e-3;
+  if (closed) path.pop();
+  const w = wallOf(best), nw = [w.n[0], w.n[1]], nl = hyp(nw[0], nw[1]) || 1; nw[0] /= nl; nw[1] /= nl;
+  const fc = flatOf(best).c, mid = [(best.a[0]+best.b[0])/2, (best.a[1]+best.b[1])/2];
+  const convex = (fc[0]-mid[0])*nw[0] + (fc[1]-mid[1])*nw[1] < 0;
+  const left = [-d0[1], d0[0]]; if (left[0]*nw[0] + left[1]*nw[1] < 0) path.reverse();
+  return {path, z, closed, convex, vSign};
+}
+function edgeSection(kind, convex, r, eps){
+  const out = [];
+  if (kind === 'edgeFillet'){
+    if (convex){ out.push([-r, eps], [-r, 0]); for (let k = 1; k < 12; k++){ const a = Math.PI/2 - Math.PI/2*k/12; out.push([-r + r*Math.cos(a), -r + r*Math.sin(a)]); } out.push([0, -r], [eps, -r], [eps, eps]); }
+    else { out.push([-eps, -eps], [r, -eps], [r, 0]); for (let k = 1; k < 12; k++){ const a = -Math.PI/2 - Math.PI/2*k/12; out.push([r + r*Math.cos(a), r + r*Math.sin(a)]); } out.push([0, r], [-eps, r]); }
+  } else {
+    if (convex) out.push([-r, eps], [-r, 0], [0, -r], [eps, -r], [eps, eps]); else out.push([-eps, -eps], [r, -eps], [r, 0], [0, r], [-eps, r]);
+  }
+  return out;
 }
 // apply features to a base mesh with booleans; returns {pos, levels, feats}
 async function csgFeatures(basePos, feats, opt = {}){
@@ -4309,6 +4415,20 @@ async function csgFeatures(basePos, feats, opt = {}){
       const rings = add ? [{pts:B2, z:zt - 0.0001}, {pts:T, z:zt + depth}] : [{pts:B2, z:zf}, {pts:T, z:zt}, {pts:T, z:zt + ext}];
       apply(stackMesh(rings), add ? ADDITION : SUBTRACTION);
       items = shapeItems(normShape(Object.assign({kind:'rectangle'}, f.top))).concat(shapeItems(normShape(Object.assign({kind:'rectangle'}, f.bottom))));
+    } else if (kind === 'edgeFillet' || kind === 'edgeChamfer'){
+      const r = n(f.r) || n(f.d); if (!(r > 0)) throw new Error(`${name}: give the radius r (fillet) or distance d (chamfer)`);
+      const P = base.geometry.getAttribute('position').array, bbx = meshBB(P), tol = Math.max(2*units, 0.03*Math.max(bbx[3]-bbx[0], bbx[4]-bbx[1]));
+      const E = findEdgeLoop(P, [n(f.x), n(f.y), n(f.z)], n(f.tol) || tol);
+      const sec = edgeSection(kind, E.convex, r, 0.01*units).map(q => [q[0], q[1]*E.vSign]); if (E.vSign < 0) sec.reverse();
+      apply(sweepMesh(E.path, sec, E.z, E.closed), E.convex ? SUBTRACTION : ADDITION);
+      zt = E.z; zf = E.z - (E.vSign > 0 ? r : -r); depth = r;
+      items = [{kind:'poly', closed:E.closed, pts:E.path.map(q => [rnd(q[0]), rnd(q[1])])}];
+    } else if (kind === 'insert'){
+      const src = f.pos instanceof Float32Array ? f.pos : Float32Array.from(f.pos || []); if (!src.length) throw new Error(`${name}: no model data`);
+      const rz = n(f.rz)*DEG, c = Math.cos(rz), si = Math.sin(rz), dx = n(f.dx), dy = n(f.dy), dz = n(f.dz), T = new Float32Array(src.length);
+      for (let i = 0; i < src.length; i += 3){ T[i] = src[i]*c - src[i+1]*si + dx; T[i+1] = src[i]*si + src[i+1]*c + dy; T[i+2] = src[i+2] + dz; }
+      apply(T, ADDITION); const tb = meshBB(T); zt = tb[5]; zf = tb[2]; depth = tb[5] - tb[2];
+      items = [{kind:'poly', closed:true, pts:[[tb[0], tb[1]], [tb[3], tb[1]], [tb[3], tb[4]], [tb[0], tb[4]]].map(q => [rnd(q[0]), rnd(q[1])])}];
     } else if (kind === 'dish'){
       const d = n(f.d), dep = n(f.depth); if (!(d > 0 && dep > 0)) throw new Error(`${name}: d and depth must be > 0`);
       const cx = n(f.cx), cy = n(f.cy), Rs = (d*d/4 + dep*dep)/(2*dep); zt = startZ(f, [[cx, cy]]); depth = dep; zf = zt - dep;
@@ -4332,7 +4452,7 @@ async function csgFeatures(basePos, feats, opt = {}){
     } else throw new Error(`${name}: unknown feature kind "${kind}" (${Object.keys(SOLID_KINDS).concat(Object.keys(CSG_KINDS)).join(', ')})`);
     const lvl = `${name} Z${fmt(zf)}`;
     levels.push({name:lvl, items});
-    out.push({no, kind, level:lvl, z_top:rnd(zt), z_floor:rnd(zf), depth:rnd(depth), suggested_op:({pocket:'pocket', slot:'pocket', step:'pocket', hole:'drill', boss:'contour (outside)', slope:'surface finish parallel', dish:'surface finish parallel (ball end mill)', revolve:'surface finish contour / parallel', sweep:'contour on the path with comp off (ball end mill for round)', loft:'surface finish contour (waterline)', shell:'pocket'})[kind]});
+    out.push({no, kind, level:lvl, z_top:rnd(zt), z_floor:rnd(zf), depth:rnd(depth), suggested_op:({pocket:'pocket', slot:'pocket', step:'pocket', hole:'drill', boss:'contour (outside)', slope:'surface finish parallel', dish:'surface finish parallel (ball end mill)', revolve:'surface finish contour / parallel', sweep:'contour on the path with comp off (ball end mill for round)', loft:'surface finish contour (waterline)', shell:'pocket', edgeFillet:'surface finish (ball end mill) or a corner-radius end mill', edgeChamfer:'contour with a chamfer mill', insert:'as the model needs'})[kind]});
   });
   return {pos:posFromGeom(base.geometry), levels, feats:out};
 }
@@ -4340,31 +4460,47 @@ async function csgFeatures(basePos, feats, opt = {}){
 function signedVolume(pos){ let v = 0; for (let t = 0; t < pos.length; t += 9){ const ax = pos[t], ay = pos[t+1], az = pos[t+2], bx = pos[t+3], by = pos[t+4], bz = pos[t+5], cx = pos[t+6], cy = pos[t+7], cz = pos[t+8]; v += ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx); } return v/6; }
 // put a built solid into the job: mesh + 2D levels + stock, and report the chains per feature.
 // opts.modify = apply the features to the CURRENT model (imported STEP/STL or built) with booleans instead of starting from a block.
-async function applySolid(spec, opts = {}){
+// The feature tree: S.geom.solid = {base:{kind:'block', block} | {kind:'mesh', pos, name}, feats:[{id, sup, ...feature}]}.
+// Every change re-runs the whole tree (parametric): edit a feature in the Solid tab and the model rebuilds.
+const SOLID_NEXT = () => ({ok:true, next:'Create the operations: pocket/drill/contour on the chains listed per feature (depth = z_floor), surface finish for 3D shapes; set_material first if not set.'});
+async function solidRebuild(opts = {}){
+  const sol = S.geom.solid; if (!sol) throw new Error('No solid to rebuild.');
+  const feats = sol.feats.filter(f => !f.sup).map(f => { const {id, sup, chains, level, ...rest} = f; return rest; });
   let r;
-  const feats = spec.features || [], needCSG = opts.modify || feats.some(f => CSG_KINDS[f.kind] || f.add);
-  if (opts.modify){
-    if (!S.geom.mesh) throw new Error('No 3D model loaded to modify — open a STEP/STL or build a solid first.');
-    busy(true, 'Solid: booleans…'); await tick();
-    try { r = await csgFeatures(S.geom.mesh.pos, feats, {startNo:Object.keys(S.geom.levels).filter(k => /^F\d+ /.test(k)).length}); } finally { busy(false); }
-    r.levels.forEach(L => L.name = L.name.toUpperCase());
-  } else if (needCSG){
-    const base = buildSolid({block:spec.block, features:[]});
-    busy(true, 'Solid: booleans…'); await tick();
-    try { const c = await csgFeatures(base.pos, feats, {blockOuts:base.blockOuts, thickness:base.thickness}); r = {pos:c.pos, levels:base.levels.concat(c.levels), feats:c.feats, thickness:base.thickness}; } finally { busy(false); }
-  } else r = buildSolid(spec);
-  pushUndo();
-  if (opts.modify){ for (const L of r.levels){ ensureLevel(L.name); for (const it of L.items) addItem(it, L.name); } S.geom.mesh = {pos:r.pos, bb:meshBB(r.pos)}; geomChanged(); S.ops.forEach(o => o.dirty = true); const lvlOf = new Map(S.geom.items.map(it => [it.id, it.level])); for (const f of r.feats) f.chains = CH.filter(c => c.items.every(id => lvlOf.get(id) === f.level)).map(c => c.no); drawStock(); renderMgr(); updTitle(); return {ok:true, facets:(r.pos.length/9) | 0, bbox:geomBBox(), features:r.feats, chains:chainSummary(), next:'Create the operations on the new chains (pocket/drill/contour) or surface finish for 3D shapes.'}; }
-  if (opts.replace !== false){ S.geom.items = []; S.geom.levels = {'1':{vis:true, num:1}}; S.geom.mesh = null; S.ops = []; selOps.clear(); S.geom.name = opts.name || 'Solid from features'; S.file = S.geom.name; }
-  for (const L of r.levels){ if (opts.sketch && L.name === 'PART') continue; const nm = L.name.toUpperCase(); ensureLevel(nm); for (const it of L.items) addItem(it, nm); }
-  if (!opts.sketch) S.geom.main = 'PART';
+  busy(true, 'Solid: rebuilding…'); await tick();
+  try {
+    if (sol.base.kind === 'mesh'){ const c = await csgFeatures(sol.base.pos, feats, {}); r = {pos:c.pos, levels:c.levels, feats:c.feats, thickness:-meshBB(sol.base.pos)[2]}; }
+    else if (feats.some(f => CSG_KINDS[f.kind] || f.add || f.kind === 'boss')){ const base = buildSolid({block:sol.base.block, features:[]}); const c = await csgFeatures(base.pos, feats, {blockOuts:base.blockOuts, thickness:base.thickness}); r = {pos:c.pos, levels:base.levels.concat(c.levels), feats:c.feats, thickness:base.thickness}; }
+    else r = buildSolid({block:sol.base.block, features:feats});
+  } finally { busy(false); }
+  const old = Object.keys(S.geom.levels).filter(k => /^F\d+ /.test(k) || (sol.base.kind === 'block' && !opts.sketch && k === 'PART'));
+  S.geom.items = S.geom.items.filter(it => !old.includes(it.level)); old.forEach(k => { delete S.geom.levels[k]; });
+  for (const L of r.levels){ if ((opts.sketch || sol.base.kind === 'mesh') && L.name === 'PART') continue; const nm = L.name.toUpperCase(); ensureLevel(nm); for (const it of L.items) addItem(it, nm); }
+  if (!opts.sketch && sol.base.kind === 'block') S.geom.main = 'PART'; if (!S.geom.levels[S.geom.main]) S.geom.main = Object.keys(S.geom.levels)[0] || '1';
   S.geom.mesh = {pos:r.pos, bb:meshBB(r.pos)};        // Z0 stays the block top even when a boss stands above it
   geomChanged();
   const lvlOf = new Map(S.geom.items.map(it => [it.id, it.level]));
-  for (const f of r.feats){ f.chains = CH.filter(c => c.items.every(id => lvlOf.get(id) === f.level.toUpperCase())).map(c => c.no); }
-  { const bb = S.geom.mesh.bb, st = S.setup.stock, m = st.margin; Object.assign(st, {x0:rnd(bb[0] - m), y0:rnd(bb[1] - m), x1:rnd(bb[3] + m), y1:rnd(bb[4] + m), top:0, bottom:-r.thickness}); } S.ops.forEach(o => o.dirty = true);
-  drawStock(); renderMgr(); updTitle(); setView('iso');
-  return {ok:true, facets:(r.pos.length/9) | 0, thickness:r.thickness, bbox:geomBBox(), stock:S.setup.stock, features:r.feats, chains:chainSummary(), next:'Create the operations: pocket/drill/contour on the chains listed per feature (depth = z_floor), surface finish for slope/dish; set_material first if not set.'};
+  const active = sol.feats.filter(f => !f.sup);
+  r.feats.forEach((f, i) => { f.chains = CH.filter(c => c.items.every(id => lvlOf.get(id) === f.level.toUpperCase())).map(c => c.no); if (active[i]){ active[i].level = f.level; active[i].chains = f.chains; } });
+  { const bb = S.geom.mesh.bb, st = S.setup.stock, m = st.margin; Object.assign(st, {x0:rnd(bb[0] - m), y0:rnd(bb[1] - m), x1:rnd(bb[3] + m), y1:rnd(bb[4] + m), top:Math.max(0, rnd(bb[5])), bottom:rnd(bb[2])}); }
+  S.ops.forEach(o => o.dirty = true);
+  drawStock(); renderMgr(); updTitle(); if (opts.view !== false) setView('iso');
+  return Object.assign(SOLID_NEXT(), {facets:(r.pos.length/9) | 0, thickness:r.thickness, bbox:geomBBox(), stock:S.setup.stock, features:r.feats, chains:chainSummary()});
+}
+async function applySolid(spec, opts = {}){
+  const feats = (spec.features || []).map(f => Object.assign({id:uid(), sup:false}, f));
+  if (opts.modify){
+    if (!S.geom.mesh) throw new Error('No 3D model loaded to modify — open a STEP/STL or build a solid first.');
+    if (!S.geom.solid) S.geom.solid = {base:{kind:'mesh', pos:S.geom.mesh.pos.slice(), name:S.geom.name}, feats:[]};
+    pushUndo();
+    const n0 = S.geom.solid.feats.length; S.geom.solid.feats.push(...feats);
+    try { const r = await solidRebuild({view:false}); r.features = r.features.slice(n0 - S.geom.solid.feats.filter((f, i) => i < n0 && f.sup).length); return r; }
+    catch (e){ S.geom.solid.feats.splice(n0); throw e; }
+  }
+  pushUndo();
+  if (opts.replace !== false){ S.geom.items = []; S.geom.levels = {'1':{vis:true, num:1}}; S.geom.mesh = null; S.ops = []; selOps.clear(); S.geom.name = opts.name || 'Solid from features'; S.file = S.geom.name; }
+  const prev = S.geom.solid; S.geom.solid = {base:{kind:'block', block:spec.block}, feats};
+  try { return await solidRebuild({sketch:opts.sketch, view:true}); } catch (e){ S.geom.solid = prev; throw e; }
 }
 // SolidWorks-style: sketch a closed chain, then Extrude (boss or cut) or Revolve it into the solid
 function sketchChains(){ const ids = new Set(selEnt); const chs = CH.filter(c => c.closed && !c.point && c.items.every(id => ids.has(id))); return chs; }
@@ -4421,6 +4557,32 @@ function lettersDlg(){
     selEnt = new Set(ids); close(); geomChanged(); prompt_(`${ids.length} strokes drawn on level ${lv}.`);
   }});
 }
+function parseKV(s){ const o = {}; for (const m of String(s).matchAll(/(\w+)\s*=\s*(\[[^\]]*\]\]?|\{[^}]*\}|[^\s]+)/g)){ let v = m[2]; if (/^[\[{]/.test(v)){ try { v = JSON.parse(v.replace(/(\w+):/g, '"$1":')); } catch (e){ throw new Error(`Cannot read ${m[1]}=${v}`); } } o[m[1]] = typeof v === 'string' && /^[+-]?\d*\.?\d+$/.test(v) ? +v : (v === 'true' ? 1 : v === 'false' ? 0 : v); } return o; }
+function kvOf(f){ return Object.entries(f).filter(([k]) => !['id', 'sup', 'kind', 'chains', 'pos'].includes(k)).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' '); }
+function featEditDlg(i){
+  const sol = S.geom.solid, f = sol.feats[i], W = {p:kvOf(f)}, el = document.createElement('div');
+  el.innerHTML = `<div class="info"><b>F${i + 1} ${esc(f.kind)}</b> — ${esc(SOLID_KINDS[f.kind] || CSG_KINDS[f.kind] || '')}</div>${fRow(W, 'p', 'Parameters (key=value …)', 't', null, false)}`;
+  bindFields(el, W); el.querySelector('input[data-k=p]').style.width = '420px';
+  dlg({title:`Edit feature F${i + 1}`, body:el, w:560, ok:close => { try { const o = parseKV(W.p); const keep = {id:f.id, sup:f.sup, kind:f.kind}; if (f.pos) keep.pos = f.pos; sol.feats[i] = Object.assign(keep, o); close(); solidRebuild({view:false}).catch(e => msg('Rebuild', e.message)); } catch (e){ msg('Edit feature', e.message); } }});
+}
+// click an edge of the shaded model to fillet or chamfer it (any model, imported STEP included)
+let edgeCtx = null;
+function startEdgePick(kind){
+  if (!S.geom.mesh){ msg('Edge fillet', 'Open or build a 3D model first.'); return; }
+  endMode(); mode = 'edge3d'; edgeCtx = {kind, V:{r:rnd(2*K())}};
+  const rb = $('#ribbon'); rb.innerHTML = `<b>${kind === 'edgeFillet' ? 'Fillet model edge' : 'Chamfer model edge'}</b><label>${kind === 'edgeFillet' ? 'Radius' : 'Distance'}<input type="number" step="any" data-ef="r" value="${edgeCtx.V.r}"></label><span class="hint" style="width:auto;margin:0">click an edge of the shaded model where a flat face meets a wall (shading must be on)</span><span style="flex:1"></span><button class="btn" id="edX">✕ Done</button>`;
+  rb.classList.add('on'); rb.oninput = e => { if (e.target.dataset.ef) edgeCtx.V.r = parseFloat(e.target.value); }; $('#edX').onclick = () => endMode();
+  if (!shade){ shade = true; drawGeom(); }
+  prompt_('Click an edge of the model (rotate with the middle mouse first if needed).');
+}
+async function edgePick(e){
+  if (!edgeCtx) return;
+  const rc = new THREE.Raycaster(); rc.setFromCamera(ndc(e), cam); const hits = rc.intersectObjects(G.mesh.children, false);
+  if (!hits.length){ prompt_('Click ON the model.'); return; }
+  const p = hits[0].point, r = edgeCtx.V.r; if (!(r > 0)){ prompt_('Type the radius / distance first.'); return; }
+  try { const res = await applySolid({features:[{kind:edgeCtx.kind, x:rnd(p.x), y:rnd(p.y), z:rnd(p.z), r}]}, {modify:true}); prompt_(`${edgeCtx.kind === 'edgeFillet' ? 'Fillet' : 'Chamfer'} done (F${S.geom.solid.feats.length}) — click another edge, or ✕ Done.`); }
+  catch (err){ prompt_(err.message); }
+}
 function solidDlg(modify){
   const W = {w:rnd(100*K()), h:rnd(80*K()), t:rnd(20*K()), shape:'rectangle', ch:0, step:1.5*K()};
   const rows = [];
@@ -4441,7 +4603,7 @@ function solidDlg(modify){
     el.querySelector('#sAdd').onclick = () => { rows.push({kind:'pocket', p:EX.pocket}); render(); };
   };
   render();
-  const parseP = s => { const o = {}; for (const m of s.matchAll(/(\w+)\s*=\s*(\[[^\]]*\]\]?|\{[^}]*\}|[^\s]+)/g)){ let v = m[2]; if (/^[\[{]/.test(v)){ try { v = JSON.parse(v.replace(/(\w+):/g, '"$1":')); } catch (e){ throw new Error(`Cannot read ${m[1]}=${v}`); } } o[m[1]] = typeof v === 'string' && /^[+-]?\d*\.?\d+$/.test(v) ? +v : (v === 'true' ? 1 : v === 'false' ? 0 : v); } return o; };
+  const parseP = parseKV;
   dlg({title:modify ? 'Add Features to the Model' : 'Create Solid from Features', body:el, w:640, ok:async close => {
     try {
       const spec = {block:{kind:W.shape, w:W.w, h:W.h, d:W.w, t:W.t, top_chamfer:W.ch, centered:true}, features:rows.map(r => Object.assign({kind:r.kind}, parseP(r.p))), mesh_step:W.step};
@@ -4466,9 +4628,9 @@ const AI_TOOLS = [
   {name:'verify', description:'Run stock verification on all operations and return collisions (rapid moves into material).', strict:true, input_schema:{type:'object', properties:{}, required:[], additionalProperties:false}},
   {name:'draw_shapes', description:'CAD: draw 2D geometry in the top view (XY plane, Z0 = part top, mm or current units). Shapes: rectangle {x,y,w,h, corner_r?, centered?} (x,y = corner, or centre if centered=true); circle {cx,cy,d}; line {x1,y1,x2,y2}; arc {cx,cy,d,a0,a1} (degrees, counter-clockwise); polygon {pts:[[x,y],...]} closed; slot {cx,cy,length,width,angle?} (rounded ends); bolt_circle {cx,cy,pcd,n,d,start_angle?} (n holes of diameter d on pitch circle pcd); grid {x,y,cols,rows,pitch_x,pitch_y,d} (holes, x,y = first hole); text {text,x,y,height,angle?,spacing?} single-stroke letters for engraving (x,y = baseline left; A-Z 0-9 - . / : + = # ( ) % ° Ø); polygon_n {cx,cy,n,d (corner-to-corner), angle?, flat?} regular polygon; ellipse {cx,cy,w,h,angle?}; spline {pts:[[x,y],...], closed?}; dim {type:"h"|"v"|"a"|"d", x1,y1,x2,y2 (the two measured points; for d: a point ON the circle), x3,y3 (where the dimension line sits; for d: the text position), height?} drafting dimension on level DIM; note {text,x,y,height}. replace=true erases existing drawing first. Returns the chain numbers, so you can create operations next. Then set_stock, then propose/create operations using tools with loaded=true.',
     input_schema:{type:'object', properties:{shapes:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['rectangle','circle','line','arc','polygon','slot','bolt_circle','grid','text','polygon_n','ellipse','spline','dim','note']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, level:{type:'string', description:'layer name, default PART'}}, required:['shapes']}},
-  {name:'build_solid', description:'CAD 3D: build the part as a SOLID from features (block + cuts from the top, in order) — makes the 3D model for shading / surface toolpaths / Verify AND the 2D chains on one level per feature for pocket / drill / contour operations. block: {kind:"rectangle"|"circle"|"polygon", w, h (Y) or d or pts, t (thickness), top_chamfer?} centred at X0 Y0, Z0 = top. features (each may have the shape fields of draw_shapes: rectangle cx,cy,w,h,corner_r | circle cx,cy,d | slot cx,cy,length,width,angle | polygon pts | bolt_circle | grid): pocket {shape, …, depth, draft (deg), top_chamfer, top_fillet, floor_r}; hole {cx,cy,d, depth|through:true, cbore_d, cbore_depth, csk_d, csk_angle} (or shape bolt_circle / grid for a pattern); slot {cx,cy,length,width,angle,depth}; boss {shape, …, height, within?} (island, the area around it is cut down); step {cx,cy,w,h,depth} (open pocket, may run past the edge); slope {shape?, angle, direction:"+x"|"-x"|"+y"|"-y"|degrees} (surface goes down towards direction); dish {cx,cy,d,depth}; revolve {cx,cy, profile:[[r,z],…] r from the axis, z ≤ 0 down from the surface, add?} (turned recess, or add:true = turned boss); sweep {path:[[x,y],…] or chain, width, depth, section:"round"|"rect"|"vee", vee_angle?, add?} (groove, or add:true = rib); loft {top:{shape…}, bottom:{shape…}, depth, add?} (tapered cut between two shapes); shell {wall, floor} (hollow block). Features cut from whatever surface is there (a hole inside a pocket starts at the pocket floor); z_top overrides. replace=true (default) starts a new part. Returns per feature: level, chain numbers, z_top, z_floor and the suggested operation.',
-    input_schema:{type:'object', properties:{block:{type:'object', additionalProperties:true}, features:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['pocket','hole','slot','boss','step','slope','dish','revolve','sweep','loft','shell']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, name:{type:'string'}}, required:['block','features']}},
-  {name:'modify_model', description:'CAD 3D: cut features into, or add bosses/ribs onto, the 3D model that is loaded NOW (a customer STEP/IGES/STL or a built solid) using solid booleans — e.g. add a pocket, holes, a counterbore, a groove or a boss to the customer\'s part. Same feature objects as build_solid (pocket, hole, slot, boss, step, slope, dish, revolve, sweep, loft); each starts from the model surface at its position unless z_top is given. Returns the new chains per feature.',
+  {name:'build_solid', description:'CAD 3D: build the part as a SOLID from features (block + cuts from the top, in order) — makes the 3D model for shading / surface toolpaths / Verify AND the 2D chains on one level per feature for pocket / drill / contour operations. block: {kind:"rectangle"|"circle"|"polygon", w, h (Y) or d or pts, t (thickness), top_chamfer?} centred at X0 Y0, Z0 = top. features (each may have the shape fields of draw_shapes: rectangle cx,cy,w,h,corner_r | circle cx,cy,d | slot cx,cy,length,width,angle | polygon pts | bolt_circle | grid): pocket {shape, …, depth, draft (deg), top_chamfer, top_fillet, floor_r}; hole {cx,cy,d, depth|through:true, cbore_d, cbore_depth, csk_d, csk_angle} (or shape bolt_circle / grid for a pattern); slot {cx,cy,length,width,angle,depth}; boss {shape, …, height, draft?, top_fillet?} (adds material standing height above the surface); step {cx,cy,w,h,depth} (open pocket, may run past the edge); slope {shape?, angle, direction:"+x"|"-x"|"+y"|"-y"|degrees} (surface goes down towards direction); dish {cx,cy,d,depth}; revolve {cx,cy, profile:[[r,z],…] r from the axis, z ≤ 0 down from the surface, add?} (turned recess, or add:true = turned boss); sweep {path:[[x,y],…] or chain, width, depth, section:"round"|"rect"|"vee", vee_angle?, add?} (groove, or add:true = rib); loft {top:{shape…}, bottom:{shape…}, depth, add?} (tapered cut between two shapes); shell {wall, floor} (hollow block). Features cut from whatever surface is there (a hole inside a pocket starts at the pocket floor); z_top overrides. replace=true (default) starts a new part. Returns per feature: level, chain numbers, z_top, z_floor and the suggested operation.',
+    input_schema:{type:'object', properties:{block:{type:'object', additionalProperties:true}, features:{type:'array', items:{type:'object', properties:{kind:{type:'string', enum:['pocket','hole','slot','boss','step','slope','dish','revolve','sweep','loft','shell','edgeFillet','edgeChamfer']}}, required:['kind'], additionalProperties:true}}, replace:{type:'boolean'}, name:{type:'string'}}, required:['block','features']}},
+  {name:'modify_model', description:'CAD 3D: cut features into, or add bosses/ribs onto, the 3D model that is loaded NOW (a customer STEP/IGES/STL or a built solid) using solid booleans — e.g. add a pocket, holes, a counterbore, a groove or a boss to the customer\'s part. Same feature objects as build_solid (pocket, hole, slot, boss, step, slope, dish, revolve, sweep, loft) plus edgeFillet {x,y,z,r} and edgeChamfer {x,y,z,d} to round or chamfer an edge of the model at a point on that edge (edges where a flat face meets a wall; get edge coordinates from the feature outlines / bbox); each starts from the model surface at its position unless z_top is given. Features go into the feature tree (parametric: the operator can edit or suppress them later). Returns the new chains per feature.',
     input_schema:{type:'object', properties:{features:{type:'array', items:{type:'object', properties:{kind:{type:'string'}}, required:['kind'], additionalProperties:true}}}, required:['features']}},
   {name:'clear_geometry', description:'CAD: erase the whole drawing (all layers) and the operations. Ask the user before calling this unless they asked to start a new part.', strict:true, input_schema:{type:'object', properties:{confirm:{type:'boolean'}}, required:['confirm'], additionalProperties:false}},
   {name:'calc_speeds', description:'Industry-standard speeds-and-feeds calculator for a tool in the current material, at the shop\'s speed/feed level (100% = standard). Give a tool number from the library, or a diameter + type (flat, ball, bull, face, chamfer, drill, spot, tap, ream) and optional flutes/pitch. Returns RPM, feed and plunge in the job units and the formula used.', strict:true, input_schema:{type:'object', properties:{tool_num:{type:['integer','null']}, dia:{type:['number','null']}, type:{type:['string','null']}, flutes:{type:['integer','null']}, pitch:{type:['number','null']}, material:{type:['string','null'], description:'material key; default = job material'}}, required:['tool_num','dia','type','flutes','pitch','material'], additionalProperties:false}},
@@ -4563,7 +4725,7 @@ async function aiRunToolNow(name, inp){
   if (name === 'draw_shapes'){
     const shapes = Array.isArray(inp.shapes) ? inp.shapes : []; if (!shapes.length) return {error:'No shapes given'};
     pushUndo();
-    if (inp.replace){ S.geom.items = []; S.geom.mesh = null; S.ops = []; selOps.clear(); S.geom.name = AI.drawingName ? 'Drawn by Claude from ' + AI.drawingName : 'Drawn with Claude'; S.file = S.geom.name.replace(/\.pdf$/i, ''); if (typeof updTitle === 'function') updTitle(); }
+    if (inp.replace){ S.geom.items = []; S.geom.mesh = null; S.geom.solid = null; S.ops = []; selOps.clear(); S.geom.name = AI.drawingName ? 'Drawn by Claude from ' + AI.drawingName : 'Drawn with Claude'; S.file = S.geom.name.replace(/\.pdf$/i, ''); if (typeof updTitle === 'function') updTitle(); }
     const lv = (inp.level || 'PART').toUpperCase(); if (!S.geom.levels[lv]) ensureLevel(lv); S.geom.main = lv;
     const added = []; for (const sh of shapes) for (const it of shapeItems(sh)) added.push(addItem(it, it.dim ? 'DIM' : lv).id);
     geomChanged(); stockFromGeom(); drawStock(); renderMgr(); setView('top');
@@ -4577,7 +4739,7 @@ async function aiRunToolNow(name, inp){
     try { const r = await applySolid({features:inp.features || []}, {modify:true}); return r; }
     catch (e){ return {error:e.message}; }
   }
-  if (name === 'clear_geometry'){ if (!inp.confirm) return {error:'Not confirmed'}; pushUndo(); S.geom.items = []; S.geom.mesh = null; S.geom.name = 'Drawn with Claude'; S.ops = []; selOps.clear(); geomChanged(); drawPaths(); drawStock(); setView('top'); return {ok:true}; }
+  if (name === 'clear_geometry'){ if (!inp.confirm) return {error:'Not confirmed'}; pushUndo(); S.geom.items = []; S.geom.mesh = null; S.geom.solid = null; S.geom.name = 'Drawn with Claude'; S.ops = []; selOps.clear(); geomChanged(); drawPaths(); drawStock(); setView('top'); return {ok:true}; }
   if (name === 'calc_speeds'){
     const t = inp.tool_num != null ? S.tools.find(x => x.num === inp.tool_num) : null;
     const tool = t ? {...t} : {dia:+inp.dia || 0, type:inp.type || 'flat', flutes:inp.flutes || 2, pitch:inp.pitch || 0};
@@ -4724,7 +4886,7 @@ if (!booted){
 setWS(WS);
 $$('#title [data-ws]').forEach(x => x.onclick = () => { if (x.dataset.ws === 'cam') startDlg(2); else setWS('cad'); });
 $('#startLink').onclick = e => { e.preventDefault(); startDlg(); };
-window.__cam = {dimItems, splinePts, polygonLines, ellipsePts, filletPoly, writeDXF, exportDXF, extrudeDlg, revolveDlg, sketchChains, deleteDuplicates, nearCircle, startCreate, createPick, applyCreate, get createCtx(){ return createCtx; }, startDlg, hideStart, cadHome, setWS, get WS(){ return WS; }, stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
+window.__cam = {solidRebuild, findEdgeLoop, meshSharpEdges, startEdgePick, featEditDlg, insertDlg, fileToMesh, parseKV, dimItems, splinePts, polygonLines, ellipsePts, filletPoly, writeDXF, exportDXF, extrudeDlg, revolveDlg, sketchChains, deleteDuplicates, nearCircle, startCreate, createPick, applyCreate, get createCtx(){ return createCtx; }, startDlg, hideStart, cadHome, setWS, get WS(){ return WS; }, stackMesh, profileStack, revolveMesh, sweepMesh, sweepSection, wallProfile, posFromGeom, csgFeatures, signedVolume, loadCSG, textItems, lettersDlg, genTmill, buildSolid, applySolid, solidDlg, featOutlines, miterOffset, aiRunTool, camContext, aiPanel, aiSend, AI, cycleTime, runK, machineDash, homeDlg, switchMachine, openDriveLink, driveIdFrom, startEdit, editPick, editApply, explodePolys, xformDlg, addItem, isectInf, get MACHINE(){ return MACHINE; }, MACHINES, loadPDFJS, preflight, runVerify, fixtureBoxes, get selEnt(){ return selEnt; }, xformAll, geomChanged, stockFromGeom, drawStock, setView, geomBBox, toolOf, GD, jobQueue, syncToolSheet, saveToDrive, gdSettings, recentDlg, recentList, setupSheet, closeGaps,pdfPaths, importPDF, fitCircle, keepSelected, isoLoops, levels, makeHM, estimate, estimateDlg, S, post, regen, genOp, parseDXF, dxfEntities, buildChains, demo, newOp, opDlg, chainsOf, get CH(){ return CH; }, expand, runVerify, startChaining, setUnits, openCAD, wizard, aiRunTool, camContext, AI, aiSend, postDlg, backplotDlg, verifyDlg, propsDlg};
 </script>
 </body>
 </html>
